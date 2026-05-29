@@ -177,6 +177,12 @@ export const GetStockAnalysisResponse = zod.object({
   "rsScore": zod.number(),
   "sectorName": zod.string().nullable()
 }),
+  "chartSignals": zod.array(zod.object({
+  "date": zod.string(),
+  "direction": zod.enum(['bull', 'bear']),
+  "label": zod.string(),
+  "strength": zod.enum(['strong', 'moderate'])
+})),
   "cachedAt": zod.string()
 })
 

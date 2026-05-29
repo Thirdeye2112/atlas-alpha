@@ -1,5 +1,5 @@
 import { fetchQuote, fetchOHLCV, type OHLCVBar } from "./marketData.js";
-import { calcTrend, calcMomentum, calcVolume, calcVolatility, calcOptions, calcPatterns, calcRelativeStrength } from "./indicators.js";
+import { calcTrend, calcMomentum, calcVolume, calcVolatility, calcOptions, calcPatterns, calcRelativeStrength, calcChartSignals } from "./indicators.js";
 import { calcAtlasScore } from "./scoring.js";
 import { analysisCache } from "./cache.js";
 import { logger } from "./logger.js";
@@ -24,6 +24,7 @@ function buildResult(
   const spyTrend = calcTrend(spyBars, spyBars[spyBars.length - 1]?.close ?? 500);
   const marketRegimeScore = spyTrend.trendAlignmentScore;
   const atlasScore = calcAtlasScore(trend, momentum, volume, options, rs, marketRegimeScore, volatility.expectedMovePercent);
+  const chartSignals = calcChartSignals(bars);
 
   return {
     quote: quoteOverride,
@@ -35,6 +36,7 @@ function buildResult(
     options,
     patterns,
     relativeStrength: rs,
+    chartSignals,
     ...(historicalDate ? { historicalDate } : {}),
     cachedAt: new Date().toISOString(),
   };

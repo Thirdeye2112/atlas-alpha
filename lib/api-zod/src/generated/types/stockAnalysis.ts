@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { AtlasAlphaScore } from './atlasAlphaScore';
+import type { ChartSignal } from './chartSignal';
 import type { MomentumIndicators } from './momentumIndicators';
 import type { OptionsAnalysis } from './optionsAnalysis';
 import type { PatternDetection } from './patternDetection';
@@ -25,5 +26,6 @@ export interface StockAnalysis {
   options: OptionsAnalysis;
   patterns: PatternDetection;
   relativeStrength: RelativeStrength;
+  chartSignals: ChartSignal[];
   cachedAt: string;
 }

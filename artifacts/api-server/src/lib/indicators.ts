@@ -463,6 +463,123 @@ export function calcPatterns(bars: OHLCVBar[], trend: TrendResult, volatility: V
   };
 }
 
+export interface ChartSignal {
+  date: string;
+  direction: "bull" | "bear";
+  label: string;
+  strength: "strong" | "moderate";
+}
+
+export function calcChartSignals(bars: OHLCVBar[]): ChartSignal[] {
+  if (bars.length < 35) return [];
+
+  const closes = bars.map(b => b.close);
+  const volumes = bars.map(b => b.volume);
+  const n = bars.length;
+  const windowStart = Math.max(0, n - 90);
+  const signals: ChartSignal[] = [];
+
+  // MACD crossovers
+  const macdArr = MACD.calculate({
+    values: closes,
+    fastPeriod: 12,
+    slowPeriod: 26,
+    signalPeriod: 9,
+    SimpleMAOscillator: false,
+    SimpleMASignal: false,
+  });
+  const macdOffset = n - macdArr.length;
+  for (let i = 1; i < macdArr.length; i++) {
+    const barIdx = macdOffset + i;
+    if (barIdx < windowStart) continue;
+    const prev = macdArr[i - 1];
+    const curr = macdArr[i];
+    if (!prev || !curr || prev.MACD == null || prev.signal == null || curr.MACD == null || curr.signal == null) continue;
+    if (prev.MACD < prev.signal && curr.MACD >= curr.signal) {
+      signals.push({ date: bars[barIdx].time.substring(0, 10), direction: "bull", label: "MACD", strength: "moderate" });
+    } else if (prev.MACD > prev.signal && curr.MACD <= curr.signal) {
+      signals.push({ date: bars[barIdx].time.substring(0, 10), direction: "bear", label: "MACD", strength: "moderate" });
+    }
+  }
+
+  // RSI threshold crossings — most actionable entries/exits
+  const rsiArr = RSI.calculate({ values: closes, period: 14 });
+  const rsiOffset = n - rsiArr.length;
+  for (let i = 1; i < rsiArr.length; i++) {
+    const barIdx = rsiOffset + i;
+    if (barIdx < windowStart) continue;
+    const prev = rsiArr[i - 1];
+    const curr = rsiArr[i];
+    // Entering oversold (strong bear confirmation)
+    if (prev >= 30 && curr < 30) {
+      signals.push({ date: bars[barIdx].time.substring(0, 10), direction: "bear", label: "OS", strength: "strong" });
+    }
+    // Bouncing back above 30 — actionable bull signal
+    if (prev < 30 && curr >= 30) {
+      signals.push({ date: bars[barIdx].time.substring(0, 10), direction: "bull", label: "RSI↑", strength: "strong" });
+    }
+    // Entering overbought
+    if (prev <= 70 && curr > 70) {
+      signals.push({ date: bars[barIdx].time.substring(0, 10), direction: "bull", label: "OB", strength: "moderate" });
+    }
+    // Rolling over from overbought — bear caution
+    if (prev > 70 && curr <= 70) {
+      signals.push({ date: bars[barIdx].time.substring(0, 10), direction: "bear", label: "RSI↓", strength: "moderate" });
+    }
+  }
+
+  // Bollinger Band breakouts and mean-reversion returns
+  const bbArr = BollingerBands.calculate({ values: closes, period: 20, stdDev: 2 });
+  const bbOffset = n - bbArr.length;
+  for (let i = 1; i < bbArr.length; i++) {
+    const barIdx = bbOffset + i;
+    if (barIdx < windowStart) continue;
+    const bb = bbArr[i];
+    const prevBb = bbArr[i - 1];
+    if (!bb || !prevBb) continue;
+    const price = closes[barIdx];
+    const prevPrice = closes[barIdx - 1];
+    // Breakout above upper band
+    if (prevPrice <= prevBb.upper && price > bb.upper) {
+      signals.push({ date: bars[barIdx].time.substring(0, 10), direction: "bull", label: "BB↑", strength: "moderate" });
+    }
+    // Breakdown below lower band
+    if (prevPrice >= prevBb.lower && price < bb.lower) {
+      signals.push({ date: bars[barIdx].time.substring(0, 10), direction: "bear", label: "BB↓", strength: "moderate" });
+    }
+    // Return inside from below (mean reversion bounce)
+    if (prevPrice < prevBb.lower && price >= bb.lower) {
+      signals.push({ date: bars[barIdx].time.substring(0, 10), direction: "bull", label: "BB↪", strength: "strong" });
+    }
+    // Return inside from above (rejection off upper band)
+    if (prevPrice > prevBb.upper && price <= bb.upper) {
+      signals.push({ date: bars[barIdx].time.substring(0, 10), direction: "bear", label: "BB↩", strength: "moderate" });
+    }
+  }
+
+  // High volume spikes (>2.5x rolling 20-bar average)
+  for (let i = windowStart + 20; i < n; i++) {
+    const avgVol = volumes.slice(i - 20, i).reduce((a, b) => a + b, 0) / 20;
+    if (avgVol > 0 && volumes[i] > avgVol * 2.5) {
+      const dir = closes[i] >= (closes[i - 1] ?? closes[i]) ? "bull" : "bear";
+      signals.push({ date: bars[i].time.substring(0, 10), direction: dir, label: "VOL", strength: "strong" });
+    }
+  }
+
+  // Sort descending by date, deduplicate same-date same-label events, cap at 20
+  signals.sort((a, b) => b.date.localeCompare(a.date));
+  const seen = new Set<string>();
+  const deduped: ChartSignal[] = [];
+  for (const s of signals) {
+    const key = `${s.date}:${s.direction}:${s.label}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      deduped.push(s);
+    }
+  }
+  return deduped.slice(0, 20);
+}
+
 export function calcRelativeStrength(
   ticker: string,
   tickerBars: OHLCVBar[],

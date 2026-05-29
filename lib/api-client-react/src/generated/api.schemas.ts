@@ -261,6 +261,29 @@ export interface AtlasAlphaScore {
   signalNarrative: string;
 }
 
+export type ChartSignalDirection = typeof ChartSignalDirection[keyof typeof ChartSignalDirection];
+
+
+export const ChartSignalDirection = {
+  bull: 'bull',
+  bear: 'bear',
+} as const;
+
+export type ChartSignalStrength = typeof ChartSignalStrength[keyof typeof ChartSignalStrength];
+
+
+export const ChartSignalStrength = {
+  strong: 'strong',
+  moderate: 'moderate',
+} as const;
+
+export interface ChartSignal {
+  date: string;
+  direction: ChartSignalDirection;
+  label: string;
+  strength: ChartSignalStrength;
+}
+
 export interface StockAnalysis {
   quote: StockQuote;
   atlasScore: AtlasAlphaScore;
@@ -271,6 +294,7 @@ export interface StockAnalysis {
   options: OptionsAnalysis;
   patterns: PatternDetection;
   relativeStrength: RelativeStrength;
+  chartSignals: ChartSignal[];
   cachedAt: string;
 }
 

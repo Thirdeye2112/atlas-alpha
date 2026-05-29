@@ -787,6 +787,10 @@ components:
           $ref: "#/components/schemas/PatternDetection"
         relativeStrength:
           $ref: "#/components/schemas/RelativeStrength"
+        chartSignals:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChartSignal"
         cachedAt:
           type: string
       required:
@@ -799,7 +803,27 @@ components:
         - options
         - patterns
         - relativeStrength
+        - chartSignals
         - cachedAt
+
+    ChartSignal:
+      type: object
+      properties:
+        date:
+          type: string
+        direction:
+          type: string
+          enum: [bull, bear]
+        label:
+          type: string
+        strength:
+          type: string
+          enum: [strong, moderate]
+      required:
+        - date
+        - direction
+        - label
+        - strength
 
     ScannerResult:
       type: object
