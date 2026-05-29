@@ -810,6 +810,32 @@ components:
         - totalIndicators
         - signalNarrative
 
+    CalibrationInfo:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [none, pending, fitted, error]
+        calibratedProbability:
+          type: ["number", "null"]
+          description: "Fitted logistic probability at the current score (null until calibration completes)"
+        slope:
+          type: ["number", "null"]
+        intercept:
+          type: ["number", "null"]
+        observations:
+          type: ["integer", "null"]
+        horizon:
+          type: ["integer", "null"]
+        rankIC:
+          type: ["number", "null"]
+        icRating:
+          type: ["string", "null"]
+        fittedAt:
+          type: ["string", "null"]
+      required:
+        - status
+
     StockAnalysis:
       type: object
       properties:
@@ -835,6 +861,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ChartSignal"
+        calibration:
+          oneOf:
+            - $ref: "#/components/schemas/CalibrationInfo"
+            - type: "null"
         cachedAt:
           type: string
       required:

@@ -183,6 +183,17 @@ export const GetStockAnalysisResponse = zod.object({
   "label": zod.string(),
   "strength": zod.enum(['strong', 'moderate'])
 })),
+  "calibration": zod.union([zod.object({
+  "status": zod.enum(['none', 'pending', 'fitted', 'error']),
+  "calibratedProbability": zod.number().nullish().describe('Fitted logistic probability at the current score (null until calibration completes)'),
+  "slope": zod.number().nullish(),
+  "intercept": zod.number().nullish(),
+  "observations": zod.number().nullish(),
+  "horizon": zod.number().nullish(),
+  "rankIC": zod.number().nullish(),
+  "icRating": zod.string().nullish(),
+  "fittedAt": zod.string().nullish()
+}),zod.null()]).optional(),
   "cachedAt": zod.string()
 })
 

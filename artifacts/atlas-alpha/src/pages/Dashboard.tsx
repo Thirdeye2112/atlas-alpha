@@ -646,14 +646,45 @@ export default function Dashboard() {
             </div>
 
             <div className="p-4 space-y-4 border-b border-border font-mono text-sm">
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground" title="Heuristic signal strength via logistic sigmoid — run backtest for calibrated probability">SIGNAL STR ⚠</span>
-                <span className="text-success font-bold">{formatPercent(displayAnalysis.atlasScore.bullishProbability)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground" title="Inverse of signal strength">BEAR STR ⚠</span>
-                <span className="text-destructive font-bold">{formatPercent(displayAnalysis.atlasScore.bearishProbability)}</span>
-              </div>
+              {(() => {
+                const cal = displayAnalysis.calibration;
+                const isFitted   = cal?.status === "fitted";
+                const isPending  = cal?.status === "pending";
+                const bullProb   = isFitted && cal.calibratedProbability != null
+                  ? cal.calibratedProbability
+                  : displayAnalysis.atlasScore.bullishProbability;
+                const bearProb   = isFitted && cal.calibratedProbability != null
+                  ? 100 - cal.calibratedProbability
+                  : displayAnalysis.atlasScore.bearishProbability;
+                return (
+                  <>
+                    <div className="flex justify-between items-center gap-2">
+                      <span className="text-muted-foreground flex items-center gap-1.5">
+                        SIGNAL STR
+                        {isFitted && (
+                          <span className="text-[9px] font-bold px-1 py-0.5 bg-primary/20 text-primary rounded tracking-wide">● FIT</span>
+                        )}
+                        {isPending && (
+                          <span className="text-[9px] text-muted-foreground/50 animate-pulse tracking-wide">calibrating…</span>
+                        )}
+                        {!isFitted && !isPending && (
+                          <span className="text-muted-foreground/40 text-[10px]">⚠</span>
+                        )}
+                      </span>
+                      <span className="text-success font-bold">{formatPercent(bullProb)}</span>
+                    </div>
+                    {isFitted && (
+                      <div className="text-[10px] text-muted-foreground/50 font-mono -mt-3">
+                        heuristic {formatPercent(displayAnalysis.atlasScore.bullishProbability)} · fitted on {cal.observations}obs ({cal.horizon}D)
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">BEAR STR</span>
+                      <span className="text-destructive font-bold">{formatPercent(bearProb)}</span>
+                    </div>
+                  </>
+                );
+              })()}
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">EXPECTED MOVE</span>
                 <span className="text-warning font-bold">

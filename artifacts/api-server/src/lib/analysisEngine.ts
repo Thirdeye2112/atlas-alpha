@@ -9,6 +9,8 @@ import {
 import { calcAtlasScore, type AtlasAlphaScore } from "./scoring.js";
 import { analysisCache } from "./cache.js";
 import { SCANNER_UNIVERSE } from "./scannerUniverse.js";
+import { calibrationStore } from "./calibrationStore.js";
+import { runCalibrationBackground } from "./backtestEngine.js";
 import { logger } from "./logger.js";
 
 export interface AnalysisResult {
@@ -37,17 +39,17 @@ function buildResult(
   quoteOverride: Record<string, unknown>,
   historicalDate?: string
 ): AnalysisResult {
-  const trend = calcTrend(bars, price);
-  const momentum = calcMomentum(bars);
-  const volume = calcVolume(bars, (quoteOverride.avgVolume as number) ?? 0);
-  const volatility = calcVolatility(bars, price);
-  const options = calcOptions(momentum, volume, volatility, price);
-  const patterns = calcPatterns(bars, trend, volatility);
-  const rs = calcRelativeStrength(sym, bars, spyBars, qqqBars, iwmBars, (quoteOverride.sector as string | null) ?? null);
-  const spyTrend = calcTrend(spyBars, spyBars[spyBars.length - 1]?.close ?? 500);
+  const trend          = calcTrend(bars, price);
+  const momentum       = calcMomentum(bars);
+  const volume         = calcVolume(bars, (quoteOverride.avgVolume as number) ?? 0);
+  const volatility     = calcVolatility(bars, price);
+  const options        = calcOptions(momentum, volume, volatility, price);
+  const patterns       = calcPatterns(bars, trend, volatility);
+  const rs             = calcRelativeStrength(sym, bars, spyBars, qqqBars, iwmBars, (quoteOverride.sector as string | null) ?? null);
+  const spyTrend       = calcTrend(spyBars, spyBars[spyBars.length - 1]?.close ?? 500);
   const regimeIndicators = calcRegimeIndicators(spyBars, spyTrend);
-  const atlasScore = calcAtlasScore(trend, momentum, volume, options, rs, regimeIndicators.regimeScore, volatility.expectedMovePercent);
-  const chartSignals = calcChartSignals(bars);
+  const atlasScore     = calcAtlasScore(trend, momentum, volume, options, rs, regimeIndicators.regimeScore, volatility.expectedMovePercent);
+  const chartSignals   = calcChartSignals(bars);
 
   return {
     quote: quoteOverride,
@@ -66,12 +68,27 @@ function buildResult(
   };
 }
 
-export async function runFullAnalysis(ticker: string) {
-  const cacheKey = `analysis:${ticker.toUpperCase()}`;
-  const cached = analysisCache.get(cacheKey);
-  if (cached) return cached;
+/** Trigger a background calibration for `ticker` if not already tracked.
+ *  Fire-and-forget — never awaited by the caller. */
+function maybeCalibrate(sym: string): void {
+  const marked = calibrationStore.markPending(sym);
+  if (!marked) return; // already fitted, pending, or concurrency limit hit
+  setImmediate(() => {
+    runCalibrationBackground(sym).catch(() => {
+      // markError already handled inside runCalibrationBackground
+    });
+  });
+}
 
-  const sym = ticker.toUpperCase();
+export async function runFullAnalysis(ticker: string): Promise<AnalysisResult> {
+  const sym      = ticker.toUpperCase();
+  const cacheKey = `analysis:${sym}`;
+  const cached   = analysisCache.get<AnalysisResult>(cacheKey);
+  if (cached) {
+    // Always trigger calibration even for cached analyses (markPending is a no-op if already tracked)
+    maybeCalibrate(sym);
+    return cached;
+  }
 
   const [quote, bars, spyBars, qqqBars, iwmBars] = await Promise.all([
     fetchQuote(sym),
@@ -87,15 +104,18 @@ export async function runFullAnalysis(ticker: string) {
 
   analysisCache.set(cacheKey, result);
   logger.info({ ticker: sym, atlasScore: result.atlasScore.overall }, "Analysis complete");
+
+  // Kick off background calibration (non-blocking)
+  maybeCalibrate(sym);
+
   return result;
 }
 
-export async function runHistoricalAnalysis(ticker: string, asOf: string) {
-  const cacheKey = `historical:${ticker.toUpperCase()}:${asOf}`;
-  const cached = analysisCache.get(cacheKey);
+export async function runHistoricalAnalysis(ticker: string, asOf: string): Promise<AnalysisResult> {
+  const sym      = ticker.toUpperCase();
+  const cacheKey = `historical:${sym}:${asOf}`;
+  const cached   = analysisCache.get<AnalysisResult>(cacheKey);
   if (cached) return cached;
-
-  const sym = ticker.toUpperCase();
 
   const [allBars, allSpyBars, allQqqBars, allIwmBars] = await Promise.all([
     fetchOHLCV(sym, "2y", "1d"),
@@ -104,7 +124,7 @@ export async function runHistoricalAnalysis(ticker: string, asOf: string) {
     fetchOHLCV("IWM", "2y", "1d"),
   ]);
 
-  const bars    = allBars.filter(b => b.time <= asOf);
+  const bars    = allBars.filter(b    => b.time <= asOf);
   const spyBars = allSpyBars.filter(b => b.time <= asOf);
   const qqqBars = allQqqBars.filter(b => b.time <= asOf);
   const iwmBars = allIwmBars.filter(b => b.time <= asOf);
@@ -113,11 +133,11 @@ export async function runHistoricalAnalysis(ticker: string, asOf: string) {
 
   const lastBar = bars[bars.length - 1];
   const prevBar = bars[bars.length - 2];
-  const price = lastBar.close;
-  const change = prevBar ? price - prevBar.close : 0;
+  const price   = lastBar.close;
+  const change  = prevBar ? price - prevBar.close : 0;
   const changePercent = prevBar && prevBar.close > 0 ? (change / prevBar.close) * 100 : 0;
-  const recentBars = bars.slice(-30);
-  const avgVolume = recentBars.reduce((s, b) => s + b.volume, 0) / recentBars.length;
+  const recentBars    = bars.slice(-30);
+  const avgVolume     = recentBars.reduce((s, b) => s + b.volume, 0) / recentBars.length;
   const historicalBars252 = bars.slice(-252);
 
   const syntheticQuote = {
@@ -143,9 +163,7 @@ export async function runHistoricalAnalysis(ticker: string, asOf: string) {
 /** Compute breadth from currently cached analyses across the scanner universe.
  *  Returns null percentages if fewer than 20 tickers are cached (scanner hasn't run yet). */
 export function getCachedBreadth(): { total: number; pctAboveSma50: number | null; pctAboveSma200: number | null } {
-  let aboveSma50 = 0;
-  let aboveSma200 = 0;
-  let total = 0;
+  let aboveSma50 = 0, aboveSma200 = 0, total = 0;
 
   for (const ticker of SCANNER_UNIVERSE) {
     const cached = analysisCache.get<AnalysisResult>(`analysis:${ticker}`);

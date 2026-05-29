@@ -261,6 +261,39 @@ export interface AtlasAlphaScore {
   signalNarrative: string;
 }
 
+export type CalibrationInfoStatus = typeof CalibrationInfoStatus[keyof typeof CalibrationInfoStatus];
+
+
+export const CalibrationInfoStatus = {
+  none: 'none',
+  pending: 'pending',
+  fitted: 'fitted',
+  error: 'error',
+} as const;
+
+export interface CalibrationInfo {
+  status: CalibrationInfoStatus;
+  /**
+     * Fitted logistic probability at the current score (null until calibration completes)
+     * @nullable
+     */
+  calibratedProbability?: number | null;
+  /** @nullable */
+  slope?: number | null;
+  /** @nullable */
+  intercept?: number | null;
+  /** @nullable */
+  observations?: number | null;
+  /** @nullable */
+  horizon?: number | null;
+  /** @nullable */
+  rankIC?: number | null;
+  /** @nullable */
+  icRating?: string | null;
+  /** @nullable */
+  fittedAt?: string | null;
+}
+
 export type ChartSignalDirection = typeof ChartSignalDirection[keyof typeof ChartSignalDirection];
 
 
@@ -295,6 +328,7 @@ export interface StockAnalysis {
   patterns: PatternDetection;
   relativeStrength: RelativeStrength;
   chartSignals: ChartSignal[];
+  calibration?: CalibrationInfo | null;
   cachedAt: string;
 }
 
