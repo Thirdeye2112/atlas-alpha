@@ -3,13 +3,22 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Atlas Alpha - Quant Trading Signal Platform API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: stock
+    description: Stock analysis and data
+  - name: scanner
+    description: Market scanner operations
+  - name: watchlist
+    description: Watchlist management
+  - name: market
+    description: Market overview
+
 paths:
   /healthz:
     get:
@@ -24,6 +33,333 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /stock/{ticker}/quote:
+    get:
+      operationId: getStockQuote
+      tags: [stock]
+      summary: Get real-time stock quote
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Stock quote
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockQuote"
+        "404":
+          description: Ticker not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /stock/{ticker}/analysis:
+    get:
+      operationId: getStockAnalysis
+      tags: [stock]
+      summary: Full Atlas Alpha analysis for a ticker
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Full stock analysis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockAnalysis"
+        "404":
+          description: Ticker not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /stock/{ticker}/ohlcv:
+    get:
+      operationId: getStockOhlcv
+      tags: [stock]
+      summary: Get historical OHLCV bars
+      description: Accepts optional query params period (1d,5d,1mo,3mo,6mo,1y,2y,5y) and interval (1m,5m,15m,30m,1h,1d,1wk)
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OHLCV bars
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OHLCVBar"
+        "404":
+          description: Ticker not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /scanner/top-longs:
+    get:
+      operationId: getScannerTopLongs
+      tags: [scanner]
+      summary: Top bullish candidates (Bullish Prob > 75%, Confidence > 80%)
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 25
+      responses:
+        "200":
+          description: Top long candidates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ScannerResult"
+
+  /scanner/top-shorts:
+    get:
+      operationId: getScannerTopShorts
+      tags: [scanner]
+      summary: Top bearish candidates (Bearish Prob > 75%, Confidence > 80%)
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 25
+      responses:
+        "200":
+          description: Top short candidates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ScannerResult"
+
+  /scanner/breakouts:
+    get:
+      operationId: getScannerBreakouts
+      tags: [scanner]
+      summary: Breakout candidates
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 25
+      responses:
+        "200":
+          description: Breakout candidates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ScannerResult"
+
+  /scanner/breakdowns:
+    get:
+      operationId: getScannerBreakdowns
+      tags: [scanner]
+      summary: Breakdown candidates
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 25
+      responses:
+        "200":
+          description: Breakdown candidates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ScannerResult"
+
+  /scanner/gamma-squeeze:
+    get:
+      operationId: getScannerGammaSqueeze
+      tags: [scanner]
+      summary: Gamma squeeze candidates
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 25
+      responses:
+        "200":
+          description: Gamma squeeze candidates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ScannerResult"
+
+  /scanner/short-squeeze:
+    get:
+      operationId: getScannerShortSqueeze
+      tags: [scanner]
+      summary: Short squeeze candidates
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 25
+      responses:
+        "200":
+          description: Short squeeze candidates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ScannerResult"
+
+  /scanner/institutional-accumulation:
+    get:
+      operationId: getScannerInstitutionalAccumulation
+      tags: [scanner]
+      summary: Institutional accumulation candidates
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 25
+      responses:
+        "200":
+          description: Institutional accumulation candidates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ScannerResult"
+
+  /scanner/mean-reversion:
+    get:
+      operationId: getScannerMeanReversion
+      tags: [scanner]
+      summary: Mean reversion candidates
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 25
+      responses:
+        "200":
+          description: Mean reversion candidates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ScannerResult"
+
+  /watchlist:
+    get:
+      operationId: getWatchlist
+      tags: [watchlist]
+      summary: Get user watchlist
+      responses:
+        "200":
+          description: Watchlist with live quotes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WatchlistItem"
+    post:
+      operationId: addToWatchlist
+      tags: [watchlist]
+      summary: Add ticker to watchlist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WatchlistInput"
+      responses:
+        "201":
+          description: Added to watchlist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WatchlistEntry"
+        "409":
+          description: Already in watchlist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /watchlist/{ticker}:
+    delete:
+      operationId: removeFromWatchlist
+      tags: [watchlist]
+      summary: Remove ticker from watchlist
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Removed from watchlist
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /market/overview:
+    get:
+      operationId: getMarketOverview
+      tags: [market]
+      summary: Market overview - SPY, QQQ, IWM, VIX
+      responses:
+        "200":
+          description: Market overview data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketOverview"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +370,619 @@ components:
       required:
         - status
 
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    StockQuote:
+      type: object
+      properties:
+        ticker:
+          type: string
+        name:
+          type: string
+        price:
+          type: number
+        change:
+          type: number
+        changePercent:
+          type: number
+        open:
+          type: number
+        high:
+          type: number
+        low:
+          type: number
+        previousClose:
+          type: number
+        volume:
+          type: integer
+        avgVolume:
+          type: integer
+        marketCap:
+          type: ["number", "null"]
+        week52High:
+          type: number
+        week52Low:
+          type: number
+        beta:
+          type: ["number", "null"]
+        pe:
+          type: ["number", "null"]
+        eps:
+          type: ["number", "null"]
+        sector:
+          type: ["string", "null"]
+        industry:
+          type: ["string", "null"]
+        timestamp:
+          type: string
+      required:
+        - ticker
+        - name
+        - price
+        - change
+        - changePercent
+        - open
+        - high
+        - low
+        - previousClose
+        - volume
+        - avgVolume
+        - marketCap
+        - week52High
+        - week52Low
+        - beta
+        - pe
+        - eps
+        - sector
+        - industry
+        - timestamp
+
+    OHLCVBar:
+      type: object
+      properties:
+        time:
+          type: string
+        open:
+          type: number
+        high:
+          type: number
+        low:
+          type: number
+        close:
+          type: number
+        volume:
+          type: integer
+      required:
+        - time
+        - open
+        - high
+        - low
+        - close
+        - volume
+
+    TrendIndicators:
+      type: object
+      properties:
+        sma20:
+          type: number
+        sma50:
+          type: number
+        sma100:
+          type: number
+        sma200:
+          type: number
+        ema8:
+          type: number
+        ema21:
+          type: number
+        ema34:
+          type: number
+        goldenCross:
+          type: boolean
+        deathCross:
+          type: boolean
+        priceVsSma20:
+          type: number
+        priceVsSma50:
+          type: number
+        priceVsSma200:
+          type: number
+        trendAlignmentScore:
+          type: number
+        trendDirection:
+          type: string
+          enum: [strong_up, up, neutral, down, strong_down]
+      required:
+        - sma20
+        - sma50
+        - sma100
+        - sma200
+        - ema8
+        - ema21
+        - ema34
+        - goldenCross
+        - deathCross
+        - priceVsSma20
+        - priceVsSma50
+        - priceVsSma200
+        - trendAlignmentScore
+        - trendDirection
+
+    MomentumIndicators:
+      type: object
+      properties:
+        rsi:
+          type: number
+        rsiSignal:
+          type: string
+          enum: [overbought, neutral, oversold]
+        rsiDivergence:
+          type: ["string", "null"]
+          enum: [bullish, bearish, "null"]
+        macd:
+          type: number
+        macdSignal:
+          type: number
+        macdHistogram:
+          type: number
+        macdCrossover:
+          type: ["string", "null"]
+          enum: [bullish, bearish, "null"]
+        stochK:
+          type: number
+        stochD:
+          type: number
+        cci:
+          type: number
+        roc:
+          type: number
+        momentumScore:
+          type: number
+      required:
+        - rsi
+        - rsiSignal
+        - rsiDivergence
+        - macd
+        - macdSignal
+        - macdHistogram
+        - macdCrossover
+        - stochK
+        - stochD
+        - cci
+        - roc
+        - momentumScore
+
+    VolumeIndicators:
+      type: object
+      properties:
+        obv:
+          type: number
+        obvTrend:
+          type: string
+          enum: [rising, falling, flat]
+        accumulationDistribution:
+          type: number
+        chaikinMoneyFlow:
+          type: number
+        vwap:
+          type: number
+        relativeVolume:
+          type: number
+        volumeSpike:
+          type: boolean
+        volumeScore:
+          type: number
+      required:
+        - obv
+        - obvTrend
+        - accumulationDistribution
+        - chaikinMoneyFlow
+        - vwap
+        - relativeVolume
+        - volumeSpike
+        - volumeScore
+
+    VolatilityIndicators:
+      type: object
+      properties:
+        atr:
+          type: number
+        atrPercent:
+          type: number
+        atrExpansion:
+          type: boolean
+        bollingerUpper:
+          type: number
+        bollingerMiddle:
+          type: number
+        bollingerLower:
+          type: number
+        bollingerWidth:
+          type: number
+        keltnerUpper:
+          type: number
+        keltnerLower:
+          type: number
+        volatilitySqueeze:
+          type: boolean
+        ivRank:
+          type: ["number", "null"]
+        ivPercentile:
+          type: ["number", "null"]
+        expectedMove:
+          type: number
+        expectedMovePercent:
+          type: number
+      required:
+        - atr
+        - atrPercent
+        - atrExpansion
+        - bollingerUpper
+        - bollingerMiddle
+        - bollingerLower
+        - bollingerWidth
+        - keltnerUpper
+        - keltnerLower
+        - volatilitySqueeze
+        - ivRank
+        - ivPercentile
+        - expectedMove
+        - expectedMovePercent
+
+    OptionsAnalysis:
+      type: object
+      properties:
+        putCallRatio:
+          type: ["number", "null"]
+        maxPain:
+          type: ["number", "null"]
+        callWall:
+          type: ["number", "null"]
+        putWall:
+          type: ["number", "null"]
+        gammaFlipLevel:
+          type: ["number", "null"]
+        unusualActivity:
+          type: boolean
+        optionsScore:
+          type: number
+      required:
+        - putCallRatio
+        - maxPain
+        - callWall
+        - putWall
+        - gammaFlipLevel
+        - unusualActivity
+        - optionsScore
+
+    PatternDetection:
+      type: object
+      properties:
+        patterns:
+          type: array
+          items:
+            type: string
+        marketStructure:
+          type: string
+          enum: [uptrend, downtrend, ranging]
+        supportLevel:
+          type: ["number", "null"]
+        resistanceLevel:
+          type: ["number", "null"]
+      required:
+        - patterns
+        - marketStructure
+        - supportLevel
+        - resistanceLevel
+
+    RelativeStrength:
+      type: object
+      properties:
+        vsSpy:
+          type: number
+        vsQqq:
+          type: number
+        vsIwm:
+          type: number
+        vsSector:
+          type: number
+        rsScore:
+          type: number
+        sectorName:
+          type: ["string", "null"]
+      required:
+        - vsSpy
+        - vsQqq
+        - vsIwm
+        - vsSector
+        - rsScore
+        - sectorName
+
+    AtlasAlphaScore:
+      type: object
+      properties:
+        overall:
+          type: number
+        label:
+          type: string
+          enum: [extreme_bearish, bearish, neutral, bullish, extreme_bullish]
+        trendScore:
+          type: number
+        momentumScore:
+          type: number
+        volumeScore:
+          type: number
+        optionsScore:
+          type: number
+        relativeStrengthScore:
+          type: number
+        marketRegimeScore:
+          type: number
+        bullishProbability:
+          type: number
+        bearishProbability:
+          type: number
+        confidenceScore:
+          type: number
+        riskScore:
+          type: number
+        direction:
+          type: string
+          enum: [bullish, bearish, neutral]
+        timeHorizon:
+          type: string
+          enum: [1-3d, 1-2w, 1-3m]
+        expectedMovePercent:
+          type: number
+        indicatorsAgreeing:
+          type: integer
+        totalIndicators:
+          type: integer
+        signalNarrative:
+          type: string
+      required:
+        - overall
+        - label
+        - trendScore
+        - momentumScore
+        - volumeScore
+        - optionsScore
+        - relativeStrengthScore
+        - marketRegimeScore
+        - bullishProbability
+        - bearishProbability
+        - confidenceScore
+        - riskScore
+        - direction
+        - timeHorizon
+        - expectedMovePercent
+        - indicatorsAgreeing
+        - totalIndicators
+        - signalNarrative
+
+    StockAnalysis:
+      type: object
+      properties:
+        quote:
+          $ref: "#/components/schemas/StockQuote"
+        atlasScore:
+          $ref: "#/components/schemas/AtlasAlphaScore"
+        trend:
+          $ref: "#/components/schemas/TrendIndicators"
+        momentum:
+          $ref: "#/components/schemas/MomentumIndicators"
+        volume:
+          $ref: "#/components/schemas/VolumeIndicators"
+        volatility:
+          $ref: "#/components/schemas/VolatilityIndicators"
+        options:
+          $ref: "#/components/schemas/OptionsAnalysis"
+        patterns:
+          $ref: "#/components/schemas/PatternDetection"
+        relativeStrength:
+          $ref: "#/components/schemas/RelativeStrength"
+        cachedAt:
+          type: string
+      required:
+        - quote
+        - atlasScore
+        - trend
+        - momentum
+        - volume
+        - volatility
+        - options
+        - patterns
+        - relativeStrength
+        - cachedAt
+
+    ScannerResult:
+      type: object
+      properties:
+        ticker:
+          type: string
+        name:
+          type: string
+        price:
+          type: number
+        change:
+          type: number
+        changePercent:
+          type: number
+        atlasScore:
+          type: number
+        atlasLabel:
+          type: string
+        bullishProbability:
+          type: number
+        bearishProbability:
+          type: number
+        confidenceScore:
+          type: number
+        direction:
+          type: string
+        signalStrength:
+          type: string
+          enum: [strong, moderate, weak]
+        sector:
+          type: ["string", "null"]
+        volume:
+          type: integer
+        relativeVolume:
+          type: number
+        rsi:
+          type: number
+        catalysts:
+          type: array
+          items:
+            type: string
+      required:
+        - ticker
+        - name
+        - price
+        - change
+        - changePercent
+        - atlasScore
+        - atlasLabel
+        - bullishProbability
+        - bearishProbability
+        - confidenceScore
+        - direction
+        - signalStrength
+        - sector
+        - volume
+        - relativeVolume
+        - rsi
+        - catalysts
+
+    WatchlistEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        ticker:
+          type: string
+        addedAt:
+          type: string
+        notes:
+          type: ["string", "null"]
+      required:
+        - id
+        - ticker
+        - addedAt
+        - notes
+
+    WatchlistItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        ticker:
+          type: string
+        addedAt:
+          type: string
+        notes:
+          type: ["string", "null"]
+        price:
+          type: ["number", "null"]
+        change:
+          type: ["number", "null"]
+        changePercent:
+          type: ["number", "null"]
+        atlasScore:
+          type: ["number", "null"]
+        atlasLabel:
+          type: ["string", "null"]
+        direction:
+          type: ["string", "null"]
+        bullishProbability:
+          type: ["number", "null"]
+        confidenceScore:
+          type: ["number", "null"]
+      required:
+        - id
+        - ticker
+        - addedAt
+        - notes
+        - price
+        - change
+        - changePercent
+        - atlasScore
+        - atlasLabel
+        - direction
+        - bullishProbability
+        - confidenceScore
+
+    WatchlistInput:
+      type: object
+      properties:
+        ticker:
+          type: string
+        notes:
+          type: string
+      required:
+        - ticker
+
+    MarketQuote:
+      type: object
+      properties:
+        ticker:
+          type: string
+        price:
+          type: number
+        change:
+          type: number
+        changePercent:
+          type: number
+        volume:
+          type: integer
+      required:
+        - ticker
+        - price
+        - change
+        - changePercent
+        - volume
+
+    MarketOverview:
+      type: object
+      properties:
+        spy:
+          $ref: "#/components/schemas/MarketQuote"
+        qqq:
+          $ref: "#/components/schemas/MarketQuote"
+        iwm:
+          $ref: "#/components/schemas/MarketQuote"
+        vix:
+          $ref: "#/components/schemas/MarketQuote"
+        marketRegime:
+          type: string
+          enum: [risk_on, neutral, risk_off]
+        marketRegimeScore:
+          type: number
+        advancingStocks:
+          type: ["integer", "null"]
+        decliningStocks:
+          type: ["integer", "null"]
+        newHighs:
+          type: ["integer", "null"]
+        newLows:
+          type: ["integer", "null"]
+        timestamp:
+          type: string
+      required:
+        - spy
+        - qqq
+        - iwm
+        - vix
+        - marketRegime
+        - marketRegimeScore
+        - advancingStocks
+        - decliningStocks
+        - newHighs
+        - newLows
+        - timestamp
