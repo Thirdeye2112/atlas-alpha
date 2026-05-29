@@ -75,9 +75,9 @@ export async function runFullAnalysis(ticker: string) {
   const [quote, bars, spyBars, qqqBars, iwmBars] = await Promise.all([
     fetchQuote(sym),
     fetchOHLCV(sym, "1y", "1d"),
-    fetchOHLCV("SPY", "6mo", "1d"),
-    fetchOHLCV("QQQ", "6mo", "1d"),
-    fetchOHLCV("IWM", "6mo", "1d"),
+    fetchOHLCV("SPY", "1y", "1d"),
+    fetchOHLCV("QQQ", "1y", "1d"),
+    fetchOHLCV("IWM", "1y", "1d"),
   ]);
 
   if (bars.length < 30) throw new Error(`Insufficient historical data for ${sym}`);
