@@ -16,21 +16,17 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 function buildPriceLines(data: {
-  trend: { sma20: number; sma50: number; sma200: number };
   volatility: { bollingerUpper: number; bollingerLower: number };
   volume: { vwap: number };
   patterns: { supportLevel: number | null; resistanceLevel: number | null };
 }): ChartPriceLine[] {
   const lines: ChartPriceLine[] = [
-    { price: data.trend.sma20,              label: "SMA20",  color: "#60a5fa",               lineStyle: "dashed" },
-    { price: data.trend.sma50,              label: "SMA50",  color: "#f97316",               lineStyle: "dashed" },
-    { price: data.trend.sma200,             label: "SMA200", color: "#ef4444",               lineStyle: "dashed" },
-    { price: data.volatility.bollingerUpper, label: "BB+",   color: "rgba(156,163,175,0.5)", lineStyle: "dotted" },
-    { price: data.volatility.bollingerLower, label: "BB-",   color: "rgba(156,163,175,0.5)", lineStyle: "dotted" },
-    { price: data.volume.vwap,              label: "VWAP",   color: "#a855f7",               lineStyle: "dashed" },
+    { price: data.volatility.bollingerUpper, label: "BB+",  color: "rgba(156,163,175,0.5)", lineStyle: "dotted" },
+    { price: data.volatility.bollingerLower, label: "BB-",  color: "rgba(156,163,175,0.5)", lineStyle: "dotted" },
+    { price: data.volume.vwap,               label: "VWAP", color: "#a855f7",               lineStyle: "dashed" },
   ];
-  if (data.patterns.supportLevel)    lines.push({ price: data.patterns.supportLevel,    label: "SUP", color: "rgba(34,197,94,0.6)",  lineStyle: "dashed" });
-  if (data.patterns.resistanceLevel) lines.push({ price: data.patterns.resistanceLevel, label: "RES", color: "rgba(239,68,68,0.6)",  lineStyle: "dashed" });
+  if (data.patterns.supportLevel)    lines.push({ price: data.patterns.supportLevel,    label: "SUP", color: "rgba(34,197,94,0.6)", lineStyle: "dashed" });
+  if (data.patterns.resistanceLevel) lines.push({ price: data.patterns.resistanceLevel, label: "RES", color: "rgba(239,68,68,0.6)", lineStyle: "dashed" });
   return lines.filter(l => l.price > 0 && isFinite(l.price));
 }
 

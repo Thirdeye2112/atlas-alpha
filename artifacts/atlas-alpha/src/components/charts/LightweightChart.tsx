@@ -3,6 +3,7 @@ import {
   createChart,
   ColorType,
   CandlestickSeries,
+  LineSeries,
   UTCTimestamp,
   IChartApi,
   ISeriesApi,
@@ -53,6 +54,15 @@ const LS_MAP: Record<string, LineStyle> = {
   dashed: LineStyle.Dashed,
   dotted: LineStyle.Dotted,
 };
+
+function calcSMA(closes: number[], period: number): (number | null)[] {
+  return closes.map((_, i) => {
+    if (i < period - 1) return null;
+    let sum = 0;
+    for (let k = i - period + 1; k <= i; k++) sum += closes[k];
+    return sum / period;
+  });
+}
 
 export default function LightweightChart({
   data,
@@ -116,17 +126,52 @@ export default function LightweightChart({
 
     candlestickSeries.setData(formattedData);
 
-    // Price level overlays — SMA, BB, VWAP, support/resistance
-    for (const pl of priceLines) {
-      if (!pl.price || !isFinite(pl.price) || pl.price <= 0) continue;
-      candlestickSeries.createPriceLine({
-        price: pl.price,
-        color: pl.color,
+    // Moving average lines — SMA50, SMA87, SMA200 — computed from bar data, full-width
+    const closes = data.map(d => d.close);
+    const maConfigs: { period: number; color: string; title: string }[] = [
+      { period: 50,  color: "#f97316", title: "SMA50"  },
+      { period: 87,  color: "#a78bfa", title: "SMA87"  },
+      { period: 200, color: "#ef4444", title: "SMA200" },
+    ];
+
+    for (const { period, color, title } of maConfigs) {
+      const smaValues = calcSMA(closes, period);
+      const maData = formattedData
+        .map((bar, i) => smaValues[i] !== null ? { time: bar.time, value: smaValues[i]! } : null)
+        .filter((d): d is { time: UTCTimestamp; value: number } => d !== null);
+      if (maData.length === 0) continue;
+      const maSeries = chart.addSeries(LineSeries, {
+        color,
         lineWidth: 1,
-        lineStyle: LS_MAP[pl.lineStyle] ?? LineStyle.Dashed,
-        axisLabelVisible: true,
-        title: pl.label,
+        lineStyle: LineStyle.Solid,
+        priceLineVisible: false,
+        lastValueVisible: true,
+        crosshairMarkerVisible: false,
+        title,
       });
+      maSeries.setData(maData);
+    }
+
+    // Short right-side stubs for BB+/−, VWAP, SUP, RES — last 2 bars only
+    if (priceLines.length > 0 && formattedData.length >= 2) {
+      const lastBar  = formattedData[formattedData.length - 1];
+      const prevBar  = formattedData[formattedData.length - 2];
+      for (const pl of priceLines) {
+        if (!pl.price || !isFinite(pl.price) || pl.price <= 0) continue;
+        const stubSeries = chart.addSeries(LineSeries, {
+          color: pl.color,
+          lineWidth: 1,
+          lineStyle: LS_MAP[pl.lineStyle] ?? LineStyle.Dashed,
+          priceLineVisible: false,
+          lastValueVisible: true,
+          crosshairMarkerVisible: false,
+          title: pl.label,
+        });
+        stubSeries.setData([
+          { time: prevBar.time, value: pl.price },
+          { time: lastBar.time, value: pl.price },
+        ]);
+      }
     }
 
     // Signal markers — only meaningful on daily bars (date strings)

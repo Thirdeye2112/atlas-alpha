@@ -479,29 +479,6 @@ export function calcChartSignals(bars: OHLCVBar[]): ChartSignal[] {
   const windowStart = Math.max(0, n - 90);
   const signals: ChartSignal[] = [];
 
-  // MACD crossovers
-  const macdArr = MACD.calculate({
-    values: closes,
-    fastPeriod: 12,
-    slowPeriod: 26,
-    signalPeriod: 9,
-    SimpleMAOscillator: false,
-    SimpleMASignal: false,
-  });
-  const macdOffset = n - macdArr.length;
-  for (let i = 1; i < macdArr.length; i++) {
-    const barIdx = macdOffset + i;
-    if (barIdx < windowStart) continue;
-    const prev = macdArr[i - 1];
-    const curr = macdArr[i];
-    if (!prev || !curr || prev.MACD == null || prev.signal == null || curr.MACD == null || curr.signal == null) continue;
-    if (prev.MACD < prev.signal && curr.MACD >= curr.signal) {
-      signals.push({ date: bars[barIdx].time.substring(0, 10), direction: "bull", label: "MACD", strength: "moderate" });
-    } else if (prev.MACD > prev.signal && curr.MACD <= curr.signal) {
-      signals.push({ date: bars[barIdx].time.substring(0, 10), direction: "bear", label: "MACD", strength: "moderate" });
-    }
-  }
-
   // RSI threshold crossings — most actionable entries/exits
   const rsiArr = RSI.calculate({ values: closes, period: 14 });
   const rsiOffset = n - rsiArr.length;
