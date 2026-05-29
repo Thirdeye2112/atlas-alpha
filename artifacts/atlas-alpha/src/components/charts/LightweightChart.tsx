@@ -1,23 +1,39 @@
 import { useEffect, useRef } from "react";
-import { createChart, ColorType, CandlestickSeries, UTCTimestamp } from "lightweight-charts";
+import {
+  createChart,
+  ColorType,
+  CandlestickSeries,
+  UTCTimestamp,
+  IChartApi,
+  ISeriesApi,
+  CandlestickData,
+} from "lightweight-charts";
 import { OHLCVBar } from "@workspace/api-client-react";
 
 interface Props {
   data: OHLCVBar[];
   height?: number;
+  onCandleClick?: (date: string, close: number) => void;
 }
 
 function toChartTime(time: string): UTCTimestamp | string {
-  // Intraday: full ISO string → Unix seconds (UTCTimestamp)
   if (time.length > 10) {
     return Math.floor(new Date(time).getTime() / 1000) as UTCTimestamp;
   }
-  // Daily/weekly/monthly: YYYY-MM-DD string (lightweight-charts BusinessDay)
   return time;
 }
 
-export default function LightweightChart({ data, height = 400 }: Props) {
+function toDateString(time: UTCTimestamp | string): string {
+  if (typeof time === "number") {
+    return new Date(time * 1000).toISOString().split("T")[0];
+  }
+  return String(time);
+}
+
+export default function LightweightChart({ data, height = 400, onCandleClick }: Props) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
 
   useEffect(() => {
     if (!chartContainerRef.current || data.length === 0) return;
@@ -71,6 +87,20 @@ export default function LightweightChart({ data, height = 400 }: Props) {
     candlestickSeries.setData(formattedData);
     chart.timeScale().fitContent();
 
+    chartRef.current = chart;
+    seriesRef.current = candlestickSeries;
+
+    // Click handler — resolve bar data and emit to parent
+    if (onCandleClick) {
+      chart.subscribeClick((param) => {
+        if (!param.time || !seriesRef.current) return;
+        const barData = param.seriesData.get(seriesRef.current) as CandlestickData | undefined;
+        if (!barData) return;
+        const dateStr = toDateString(param.time as UTCTimestamp | string);
+        onCandleClick(dateStr, barData.close);
+      });
+    }
+
     const handleResize = () => {
       if (chartContainerRef.current) {
         chart.applyOptions({ width: chartContainerRef.current.clientWidth });
@@ -82,8 +112,16 @@ export default function LightweightChart({ data, height = 400 }: Props) {
     return () => {
       window.removeEventListener("resize", handleResize);
       chart.remove();
+      chartRef.current = null;
+      seriesRef.current = null;
     };
-  }, [data, height]);
+  }, [data, height, onCandleClick]);
 
-  return <div ref={chartContainerRef} className="w-full" style={{ height }} />;
+  return (
+    <div
+      ref={chartContainerRef}
+      className="w-full"
+      style={{ height, cursor: onCandleClick ? "crosshair" : "default" }}
+    />
+  );
 }

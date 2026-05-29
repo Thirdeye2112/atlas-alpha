@@ -1,5 +1,4 @@
-import React, { useState } from "react";
-import { useLocation } from "wouter";
+import React, { useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { 
   useGetStockAnalysis, 
@@ -12,7 +11,7 @@ import ScoreGauge from "@/components/charts/ScoreGauge";
 import MiniGauge from "@/components/charts/MiniGauge";
 import RsiMiniChart from "@/components/charts/RsiMiniChart";
 import { formatCurrency, formatPercent, formatNumber, getColorForScore, getColorForDirection } from "@/lib/formatters";
-import { Search, Info, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Search, Info, TrendingUp, TrendingDown, Minus, Clock, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -34,21 +33,29 @@ const TIMEFRAMES: Timeframe[] = [
   { label: "ALL", period: "max", interval: "1mo" },
 ];
 
-const DEFAULT_TF = TIMEFRAMES[3]; // 3M / 1d
+const DEFAULT_TF = TIMEFRAMES[3];
+
+function formatDateLabel(date: string): string {
+  return new Date(date + "T12:00:00Z").toLocaleDateString("en-US", {
+    month: "short", day: "numeric", year: "numeric"
+  });
+}
 
 export default function Dashboard() {
-  const [location] = useLocation();
   const searchParams = new URLSearchParams(window.location.search);
   const initialTicker = searchParams.get("ticker") || "AAPL";
-  
+
   const [ticker, setTicker] = useState(initialTicker);
   const [searchInput, setSearchInput] = useState(initialTicker);
   const [timeframe, setTimeframe] = useState<Timeframe>(DEFAULT_TF);
+  const [selectedBar, setSelectedBar] = useState<{ date: string; close: number } | null>(null);
 
+  // Live analysis
   const { data: analysis, isLoading: analysisLoading } = useGetStockAnalysis(ticker, {
     query: { enabled: !!ticker, queryKey: getGetStockAnalysisQueryKey(ticker) }
   });
 
+  // OHLCV — custom fetch to support period/interval params
   const { data: ohlcv, isLoading: ohlcvLoading } = useQuery<OHLCVBar[]>({
     queryKey: ["ohlcv", ticker, timeframe.period, timeframe.interval],
     queryFn: async ({ signal }) => {
@@ -60,12 +67,40 @@ export default function Dashboard() {
     enabled: !!ticker,
   });
 
+  // Historical (point-in-time) analysis — only when a candle is clicked
+  const { data: historicalAnalysis, isLoading: historicalLoading } = useQuery({
+    queryKey: ["historical-analysis", ticker, selectedBar?.date],
+    queryFn: async ({ signal }) => {
+      const url = `/api/stock/${encodeURIComponent(ticker)}/historical-analysis?asOf=${selectedBar!.date}`;
+      const res = await fetch(url, { signal });
+      if (!res.ok) throw new Error("Historical analysis failed");
+      return res.json();
+    },
+    enabled: !!selectedBar,
+  });
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchInput.trim()) {
-      setTicker(searchInput.trim().toUpperCase());
+      const t = searchInput.trim().toUpperCase();
+      setTicker(t);
+      setSelectedBar(null);
     }
   };
+
+  const handleCandleClick = useCallback((date: string, close: number) => {
+    // Only works on daily/weekly/monthly timeframes (date strings, not intraday)
+    if (date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      setSelectedBar(prev => prev?.date === date ? null : { date, close });
+    }
+  }, []);
+
+  const clearHistorical = () => setSelectedBar(null);
+
+  // Which analysis to display (historical takes priority when selected)
+  const isHistoricalMode = !!selectedBar;
+  const displayAnalysis = isHistoricalMode ? historicalAnalysis : analysis;
+  const displayLoading = isHistoricalMode ? historicalLoading : analysisLoading;
 
   return (
     <div className="flex-1 flex overflow-hidden">
@@ -77,31 +112,31 @@ export default function Dashboard() {
       {/* Center Panel */}
       <div className="flex-1 flex flex-col min-w-0 border-r border-border h-full overflow-y-auto">
         <div className="p-4 border-b border-border bg-card">
-          <form onSubmit={handleSearch} className="flex gap-4">
+          <form onSubmit={handleSearch} className="flex gap-4 flex-wrap items-center">
             <div className="relative w-64">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input 
+              <Input
                 value={searchInput}
                 onChange={e => setSearchInput(e.target.value)}
                 placeholder="Enter Ticker..."
                 className="pl-9 font-mono uppercase bg-background border-border focus-visible:ring-primary h-9"
               />
             </div>
-            {analysis && (
+            {displayAnalysis && (
               <div className="flex items-center gap-4 text-sm font-mono">
                 <div>
                   <span className="text-muted-foreground mr-2">LAST</span>
-                  <span className="text-lg font-bold">{formatCurrency(analysis.quote.price)}</span>
+                  <span className="text-lg font-bold">{formatCurrency(displayAnalysis.quote.price)}</span>
                 </div>
                 <div>
                   <span className="text-muted-foreground mr-2">CHG</span>
-                  <span className={analysis.quote.change >= 0 ? "text-success" : "text-destructive"}>
-                    {analysis.quote.change >= 0 ? "+" : ""}{formatCurrency(analysis.quote.change)} ({formatPercent(analysis.quote.changePercent)})
+                  <span className={displayAnalysis.quote.change >= 0 ? "text-success" : "text-destructive"}>
+                    {displayAnalysis.quote.change >= 0 ? "+" : ""}{formatCurrency(displayAnalysis.quote.change)} ({formatPercent(displayAnalysis.quote.changePercent)})
                   </span>
                 </div>
                 <div>
                   <span className="text-muted-foreground mr-2">VOL</span>
-                  <span>{formatNumber(analysis.quote.volume, true)}</span>
+                  <span>{formatNumber(displayAnalysis.quote.volume, true)}</span>
                 </div>
               </div>
             )}
@@ -119,7 +154,7 @@ export default function Dashboard() {
                 {TIMEFRAMES.map(tf => (
                   <button
                     key={tf.label}
-                    onClick={() => setTimeframe(tf)}
+                    onClick={() => { setTimeframe(tf); setSelectedBar(null); }}
                     className={cn(
                       "px-2 py-0.5 text-xs font-mono font-bold rounded transition-colors",
                       timeframe.label === tf.label
@@ -135,89 +170,91 @@ export default function Dashboard() {
             </div>
             <div className="flex-1">
               {ohlcvLoading ? (
-                <div className="w-full h-full flex items-center justify-center text-muted-foreground">LOADING CHART...</div>
+                <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">LOADING CHART...</div>
               ) : ohlcv ? (
-                <LightweightChart data={ohlcv} height={285} />
+                <LightweightChart
+                  data={ohlcv}
+                  height={285}
+                  onCandleClick={timeframe.interval === "1d" || timeframe.interval === "1wk" || timeframe.interval === "1mo" ? handleCandleClick : undefined}
+                />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-muted-foreground">NO DATA</div>
+                <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">NO DATA</div>
               )}
             </div>
           </div>
 
           {/* Core Analytics */}
-          {analysisLoading ? (
-            <div className="flex-1 flex items-center justify-center text-muted-foreground animate-pulse">ANALYZING...</div>
-          ) : analysis ? (
+          {displayLoading ? (
+            <div className="flex-1 flex items-center justify-center text-muted-foreground animate-pulse text-sm">
+              {isHistoricalMode ? `REPLAYING ${selectedBar?.date}...` : "ANALYZING..."}
+            </div>
+          ) : displayAnalysis ? (
             <div className="space-y-6">
-              {/* 9 Gauges Grid */}
               <div className="grid grid-cols-3 xl:grid-cols-5 gap-3">
-                <MiniGauge title="Trend" score={analysis.atlasScore.trendScore} />
-                <MiniGauge title="Momentum" score={analysis.atlasScore.momentumScore} />
-                <MiniGauge title="Volume" score={analysis.atlasScore.volumeScore} />
-                <MiniGauge title="Options" score={analysis.atlasScore.optionsScore} />
-                <MiniGauge title="Rel Str" score={analysis.atlasScore.relativeStrengthScore} />
-                <MiniGauge title="Regime" score={analysis.atlasScore.marketRegimeScore} />
-                <MiniGauge title="Confidence" score={analysis.atlasScore.confidenceScore} />
-                <MiniGauge title="Risk" score={analysis.atlasScore.riskScore} />
+                <MiniGauge title="Trend" score={displayAnalysis.atlasScore.trendScore} />
+                <MiniGauge title="Momentum" score={displayAnalysis.atlasScore.momentumScore} />
+                <MiniGauge title="Volume" score={displayAnalysis.atlasScore.volumeScore} />
+                <MiniGauge title="Options" score={displayAnalysis.atlasScore.optionsScore} />
+                <MiniGauge title="Rel Str" score={displayAnalysis.atlasScore.relativeStrengthScore} />
+                <MiniGauge title="Regime" score={displayAnalysis.atlasScore.marketRegimeScore} />
+                <MiniGauge title="Confidence" score={displayAnalysis.atlasScore.confidenceScore} />
+                <MiniGauge title="Risk" score={displayAnalysis.atlasScore.riskScore} />
               </div>
 
-              {/* Technical Breakdown */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {/* Trend Analysis */}
                 <div className="bg-card border border-border rounded-md p-4 space-y-4">
                   <h3 className="text-sm font-bold tracking-wider border-b border-border pb-2 text-primary">TREND ANALYSIS</h3>
                   <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm font-mono">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">SMA 20</span>
                       <span className="flex items-center gap-1">
-                        {formatCurrency(analysis.trend.sma20)}
-                        <div className={`w-2 h-2 rounded-full ${analysis.quote.price > analysis.trend.sma20 ? 'bg-success' : 'bg-destructive'}`} />
+                        {formatCurrency(displayAnalysis.trend.sma20)}
+                        <div className={`w-2 h-2 rounded-full ${displayAnalysis.quote.price > displayAnalysis.trend.sma20 ? 'bg-success' : 'bg-destructive'}`} />
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">SMA 50</span>
                       <span className="flex items-center gap-1">
-                        {formatCurrency(analysis.trend.sma50)}
-                        <div className={`w-2 h-2 rounded-full ${analysis.quote.price > analysis.trend.sma50 ? 'bg-success' : 'bg-destructive'}`} />
+                        {formatCurrency(displayAnalysis.trend.sma50)}
+                        <div className={`w-2 h-2 rounded-full ${displayAnalysis.quote.price > displayAnalysis.trend.sma50 ? 'bg-success' : 'bg-destructive'}`} />
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">SMA 200</span>
                       <span className="flex items-center gap-1">
-                        {formatCurrency(analysis.trend.sma200)}
-                        <div className={`w-2 h-2 rounded-full ${analysis.quote.price > analysis.trend.sma200 ? 'bg-success' : 'bg-destructive'}`} />
+                        {formatCurrency(displayAnalysis.trend.sma200)}
+                        <div className={`w-2 h-2 rounded-full ${displayAnalysis.quote.price > displayAnalysis.trend.sma200 ? 'bg-success' : 'bg-destructive'}`} />
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">ALIGNMENT</span>
-                      <span className={getColorForScore(analysis.trend.trendAlignmentScore)}>{analysis.trend.trendAlignmentScore.toFixed(0)}</span>
+                      <span className={getColorForScore(displayAnalysis.trend.trendAlignmentScore)}>{displayAnalysis.trend.trendAlignmentScore.toFixed(0)}</span>
                     </div>
                   </div>
                 </div>
 
-                {/* Momentum Analysis */}
                 <div className="bg-card border border-border rounded-md p-4 space-y-4">
                   <h3 className="text-sm font-bold tracking-wider border-b border-border pb-2 text-primary">MOMENTUM & VOLATILITY</h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <div className="text-xs text-muted-foreground mb-1 font-mono">RSI (14)</div>
-                      <RsiMiniChart value={analysis.momentum.rsi} height={40} />
+                      <RsiMiniChart value={displayAnalysis.momentum.rsi} height={40} />
                     </div>
                     <div className="space-y-2 text-sm font-mono">
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">MACD</span>
-                        <span className={analysis.momentum.macdHistogram > 0 ? "text-success" : "text-destructive"}>
-                          {analysis.momentum.macd.toFixed(2)}
+                        <span className={displayAnalysis.momentum.macdHistogram > 0 ? "text-success" : "text-destructive"}>
+                          {displayAnalysis.momentum.macd.toFixed(2)}
                         </span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">ATR</span>
-                        <span>{formatCurrency(analysis.volatility.atr)}</span>
+                        <span>{formatCurrency(displayAnalysis.volatility.atr)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">SQUEEZE</span>
-                        <span className={analysis.volatility.volatilitySqueeze ? "text-warning" : "text-muted-foreground"}>
-                          {analysis.volatility.volatilitySqueeze ? "YES" : "NO"}
+                        <span className={displayAnalysis.volatility.volatilitySqueeze ? "text-warning" : "text-muted-foreground"}>
+                          {displayAnalysis.volatility.volatilitySqueeze ? "YES" : "NO"}
                         </span>
                       </div>
                     </div>
@@ -231,19 +268,40 @@ export default function Dashboard() {
 
       {/* Right Panel - Atlas Score Hero */}
       <div className="w-80 shrink-0 bg-card border-l border-border h-full flex flex-col">
-        {analysisLoading ? (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground animate-pulse">CALCULATING SCORE...</div>
-        ) : analysis ? (
+        {/* Historical mode banner */}
+        {isHistoricalMode && (
+          <div className="flex items-center justify-between px-4 py-2 bg-warning/10 border-b border-warning/30">
+            <div className="flex items-center gap-2">
+              <Clock className="w-3 h-3 text-warning" />
+              <span className="text-xs font-bold font-mono text-warning tracking-wider">
+                HISTORICAL · {formatDateLabel(selectedBar!.date)}
+              </span>
+            </div>
+            <button
+              onClick={clearHistorical}
+              className="text-warning hover:text-warning/70 transition-colors"
+              title="Return to live"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {displayLoading ? (
+          <div className="flex-1 flex items-center justify-center text-muted-foreground animate-pulse text-sm">
+            {isHistoricalMode ? "REPLAYING..." : "CALCULATING SCORE..."}
+          </div>
+        ) : displayAnalysis ? (
           <>
             <div className="p-6 flex flex-col items-center border-b border-border">
-              <ScoreGauge score={analysis.atlasScore.overall} size={220} strokeWidth={18} />
-              
+              <ScoreGauge score={displayAnalysis.atlasScore.overall} size={220} strokeWidth={18} />
+
               <div className="mt-6 flex items-center justify-center gap-2">
-                {analysis.atlasScore.direction === 'bullish' ? <TrendingUp className="text-success w-6 h-6" /> : 
-                 analysis.atlasScore.direction === 'bearish' ? <TrendingDown className="text-destructive w-6 h-6" /> : 
+                {displayAnalysis.atlasScore.direction === "bullish" ? <TrendingUp className="text-success w-6 h-6" /> :
+                 displayAnalysis.atlasScore.direction === "bearish" ? <TrendingDown className="text-destructive w-6 h-6" /> :
                  <Minus className="text-muted-foreground w-6 h-6" />}
-                <h2 className={cn("text-2xl font-bold uppercase tracking-widest font-mono", getColorForDirection(analysis.atlasScore.direction))}>
-                  {analysis.atlasScore.label.replace('_', ' ')}
+                <h2 className={cn("text-2xl font-bold uppercase tracking-widest font-mono", getColorForDirection(displayAnalysis.atlasScore.direction))}>
+                  {displayAnalysis.atlasScore.label.replace("_", " ")}
                 </h2>
               </div>
             </div>
@@ -251,19 +309,19 @@ export default function Dashboard() {
             <div className="p-4 space-y-4 border-b border-border font-mono text-sm">
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">BULL PROB</span>
-                <span className="text-success font-bold">{formatPercent(analysis.atlasScore.bullishProbability)}</span>
+                <span className="text-success font-bold">{formatPercent(displayAnalysis.atlasScore.bullishProbability)}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">BEAR PROB</span>
-                <span className="text-destructive font-bold">{formatPercent(analysis.atlasScore.bearishProbability)}</span>
+                <span className="text-destructive font-bold">{formatPercent(displayAnalysis.atlasScore.bearishProbability)}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">EXPECTED MOVE</span>
-                <span className="text-warning font-bold">±{formatPercent(analysis.atlasScore.expectedMovePercent)}</span>
+                <span className="text-warning font-bold">±{formatPercent(displayAnalysis.atlasScore.expectedMovePercent)}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">HORIZON</span>
-                <span className="text-foreground">{analysis.atlasScore.timeHorizon.toUpperCase()}</span>
+                <span className="text-foreground">{displayAnalysis.atlasScore.timeHorizon.toUpperCase()}</span>
               </div>
             </div>
 
@@ -273,20 +331,26 @@ export default function Dashboard() {
                 SIGNAL NARRATIVE
               </h3>
               <p className="text-sm text-secondary-foreground leading-relaxed">
-                {analysis.atlasScore.signalNarrative}
+                {displayAnalysis.atlasScore.signalNarrative}
               </p>
-              
+
               <div className="mt-6">
                 <h3 className="text-xs font-bold text-muted-foreground tracking-wider mb-2">KEY CATALYSTS</h3>
                 <ul className="list-disc pl-4 space-y-1 text-sm text-secondary-foreground">
-                  {analysis.patterns.patterns.map((p, i) => (
+                  {displayAnalysis.patterns.patterns.map((p: string, i: number) => (
                     <li key={i}>{p}</li>
                   ))}
-                  {analysis.options.unusualActivity && (
+                  {displayAnalysis.options.unusualActivity && (
                     <li className="text-warning">Unusual options activity detected</li>
                   )}
                 </ul>
               </div>
+
+              {!isHistoricalMode && (
+                <p className="mt-6 text-xs text-muted-foreground font-mono border-t border-border pt-4">
+                  CLICK ANY DAILY CANDLE TO REPLAY SCORE AT THAT DATE
+                </p>
+              )}
             </div>
           </>
         ) : null}

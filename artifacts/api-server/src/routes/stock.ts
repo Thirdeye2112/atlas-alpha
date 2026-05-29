@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { fetchQuote, fetchOHLCV } from "../lib/marketData.js";
-import { runFullAnalysis } from "../lib/analysisEngine.js";
+import { runFullAnalysis, runHistoricalAnalysis } from "../lib/analysisEngine.js";
 import { GetStockQuoteParams, GetStockAnalysisParams, GetStockOhlcvParams } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -32,6 +32,22 @@ router.get("/stock/:ticker/analysis", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.warn({ err, ticker: params.data.ticker }, "Analysis failed");
     res.status(404).json({ error: `Could not analyze ticker: ${params.data.ticker}` });
+  }
+});
+
+router.get("/stock/:ticker/historical-analysis", async (req, res): Promise<void> => {
+  const ticker = (req.params.ticker as string).toUpperCase();
+  const asOf = typeof req.query.asOf === "string" ? req.query.asOf : "";
+  if (!asOf || !/^\d{4}-\d{2}-\d{2}$/.test(asOf)) {
+    res.status(400).json({ error: "asOf query param required (YYYY-MM-DD)" });
+    return;
+  }
+  try {
+    const analysis = await runHistoricalAnalysis(ticker, asOf);
+    res.json(analysis);
+  } catch (err) {
+    req.log.warn({ err, ticker, asOf }, "Historical analysis failed");
+    res.status(404).json({ error: `Could not analyze ${ticker} as of ${asOf}` });
   }
 });
 
