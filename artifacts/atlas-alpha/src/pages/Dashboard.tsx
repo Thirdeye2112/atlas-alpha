@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { 
   useGetStockAnalysis, 
@@ -11,9 +11,194 @@ import ScoreGauge from "@/components/charts/ScoreGauge";
 import MiniGauge from "@/components/charts/MiniGauge";
 import RsiMiniChart from "@/components/charts/RsiMiniChart";
 import { formatCurrency, formatPercent, formatNumber, getColorForScore, getColorForDirection } from "@/lib/formatters";
-import { Search, Info, TrendingUp, TrendingDown, Minus, Clock, X } from "lucide-react";
+import { Search, Info, TrendingUp, TrendingDown, Minus, Clock, X, ChevronDown, ChevronRight, FlaskConical } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+
+interface BacktestPoint { x: number; y: number; date: string; }
+interface BacktestBucket { count: number; hitRate: number | null; avgReturn: number | null; }
+interface BacktestResult {
+  ticker: string; horizon: number; ic: number; icRating: string;
+  totalObservations: number;
+  bull: BacktestBucket; neutral: BacktestBucket; bear: BacktestBucket;
+  scatter: BacktestPoint[];
+}
+
+function ScatterPlot({ data, width = 240, height = 110 }: { data: BacktestPoint[]; width?: number; height?: number }) {
+  if (!data.length) return null;
+  const pad = { t: 8, r: 8, b: 24, l: 28 };
+  const W = width - pad.l - pad.r;
+  const H = height - pad.t - pad.b;
+  const xs = data.map(d => d.x);
+  const ys = data.map(d => d.y);
+  const xMin = Math.min(...xs), xMax = Math.max(...xs);
+  const yMin = Math.min(...ys), yMax = Math.max(...ys);
+  const xRange = xMax - xMin || 1;
+  const yRange = yMax - yMin || 1;
+  const toSvgX = (v: number) => pad.l + ((v - xMin) / xRange) * W;
+  const toSvgY = (v: number) => pad.t + H - ((v - yMin) / yRange) * H;
+  const zero = toSvgY(0);
+
+  // Least-squares regression line
+  const n = data.length;
+  const mx = xs.reduce((a, b) => a + b, 0) / n;
+  const my = ys.reduce((a, b) => a + b, 0) / n;
+  const num = xs.reduce((s, x, i) => s + (x - mx) * (ys[i] - my), 0);
+  const den = xs.reduce((s, x) => s + (x - mx) ** 2, 0);
+  const slope = den ? num / den : 0;
+  const intercept = my - slope * mx;
+  const x1 = xMin, y1 = slope * x1 + intercept;
+  const x2 = xMax, y2 = slope * x2 + intercept;
+
+  return (
+    <svg width={width} height={height} className="overflow-visible">
+      {/* zero line */}
+      {zero > pad.t && zero < pad.t + H && (
+        <line x1={pad.l} x2={pad.l + W} y1={zero} y2={zero} stroke="rgba(255,255,255,0.15)" strokeDasharray="3,3" />
+      )}
+      {/* regression line */}
+      <line
+        x1={toSvgX(x1)} y1={toSvgY(y1)} x2={toSvgX(x2)} y2={toSvgY(y2)}
+        stroke={slope > 0 ? "rgba(34,197,94,0.6)" : "rgba(239,68,68,0.6)"}
+        strokeWidth={1.5}
+      />
+      {/* dots */}
+      {data.map((d, i) => (
+        <circle
+          key={i} cx={toSvgX(d.x)} cy={toSvgY(d.y)} r={2}
+          fill={d.y > 0 ? "rgba(34,197,94,0.5)" : "rgba(239,68,68,0.5)"}
+        />
+      ))}
+      {/* axes labels */}
+      <text x={pad.l} y={height - 4} fontSize={9} fill="rgba(255,255,255,0.35)" fontFamily="monospace">Score</text>
+      <text x={pad.l + W} y={height - 4} fontSize={9} fill="rgba(255,255,255,0.35)" fontFamily="monospace" textAnchor="end">{xMax.toFixed(0)}</text>
+      <text x={pad.l - 2} y={pad.t + 6} fontSize={9} fill="rgba(255,255,255,0.35)" fontFamily="monospace" textAnchor="end">Ret%</text>
+    </svg>
+  );
+}
+
+function BacktestPanel({ ticker }: { ticker: string }) {
+  const [open, setOpen] = useState(false);
+  const [horizon, setHorizon] = useState(10);
+  const [data, setData] = useState<BacktestResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const run = useCallback(async (h: number) => {
+    if (abortRef.current) abortRef.current.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    setLoading(true); setError(null); setData(null);
+    try {
+      const r = await fetch(`/api/backtest/ic?ticker=${encodeURIComponent(ticker)}&horizon=${h}`, { signal: ctrl.signal });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setData(await r.json());
+    } catch (e: unknown) {
+      if (e instanceof Error && e.name !== "AbortError") setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [ticker]);
+
+  useEffect(() => { if (open) run(horizon); }, [open, ticker]);
+
+  const icColor = data
+    ? data.icRating === "strong" ? "text-success"
+    : data.icRating === "moderate" ? "text-warning"
+    : "text-muted-foreground"
+    : "";
+
+  return (
+    <div className="border-t border-border mt-4">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between py-3 text-xs font-bold tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <span className="flex items-center gap-2"><FlaskConical className="w-3 h-3" /> WALK-FORWARD BACKTEST</span>
+        {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+      </button>
+
+      {open && (
+        <div className="space-y-3 pb-4">
+          {/* Horizon selector */}
+          <div className="flex items-center gap-1">
+            {[5, 10, 20].map(h => (
+              <button
+                key={h}
+                onClick={() => { setHorizon(h); run(h); }}
+                className={cn(
+                  "px-2 py-0.5 text-xs font-mono border rounded transition-colors",
+                  horizon === h
+                    ? "border-primary text-primary bg-primary/10"
+                    : "border-border text-muted-foreground hover:border-foreground"
+                )}
+              >{h}D</button>
+            ))}
+            <span className="ml-auto text-xs text-muted-foreground font-mono">fwd horizon</span>
+          </div>
+
+          {loading && (
+            <div className="text-xs text-muted-foreground font-mono animate-pulse py-4 text-center">
+              COMPUTING {data ? "(cached)" : "~10–20s"}…
+            </div>
+          )}
+          {error && <div className="text-xs text-destructive font-mono">{error}</div>}
+
+          {data && !loading && (
+            <div className="space-y-3">
+              {/* IC stat */}
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground font-mono">PEARSON IC</span>
+                <span className={cn("text-sm font-bold font-mono", icColor)}>
+                  {data.ic > 0 ? "+" : ""}{data.ic.toFixed(3)}
+                  <span className="text-xs font-normal ml-1 text-muted-foreground">({data.icRating})</span>
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground font-mono">OBSERVATIONS</span>
+                <span className="text-xs font-mono">{data.totalObservations} days</span>
+              </div>
+
+              {/* Bucket hit rates */}
+              <div className="space-y-1.5 pt-1">
+                {[
+                  { label: "BULL (≥60)", b: data.bull, positive: true, color: "text-success" },
+                  { label: "NEUTRAL", b: data.neutral, positive: true, color: "text-muted-foreground" },
+                  { label: "BEAR (≤40)", b: data.bear, positive: false, color: "text-destructive" },
+                ].map(({ label, b, positive, color }) => (
+                  <div key={label} className="flex items-center gap-2 text-xs font-mono">
+                    <span className="text-muted-foreground w-20 shrink-0">{label}</span>
+                    <div className="flex-1 bg-border/30 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className={cn("h-full rounded-full", positive ? "bg-success/60" : "bg-destructive/60")}
+                        style={{ width: `${b.hitRate ?? 0}%` }}
+                      />
+                    </div>
+                    <span className={cn("w-8 text-right", color)}>{b.hitRate ?? "—"}%</span>
+                    <span className="text-muted-foreground/60 w-12 text-right">
+                      {b.avgReturn !== null ? `${b.avgReturn > 0 ? "+" : ""}${b.avgReturn}%` : "—"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Scatter */}
+              <div className="pt-1">
+                <div className="text-xs text-muted-foreground font-mono mb-1">SCORE vs {data.horizon}D RETURN</div>
+                <ScatterPlot data={data.scatter} width={236} height={110} />
+              </div>
+
+              <p className="text-xs text-muted-foreground/50 font-mono leading-relaxed pt-1">
+                Walk-forward: scored daily using only prior data. IC {'>'} 0.05 = signal exists. Hit rate = % correct direction calls.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function buildPriceLines(data: {
   volatility: { bollingerUpper: number; bollingerLower: number };
@@ -366,8 +551,10 @@ export default function Dashboard() {
                 </ul>
               </div>
 
+              {!isHistoricalMode && <BacktestPanel ticker={ticker} />}
+
               {!isHistoricalMode && (
-                <p className="mt-6 text-xs text-muted-foreground font-mono border-t border-border pt-4">
+                <p className="mt-4 text-xs text-muted-foreground font-mono border-t border-border pt-4">
                   CLICK ANY DAILY CANDLE TO REPLAY SCORE AT THAT DATE
                 </p>
               )}
