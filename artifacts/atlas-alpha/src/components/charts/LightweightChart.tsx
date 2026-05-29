@@ -4,6 +4,7 @@ import {
   ColorType,
   CandlestickSeries,
   LineSeries,
+  HistogramSeries,
   UTCTimestamp,
   IChartApi,
   ISeriesApi,
@@ -121,10 +122,29 @@ export default function LightweightChart({
         high: d.high,
         low: d.low,
         close: d.close,
+        volume: d.volume,
       }))
       .sort((a, b) => (a.time as number) - (b.time as number));
 
     candlestickSeries.setData(formattedData);
+
+    // Volume histogram — bottom 22% of chart, colored by candle direction
+    const volumeSeries = chart.addSeries(HistogramSeries, {
+      priceFormat: { type: "volume" },
+      priceScaleId: "volume",
+    });
+    volumeSeries.priceScale().applyOptions({
+      scaleMargins: { top: 0.78, bottom: 0 },
+    });
+    volumeSeries.setData(
+      formattedData.map(bar => ({
+        time: bar.time,
+        value: bar.volume,
+        color: bar.close >= bar.open
+          ? "rgba(34,197,94,0.35)"
+          : "rgba(239,68,68,0.35)",
+      }))
+    );
 
     // Moving average lines — SMA50, SMA87, SMA200 — computed from bar data, full-width
     const closes = data.map(d => d.close);

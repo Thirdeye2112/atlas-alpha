@@ -17,13 +17,11 @@ import { cn } from "@/lib/utils";
 
 function buildPriceLines(data: {
   volatility: { bollingerUpper: number; bollingerLower: number };
-  volume: { vwap: number };
   patterns: { supportLevel: number | null; resistanceLevel: number | null };
 }): ChartPriceLine[] {
   const lines: ChartPriceLine[] = [
-    { price: data.volatility.bollingerUpper, label: "BB+",  color: "rgba(156,163,175,0.5)", lineStyle: "dotted" },
-    { price: data.volatility.bollingerLower, label: "BB-",  color: "rgba(156,163,175,0.5)", lineStyle: "dotted" },
-    { price: data.volume.vwap,               label: "VWAP", color: "#a855f7",               lineStyle: "dashed" },
+    { price: data.volatility.bollingerUpper, label: "BB+", color: "rgba(156,163,175,0.5)", lineStyle: "dotted" },
+    { price: data.volatility.bollingerLower, label: "BB-", color: "rgba(156,163,175,0.5)", lineStyle: "dotted" },
   ];
   if (data.patterns.supportLevel)    lines.push({ price: data.patterns.supportLevel,    label: "SUP", color: "rgba(34,197,94,0.6)", lineStyle: "dashed" });
   if (data.patterns.resistanceLevel) lines.push({ price: data.patterns.resistanceLevel, label: "RES", color: "rgba(239,68,68,0.6)", lineStyle: "dashed" });
@@ -160,7 +158,7 @@ export default function Dashboard() {
 
         <div className="flex-1 p-4 flex flex-col gap-6">
           {/* Chart Section */}
-          <div className="h-80 bg-card border border-border rounded-md overflow-hidden flex flex-col">
+          <div className="h-[420px] bg-card border border-border rounded-md overflow-hidden flex flex-col">
             <div className="px-3 py-2 border-b border-border flex items-center justify-between gap-2">
               <span className="text-xs font-bold text-muted-foreground tracking-wider shrink-0">
                 {ticker} · {timeframe.label} · {timeframe.interval.toUpperCase()}
@@ -189,7 +187,7 @@ export default function Dashboard() {
               ) : ohlcv ? (
                 <LightweightChart
                   data={ohlcv}
-                  height={285}
+                  height={378}
                   onCandleClick={timeframe.interval === "1d" || timeframe.interval === "1wk" || timeframe.interval === "1mo" ? handleCandleClick : undefined}
                   priceLines={analysis ? buildPriceLines(analysis) : []}
                   signals={(timeframe.interval === "1d" || timeframe.interval === "1wk" || timeframe.interval === "1mo") && displayAnalysis?.chartSignals ? displayAnalysis.chartSignals as ChartSignalMarker[] : []}

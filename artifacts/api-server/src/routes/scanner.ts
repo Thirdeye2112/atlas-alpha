@@ -1,14 +1,14 @@
 import { Router, type IRouter } from "express";
 import { SCANNER_UNIVERSE } from "../lib/scannerUniverse.js";
-import { runFullAnalysis } from "../lib/analysisEngine.js";
+import { runFullAnalysis, type AnalysisResult } from "../lib/analysisEngine.js";
 import { scannerCache } from "../lib/cache.js";
 import { calcScannerResult } from "../lib/scoring.js";
 import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
 
-type ScannerFilter = (analysis: Awaited<ReturnType<typeof runFullAnalysis>>) => boolean;
-type ScannerSort = (a: Awaited<ReturnType<typeof runFullAnalysis>>, b: Awaited<ReturnType<typeof runFullAnalysis>>) => number;
+type ScannerFilter = (analysis: AnalysisResult) => boolean;
+type ScannerSort = (a: AnalysisResult, b: AnalysisResult) => number;
 
 async function runScanner(
   cacheKey: string,
@@ -19,10 +19,9 @@ async function runScanner(
   const cached = scannerCache.get<object[]>(cacheKey);
   if (cached) return cached.slice(0, limit);
 
-  // Run analysis on universe in batches of 10
-  const universe = SCANNER_UNIVERSE.slice(0, 80); // limit for performance
-  const analyses: Awaited<ReturnType<typeof runFullAnalysis>>[] = [];
-  const batchSize = 10;
+  const universe = SCANNER_UNIVERSE;
+  const analyses: AnalysisResult[] = [];
+  const batchSize = 20;
 
   for (let i = 0; i < universe.length; i += batchSize) {
     const batch = universe.slice(i, i + batchSize);
@@ -30,7 +29,7 @@ async function runScanner(
       batch.map(ticker => runFullAnalysis(ticker))
     );
     for (const r of results) {
-      if (r.status === "fulfilled") analyses.push(r.value);
+      if (r.status === "fulfilled") analyses.push(r.value as AnalysisResult);
     }
   }
 
@@ -38,17 +37,17 @@ async function runScanner(
 
   const results = filtered.map(a =>
     calcScannerResult(
-      a.quote.ticker,
-      a.quote.name,
-      a.quote.price,
-      a.quote.change,
-      a.quote.changePercent,
+      a.quote.ticker as string,
+      a.quote.name as string,
+      a.quote.price as number,
+      a.quote.change as number,
+      a.quote.changePercent as number,
       a.atlasScore,
       a.volume,
       a.momentum,
       a.trend,
-      a.quote.sector,
-      a.quote.volume
+      (a.quote.sector as string | null) ?? null,
+      a.quote.volume as number
     )
   );
 
@@ -95,7 +94,7 @@ router.get("/scanner/breakouts", async (req, res): Promise<void> => {
       "scanner:breakouts",
       a => {
         const nearResistance = a.volatility.bollingerUpper > 0 &&
-          a.quote.price >= a.volatility.bollingerUpper * 0.98;
+          (a.quote.price as number) >= a.volatility.bollingerUpper * 0.98;
         return a.atlasScore.direction === "bullish" && a.volume.volumeSpike && nearResistance;
       },
       (a, b) => b.volume.relativeVolume - a.volume.relativeVolume,
@@ -115,7 +114,7 @@ router.get("/scanner/breakdowns", async (req, res): Promise<void> => {
       "scanner:breakdowns",
       a => {
         const nearSupport = a.volatility.bollingerLower > 0 &&
-          a.quote.price <= a.volatility.bollingerLower * 1.02;
+          (a.quote.price as number) <= a.volatility.bollingerLower * 1.02;
         return a.atlasScore.direction === "bearish" && a.volume.volumeSpike && nearSupport;
       },
       (a, b) => a.atlasScore.overall - b.atlasScore.overall,

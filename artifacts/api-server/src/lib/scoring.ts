@@ -37,6 +37,11 @@ function labelFromScore(score: number): AtlasLabel {
   return "extreme_bearish";
 }
 
+// Logistic calibration: score 50→50%, 70→84%, 30→16%, 80→93%, 20→7%
+function logisticProb(score: number): number {
+  return clamp(Math.round((1 / (1 + Math.exp(-0.08 * (score - 50)))) * 100));
+}
+
 export function calcAtlasScore(
   trend: TrendResult,
   momentum: MomentumResult,
@@ -46,19 +51,20 @@ export function calcAtlasScore(
   marketRegimeScore: number,
   expectedMovePercent: number
 ): AtlasAlphaScore {
-  // Weighted composite: Trend 25% + Momentum 20% + Volume 15% + Options 20% + RS 10% + Regime 10%
+  // Weighted composite: Trend 30% + Momentum 20% + Volume 15% + Options 10% + RS 15% + Regime 10%
+  // Options reduced (proxy data); Trend + RS raised (verifiable price-based signals)
   const overall = clamp(
-    trend.trendAlignmentScore * 0.25 +
-    momentum.momentumScore * 0.20 +
-    volume.volumeScore * 0.15 +
-    options.optionsScore * 0.20 +
-    rs.rsScore * 0.10 +
-    marketRegimeScore * 0.10
+    trend.trendAlignmentScore * 0.30 +
+    momentum.momentumScore    * 0.20 +
+    volume.volumeScore        * 0.15 +
+    options.optionsScore      * 0.10 +
+    rs.rsScore                * 0.15 +
+    marketRegimeScore         * 0.10
   );
 
   const label = labelFromScore(overall);
 
-  // Count agreeing indicators (bullish side)
+  // Indicator agreement — 18 independent signals (redundant vsSpy>2 slot removed)
   const bullishSignals: boolean[] = [
     trend.trendDirection === "strong_up" || trend.trendDirection === "up",
     trend.goldenCross,
@@ -73,9 +79,7 @@ export function calcAtlasScore(
     volume.volumeSpike && overall > 50,
     options.optionsScore > 60,
     options.unusualActivity && overall > 50,
-    rs.vsSpy > 0,
-    rs.vsSpy > 2,
-    trend.priceVsSma20 > 0,
+    rs.vsSpy > 0,                      // multi-timeframe weighted RS vs SPY
     trend.priceVsSma50 > 0,
     trend.priceVsSma200 > 0,
     momentum.rsiDivergence === "bullish",
@@ -97,8 +101,6 @@ export function calcAtlasScore(
     options.optionsScore < 40,
     options.unusualActivity && overall < 50,
     rs.vsSpy < 0,
-    rs.vsSpy < -2,
-    trend.priceVsSma20 < 0,
     trend.priceVsSma50 < 0,
     trend.priceVsSma200 < 0,
     momentum.rsiDivergence === "bearish",
@@ -110,22 +112,19 @@ export function calcAtlasScore(
   const bearCount = bearishSignals.filter(Boolean).length;
   const indicatorsAgreeing = overall >= 50 ? bullCount : bearCount;
 
-  // Confidence = agreement ratio
   const agreementRatio = Math.max(bullCount, bearCount) / totalIndicators;
   const confidenceScore = clamp(agreementRatio * 100);
 
-  // Probabilities
-  const bullishProbability = clamp(overall);
-  const bearishProbability = clamp(100 - overall);
+  // Logistic-calibrated probabilities (not just the raw score)
+  const bullishProbability = logisticProb(overall);
+  const bearishProbability = clamp(100 - bullishProbability);
 
   const direction: Direction = overall >= 60 ? "bullish" : overall <= 40 ? "bearish" : "neutral";
 
-  // Time horizon: based on how strong the signal is and momentum
   let timeHorizon: TimeHorizon = "1-2w";
   if (confidenceScore > 80 && Math.abs(overall - 50) > 25) timeHorizon = "1-3d";
   else if (confidenceScore < 55) timeHorizon = "1-3m";
 
-  // Risk score (inverse of confidence + volatility proxy)
   const riskScore = clamp(100 - confidenceScore + (expectedMovePercent > 5 ? 20 : 0));
 
   const signalNarrative = buildNarrative(trend, momentum, volume, options, rs, direction, overall, confidenceScore, bullCount, totalIndicators);
@@ -139,8 +138,8 @@ export function calcAtlasScore(
     optionsScore: Math.round(options.optionsScore),
     relativeStrengthScore: Math.round(rs.rsScore),
     marketRegimeScore: Math.round(marketRegimeScore),
-    bullishProbability: Math.round(bullishProbability),
-    bearishProbability: Math.round(bearishProbability),
+    bullishProbability,
+    bearishProbability,
     confidenceScore: Math.round(confidenceScore),
     riskScore: Math.round(riskScore),
     direction,
@@ -165,13 +164,12 @@ function buildNarrative(
   total: number
 ): string {
   const parts: string[] = [];
-  const dir = direction.charAt(0).toUpperCase() + direction.slice(1);
   const strength = overall >= 75 ? "Strong" : overall >= 60 ? "Moderate" : overall <= 25 ? "Strong bearish" : overall <= 40 ? "Moderate bearish" : "Mixed";
 
   parts.push(`${strength} ${direction} setup detected. Signal confidence: ${Math.round(confidence)}% (${agreeing}/${total} indicators in agreement).`);
 
   if (trend.trendDirection === "strong_up") {
-    parts.push(`Price maintains alignment above all major moving averages — SMA20 (+${trend.priceVsSma20.toFixed(1)}%), SMA50 (+${trend.priceVsSma50.toFixed(1)}%), SMA200 (+${trend.priceVsSma200.toFixed(1)}%).`);
+    parts.push(`Price maintains alignment above key moving averages — SMA50 (+${trend.priceVsSma50.toFixed(1)}%), SMA200 (+${trend.priceVsSma200.toFixed(1)}%).`);
   } else if (trend.trendDirection === "strong_down") {
     parts.push(`Price trading below all key moving averages — a bearish structure. Distance from SMA200: ${trend.priceVsSma200.toFixed(1)}%.`);
   } else if (trend.trendDirection === "up") {
@@ -212,9 +210,9 @@ function buildNarrative(
   }
 
   if (rs.vsSpy > 3) {
-    parts.push(`Outperforming SPY by ${rs.vsSpy.toFixed(1)}% over the lookback period — institutional relative strength thesis intact.`);
+    parts.push(`Outperforming SPY by ${rs.vsSpy.toFixed(1)}% (multi-timeframe composite) — institutional relative strength thesis intact.`);
   } else if (rs.vsSpy < -3) {
-    parts.push(`Underperforming SPY by ${Math.abs(rs.vsSpy).toFixed(1)}% — sector rotation risk should be monitored.`);
+    parts.push(`Underperforming SPY by ${Math.abs(rs.vsSpy).toFixed(1)}% (multi-timeframe composite) — sector rotation risk should be monitored.`);
   }
 
   if (momentum.rsiDivergence === "bullish") {

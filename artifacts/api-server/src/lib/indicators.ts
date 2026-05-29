@@ -505,12 +505,13 @@ export function calcChartSignals(bars: OHLCVBar[]): ChartSignal[] {
     }
   }
 
-  // Bollinger Band breakouts and mean-reversion returns
+  // Bollinger Band breakouts and mean-reversion returns — last 20 bars only (reduces noise)
+  const bbWindowStart = Math.max(0, n - 20);
   const bbArr = BollingerBands.calculate({ values: closes, period: 20, stdDev: 2 });
   const bbOffset = n - bbArr.length;
   for (let i = 1; i < bbArr.length; i++) {
     const barIdx = bbOffset + i;
-    if (barIdx < windowStart) continue;
+    if (barIdx < bbWindowStart) continue;
     const bb = bbArr[i];
     const prevBb = bbArr[i - 1];
     if (!bb || !prevBb) continue;
@@ -565,31 +566,29 @@ export function calcRelativeStrength(
   iwmBars: OHLCVBar[],
   sectorName: string | null
 ): RelativeStrengthResult {
-  const perfPct = (bars: OHLCVBar[]) => {
-    if (bars.length < 2) return 0;
-    const first = bars[0].close;
-    const last = bars[bars.length - 1].close;
-    return ((last - first) / first) * 100;
+  // % return over a given lookback (uses all available bars if fewer than requested)
+  const perfPct = (bars: OHLCVBar[], lookback: number): number => {
+    const sliced = bars.slice(-lookback);
+    if (sliced.length < 2) return 0;
+    return ((sliced[sliced.length - 1].close - sliced[0].close) / sliced[0].close) * 100;
   };
 
-  const tickerPerf = perfPct(tickerBars);
-  const spyPerf = perfPct(spyBars);
-  const qqqPerf = perfPct(qqqBars);
-  const iwmPerf = perfPct(iwmBars);
+  // Three timeframes: 1mo (21d), 3mo (63d), 6mo (126d)
+  const t1m = 21, t3m = 63, t6m = 126;
 
-  const vsSpy = tickerPerf - spyPerf;
-  const vsQqq = tickerPerf - qqqPerf;
-  const vsIwm = tickerPerf - iwmPerf;
-  const vsSector = vsSpy * 0.5; // proxy when sector ETF not available
+  const tickerVsSpy1m = perfPct(tickerBars, t1m) - perfPct(spyBars, t1m);
+  const tickerVsSpy3m = perfPct(tickerBars, t3m) - perfPct(spyBars, t3m);
+  const tickerVsSpy6m = perfPct(tickerBars, t6m) - perfPct(spyBars, t6m);
 
-  const rsScore = clamp(50 + vsSpy * 2);
+  // Mansfield-style weighted composite: 40% recent + 35% medium + 25% long
+  const weightedVsSpy = tickerVsSpy1m * 0.40 + tickerVsSpy3m * 0.35 + tickerVsSpy6m * 0.25;
 
-  return {
-    vsSpy,
-    vsQqq,
-    vsIwm,
-    vsSector,
-    rsScore,
-    sectorName,
-  };
+  const vsSpy   = Math.round(weightedVsSpy * 10) / 10;
+  const vsQqq   = Math.round((perfPct(tickerBars, t1m) - perfPct(qqqBars, t1m)) * 10) / 10;
+  const vsIwm   = Math.round((perfPct(tickerBars, t1m) - perfPct(iwmBars, t1m)) * 10) / 10;
+  const vsSector = Math.round(weightedVsSpy * 0.5 * 10) / 10;
+
+  const rsScore = clamp(50 + weightedVsSpy * 2);
+
+  return { vsSpy, vsQqq, vsIwm, vsSector, rsScore, sectorName };
 }

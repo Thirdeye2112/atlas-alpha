@@ -1,8 +1,29 @@
 import { fetchQuote, fetchOHLCV, type OHLCVBar } from "./marketData.js";
-import { calcTrend, calcMomentum, calcVolume, calcVolatility, calcOptions, calcPatterns, calcRelativeStrength, calcChartSignals } from "./indicators.js";
-import { calcAtlasScore } from "./scoring.js";
+import {
+  calcTrend, calcMomentum, calcVolume, calcVolatility, calcOptions,
+  calcPatterns, calcRelativeStrength, calcChartSignals,
+  type TrendResult, type MomentumResult, type VolumeResult,
+  type VolatilityResult, type OptionsResult, type PatternResult,
+  type RelativeStrengthResult, type ChartSignal,
+} from "./indicators.js";
+import { calcAtlasScore, type AtlasAlphaScore } from "./scoring.js";
 import { analysisCache } from "./cache.js";
 import { logger } from "./logger.js";
+
+export interface AnalysisResult {
+  quote: Record<string, unknown>;
+  atlasScore: AtlasAlphaScore;
+  trend: TrendResult;
+  momentum: MomentumResult;
+  volume: VolumeResult;
+  volatility: VolatilityResult;
+  options: OptionsResult;
+  patterns: PatternResult;
+  relativeStrength: RelativeStrengthResult;
+  chartSignals: ChartSignal[];
+  historicalDate?: string;
+  cachedAt: string;
+}
 
 function buildResult(
   sym: string,
@@ -13,14 +34,14 @@ function buildResult(
   iwmBars: OHLCVBar[],
   quoteOverride: Record<string, unknown>,
   historicalDate?: string
-) {
+): AnalysisResult {
   const trend = calcTrend(bars, price);
   const momentum = calcMomentum(bars);
   const volume = calcVolume(bars, (quoteOverride.avgVolume as number) ?? 0);
   const volatility = calcVolatility(bars, price);
   const options = calcOptions(momentum, volume, volatility, price);
   const patterns = calcPatterns(bars, trend, volatility);
-  const rs = calcRelativeStrength(sym, bars.slice(-60), spyBars, qqqBars, iwmBars, (quoteOverride.sector as string | null) ?? null);
+  const rs = calcRelativeStrength(sym, bars, spyBars, qqqBars, iwmBars, (quoteOverride.sector as string | null) ?? null);
   const spyTrend = calcTrend(spyBars, spyBars[spyBars.length - 1]?.close ?? 500);
   const marketRegimeScore = spyTrend.trendAlignmentScore;
   const atlasScore = calcAtlasScore(trend, momentum, volume, options, rs, marketRegimeScore, volatility.expectedMovePercent);
@@ -52,9 +73,9 @@ export async function runFullAnalysis(ticker: string) {
   const [quote, bars, spyBars, qqqBars, iwmBars] = await Promise.all([
     fetchQuote(sym),
     fetchOHLCV(sym, "1y", "1d"),
-    fetchOHLCV("SPY", "3mo", "1d"),
-    fetchOHLCV("QQQ", "3mo", "1d"),
-    fetchOHLCV("IWM", "3mo", "1d"),
+    fetchOHLCV("SPY", "6mo", "1d"),
+    fetchOHLCV("QQQ", "6mo", "1d"),
+    fetchOHLCV("IWM", "6mo", "1d"),
   ]);
 
   if (bars.length < 30) throw new Error(`Insufficient historical data for ${sym}`);
