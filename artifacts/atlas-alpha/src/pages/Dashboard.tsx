@@ -317,7 +317,12 @@ export default function Dashboard() {
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">EXPECTED MOVE</span>
-                <span className="text-warning font-bold">±{formatPercent(displayAnalysis.atlasScore.expectedMovePercent)}</span>
+                <span className="text-warning font-bold">
+                  ±{formatPercent(displayAnalysis.atlasScore.expectedMovePercent)}
+                  <span className="text-muted-foreground font-normal ml-1.5">
+                    (±{formatCurrency(displayAnalysis.quote.price * displayAnalysis.atlasScore.expectedMovePercent / 100)})
+                  </span>
+                </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">HORIZON</span>
