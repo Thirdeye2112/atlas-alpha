@@ -16,6 +16,20 @@ const backtestCache = new NodeCache({ stdTTL: 3600 });
 
 const router: IRouter = Router();
 
+function rank(arr: number[]): number[] {
+  const sorted = arr.map((v, i) => ({ v, i })).sort((a, b) => a.v - b.v);
+  const ranks = new Array<number>(arr.length);
+  let i = 0;
+  while (i < sorted.length) {
+    let j = i;
+    while (j < sorted.length - 1 && sorted[j + 1].v === sorted[j].v) j++;
+    const r = (i + j + 2) / 2;
+    for (let k = i; k <= j; k++) ranks[sorted[k].i] = r;
+    i = j + 1;
+  }
+  return ranks;
+}
+
 function pearsonIC(xs: number[], ys: number[]): number {
   const n = xs.length;
   if (n < 5) return 0;
@@ -27,6 +41,15 @@ function pearsonIC(xs: number[], ys: number[]): number {
   return dx * dy > 0 ? num / (dx * dy) : 0;
 }
 
+function spearmanIC(xs: number[], ys: number[]): number {
+  if (xs.length < 5) return 0;
+  return pearsonIC(rank(xs), rank(ys));
+}
+
+function round3(n: number): number {
+  return Math.round(n * 1000) / 1000;
+}
+
 function avg(arr: number[]): number | null {
   return arr.length ? Math.round((arr.reduce((s, v) => s + v, 0) / arr.length) * 100) / 100 : null;
 }
@@ -34,6 +57,10 @@ function avg(arr: number[]): number | null {
 function hitRate(pts: Array<{ fwdReturn: number }>, positive: boolean): number | null {
   if (!pts.length) return null;
   return Math.round(pts.filter(d => positive ? d.fwdReturn > 0 : d.fwdReturn < 0).length / pts.length * 100);
+}
+
+function icRating(absIC: number): string {
+  return absIC >= 0.10 ? "strong" : absIC >= 0.05 ? "moderate" : absIC >= 0.02 ? "weak" : "noise";
 }
 
 router.get("/backtest/ic", async (req, res): Promise<void> => {
@@ -90,13 +117,27 @@ router.get("/backtest/ic", async (req, res): Promise<void> => {
 
   const scores = dataPoints.map(d => d.score);
   const returns = dataPoints.map(d => d.fwdReturn);
-  const ic = Math.round(pearsonIC(scores, returns) * 1000) / 1000;
-  const absIC = Math.abs(ic);
-  const icRating = absIC >= 0.10 ? "strong" : absIC >= 0.05 ? "moderate" : absIC >= 0.02 ? "weak" : "noise";
+
+  const ic = round3(pearsonIC(scores, returns));
+  const rankIC = round3(spearmanIC(scores, returns));
+  const n = dataPoints.length;
+  const icTStat = n > 2 ? round3(rankIC * Math.sqrt(n - 2) / Math.sqrt(Math.max(1 - rankIC ** 2, 1e-9))) : 0;
 
   const bull = dataPoints.filter(d => d.score >= 60);
   const neutral = dataPoints.filter(d => d.score > 40 && d.score < 60);
   const bear = dataPoints.filter(d => d.score <= 40);
+
+  const deciles = Array.from({ length: 10 }, (_, d) => {
+    const low = d * 10;
+    const high = (d + 1) * 10;
+    const pts = dataPoints.filter(p => d === 9 ? p.score >= low : (p.score >= low && p.score < high));
+    return {
+      bucket: `${low}–${high}`,
+      count: pts.length,
+      hitRate: hitRate(pts, true),
+      avgReturn: avg(pts.map(p => p.fwdReturn)),
+    };
+  });
 
   const scatter = dataPoints
     .filter((_, i) => i % 3 === 0)
@@ -106,8 +147,11 @@ router.get("/backtest/ic", async (req, res): Promise<void> => {
     ticker,
     horizon,
     ic,
-    icRating,
-    totalObservations: dataPoints.length,
+    icRating: icRating(Math.abs(ic)),
+    rankIC,
+    rankICRating: icRating(Math.abs(rankIC)),
+    icTStat,
+    totalObservations: n,
     bull: {
       count: bull.length,
       hitRate: hitRate(bull, true),
@@ -123,6 +167,7 @@ router.get("/backtest/ic", async (req, res): Promise<void> => {
       hitRate: hitRate(bear, false),
       avgReturn: avg(bear.map(d => d.fwdReturn)),
     },
+    deciles,
     scatter,
     cachedAt: new Date().toISOString(),
   };

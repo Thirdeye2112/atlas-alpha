@@ -13,6 +13,7 @@ export interface ScannerResult {
   price: number;
   change: number;
   changePercent: number;
+  gapPercent: number;
   atlasScore: number;
   atlasLabel: string;
   bullishProbability: number;

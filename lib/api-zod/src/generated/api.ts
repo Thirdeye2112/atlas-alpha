@@ -221,6 +221,7 @@ export const GetScannerTopLongsResponseItem = zod.object({
   "price": zod.number(),
   "change": zod.number(),
   "changePercent": zod.number(),
+  "gapPercent": zod.number(),
   "atlasScore": zod.number(),
   "atlasLabel": zod.string(),
   "bullishProbability": zod.number(),
@@ -252,6 +253,7 @@ export const GetScannerTopShortsResponseItem = zod.object({
   "price": zod.number(),
   "change": zod.number(),
   "changePercent": zod.number(),
+  "gapPercent": zod.number(),
   "atlasScore": zod.number(),
   "atlasLabel": zod.string(),
   "bullishProbability": zod.number(),
@@ -283,6 +285,7 @@ export const GetScannerBreakoutsResponseItem = zod.object({
   "price": zod.number(),
   "change": zod.number(),
   "changePercent": zod.number(),
+  "gapPercent": zod.number(),
   "atlasScore": zod.number(),
   "atlasLabel": zod.string(),
   "bullishProbability": zod.number(),
@@ -314,6 +317,7 @@ export const GetScannerBreakdownsResponseItem = zod.object({
   "price": zod.number(),
   "change": zod.number(),
   "changePercent": zod.number(),
+  "gapPercent": zod.number(),
   "atlasScore": zod.number(),
   "atlasLabel": zod.string(),
   "bullishProbability": zod.number(),
@@ -345,6 +349,7 @@ export const GetScannerGammaSqueezeResponseItem = zod.object({
   "price": zod.number(),
   "change": zod.number(),
   "changePercent": zod.number(),
+  "gapPercent": zod.number(),
   "atlasScore": zod.number(),
   "atlasLabel": zod.string(),
   "bullishProbability": zod.number(),
@@ -376,6 +381,7 @@ export const GetScannerShortSqueezeResponseItem = zod.object({
   "price": zod.number(),
   "change": zod.number(),
   "changePercent": zod.number(),
+  "gapPercent": zod.number(),
   "atlasScore": zod.number(),
   "atlasLabel": zod.string(),
   "bullishProbability": zod.number(),
@@ -407,6 +413,7 @@ export const GetScannerInstitutionalAccumulationResponseItem = zod.object({
   "price": zod.number(),
   "change": zod.number(),
   "changePercent": zod.number(),
+  "gapPercent": zod.number(),
   "atlasScore": zod.number(),
   "atlasLabel": zod.string(),
   "bullishProbability": zod.number(),
@@ -438,6 +445,7 @@ export const GetScannerMeanReversionResponseItem = zod.object({
   "price": zod.number(),
   "change": zod.number(),
   "changePercent": zod.number(),
+  "gapPercent": zod.number(),
   "atlasScore": zod.number(),
   "atlasLabel": zod.string(),
   "bullishProbability": zod.number(),
@@ -452,6 +460,70 @@ export const GetScannerMeanReversionResponseItem = zod.object({
   "catalysts": zod.array(zod.string())
 })
 export const GetScannerMeanReversionResponse = zod.array(GetScannerMeanReversionResponseItem)
+
+
+/**
+ * @summary Gap-up candidates (open > prev close by ≥2%)
+ */
+export const getScannerGapUpQueryLimitDefault = 25;
+
+export const GetScannerGapUpQueryParams = zod.object({
+  "limit": zod.coerce.number().default(getScannerGapUpQueryLimitDefault)
+})
+
+export const GetScannerGapUpResponseItem = zod.object({
+  "ticker": zod.string(),
+  "name": zod.string(),
+  "price": zod.number(),
+  "change": zod.number(),
+  "changePercent": zod.number(),
+  "gapPercent": zod.number(),
+  "atlasScore": zod.number(),
+  "atlasLabel": zod.string(),
+  "bullishProbability": zod.number(),
+  "bearishProbability": zod.number(),
+  "confidenceScore": zod.number(),
+  "direction": zod.string(),
+  "signalStrength": zod.enum(['strong', 'moderate', 'weak']),
+  "sector": zod.string().nullable(),
+  "volume": zod.number(),
+  "relativeVolume": zod.number(),
+  "rsi": zod.number(),
+  "catalysts": zod.array(zod.string())
+})
+export const GetScannerGapUpResponse = zod.array(GetScannerGapUpResponseItem)
+
+
+/**
+ * @summary Gap-down candidates (open < prev close by ≥2%)
+ */
+export const getScannerGapDownQueryLimitDefault = 25;
+
+export const GetScannerGapDownQueryParams = zod.object({
+  "limit": zod.coerce.number().default(getScannerGapDownQueryLimitDefault)
+})
+
+export const GetScannerGapDownResponseItem = zod.object({
+  "ticker": zod.string(),
+  "name": zod.string(),
+  "price": zod.number(),
+  "change": zod.number(),
+  "changePercent": zod.number(),
+  "gapPercent": zod.number(),
+  "atlasScore": zod.number(),
+  "atlasLabel": zod.string(),
+  "bullishProbability": zod.number(),
+  "bearishProbability": zod.number(),
+  "confidenceScore": zod.number(),
+  "direction": zod.string(),
+  "signalStrength": zod.enum(['strong', 'moderate', 'weak']),
+  "sector": zod.string().nullable(),
+  "volume": zod.number(),
+  "relativeVolume": zod.number(),
+  "rsi": zod.number(),
+  "catalysts": zod.array(zod.string())
+})
+export const GetScannerGapDownResponse = zod.array(GetScannerGapDownResponseItem)
 
 
 /**

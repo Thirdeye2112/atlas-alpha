@@ -4,6 +4,22 @@ import { logger } from "./logger.js";
 
 const yahooFinance = new YahooFinanceClass({ suppressNotices: ["yahooSurvey"] });
 
+async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err: unknown) {
+      const code = (err as { code?: number })?.code;
+      if (code === 429 && attempt < maxRetries - 1) {
+        await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error("unreachable");
+}
+
 export interface YahooQuote {
   ticker: string;
   name: string;
@@ -40,7 +56,7 @@ export async function fetchQuote(ticker: string): Promise<YahooQuote> {
   const cached = quoteCache.get<YahooQuote>(ticker);
   if (cached) return cached;
 
-  const q = await yahooFinance.quote(ticker);
+  const q = await withRetry(() => yahooFinance.quote(ticker));
 
   const result: YahooQuote = {
     ticker: q.symbol ?? ticker,
@@ -108,11 +124,11 @@ export async function fetchOHLCV(ticker: string, period = "3mo", interval = "1d"
   type ValidInterval = typeof validIntervals[number];
   const mappedInterval: ValidInterval = (validIntervals.includes(interval as ValidInterval) ? interval : "1d") as ValidInterval;
 
-  const historical = await yahooFinance.chart(ticker, {
+  const historical = await withRetry(() => yahooFinance.chart(ticker, {
     period1: start,
     period2: end,
     interval: mappedInterval,
-  });
+  }));
 
   const bars: OHLCVBar[] = (historical.quotes ?? [])
     .filter(q => q.open != null && q.close != null)

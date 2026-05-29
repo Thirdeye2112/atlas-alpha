@@ -24,6 +24,8 @@ import type {
   GetScannerBreakdownsParams,
   GetScannerBreakoutsParams,
   GetScannerGammaSqueezeParams,
+  GetScannerGapDownParams,
+  GetScannerGapUpParams,
   GetScannerInstitutionalAccumulationParams,
   GetScannerMeanReversionParams,
   GetScannerShortSqueezeParams,
@@ -1022,6 +1024,174 @@ export function useGetScannerMeanReversion<TData = Awaited<ReturnType<typeof get
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetScannerMeanReversionQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetScannerGapUpUrl = (params?: GetScannerGapUpParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/scanner/gap-up?${stringifiedParams}` : `/api/scanner/gap-up`
+}
+
+/**
+ * @summary Gap-up candidates (open > prev close by ≥2%)
+ */
+export const getScannerGapUp = async (params?: GetScannerGapUpParams, options?: RequestInit): Promise<ScannerResult[]> => {
+
+  return customFetch<ScannerResult[]>(getGetScannerGapUpUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetScannerGapUpQueryKey = (params?: GetScannerGapUpParams,) => {
+    return [
+    `/api/scanner/gap-up`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetScannerGapUpQueryOptions = <TData = Awaited<ReturnType<typeof getScannerGapUp>>, TError = ErrorType<unknown>>(params?: GetScannerGapUpParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getScannerGapUp>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetScannerGapUpQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getScannerGapUp>>> = ({ signal }) => getScannerGapUp(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getScannerGapUp>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetScannerGapUpQueryResult = NonNullable<Awaited<ReturnType<typeof getScannerGapUp>>>
+export type GetScannerGapUpQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Gap-up candidates (open > prev close by ≥2%)
+ */
+
+export function useGetScannerGapUp<TData = Awaited<ReturnType<typeof getScannerGapUp>>, TError = ErrorType<unknown>>(
+ params?: GetScannerGapUpParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getScannerGapUp>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetScannerGapUpQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetScannerGapDownUrl = (params?: GetScannerGapDownParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/scanner/gap-down?${stringifiedParams}` : `/api/scanner/gap-down`
+}
+
+/**
+ * @summary Gap-down candidates (open < prev close by ≥2%)
+ */
+export const getScannerGapDown = async (params?: GetScannerGapDownParams, options?: RequestInit): Promise<ScannerResult[]> => {
+
+  return customFetch<ScannerResult[]>(getGetScannerGapDownUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetScannerGapDownQueryKey = (params?: GetScannerGapDownParams,) => {
+    return [
+    `/api/scanner/gap-down`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetScannerGapDownQueryOptions = <TData = Awaited<ReturnType<typeof getScannerGapDown>>, TError = ErrorType<unknown>>(params?: GetScannerGapDownParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getScannerGapDown>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetScannerGapDownQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getScannerGapDown>>> = ({ signal }) => getScannerGapDown(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getScannerGapDown>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetScannerGapDownQueryResult = NonNullable<Awaited<ReturnType<typeof getScannerGapDown>>>
+export type GetScannerGapDownQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Gap-down candidates (open < prev close by ≥2%)
+ */
+
+export function useGetScannerGapDown<TData = Awaited<ReturnType<typeof getScannerGapDown>>, TError = ErrorType<unknown>>(
+ params?: GetScannerGapDownParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getScannerGapDown>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetScannerGapDownQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

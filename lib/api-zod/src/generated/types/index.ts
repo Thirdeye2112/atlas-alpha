@@ -17,6 +17,8 @@ export * from './chartSignalStrength';
 export * from './getScannerBreakdownsParams';
 export * from './getScannerBreakoutsParams';
 export * from './getScannerGammaSqueezeParams';
+export * from './getScannerGapDownParams';
+export * from './getScannerGapUpParams';
 export * from './getScannerInstitutionalAccumulationParams';
 export * from './getScannerMeanReversionParams';
 export * from './getScannerShortSqueezeParams';

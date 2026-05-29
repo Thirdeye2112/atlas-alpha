@@ -10,6 +10,13 @@ const router: IRouter = Router();
 type ScannerFilter = (analysis: AnalysisResult) => boolean;
 type ScannerSort = (a: AnalysisResult, b: AnalysisResult) => number;
 
+function getGapPercent(a: AnalysisResult): number {
+  const open = a.quote.open as number;
+  const prevClose = a.quote.previousClose as number;
+  if (!prevClose) return 0;
+  return Math.round(((open - prevClose) / prevClose) * 10000) / 100;
+}
+
 async function runScanner(
   cacheKey: string,
   filter: ScannerFilter,
@@ -47,7 +54,8 @@ async function runScanner(
       a.momentum,
       a.trend,
       (a.quote.sector as string | null) ?? null,
-      a.quote.volume as number
+      a.quote.volume as number,
+      getGapPercent(a)
     )
   );
 
@@ -190,6 +198,44 @@ router.get("/scanner/mean-reversion", async (req, res): Promise<void> => {
     res.json(results);
   } catch (err) {
     logger.error({ err }, "Scanner mean-reversion failed");
+    res.json([]);
+  }
+});
+
+router.get("/scanner/gap-up", async (req, res): Promise<void> => {
+  const limit = Math.min(Number(req.query.limit) || 25, 50);
+  try {
+    const results = await runScanner(
+      "scanner:gap-up",
+      a => {
+        const gap = getGapPercent(a);
+        return gap >= 2.0 && (a.quote.previousClose as number) > 0;
+      },
+      (a, b) => getGapPercent(b) - getGapPercent(a),
+      limit
+    );
+    res.json(results);
+  } catch (err) {
+    logger.error({ err }, "Scanner gap-up failed");
+    res.json([]);
+  }
+});
+
+router.get("/scanner/gap-down", async (req, res): Promise<void> => {
+  const limit = Math.min(Number(req.query.limit) || 25, 50);
+  try {
+    const results = await runScanner(
+      "scanner:gap-down",
+      a => {
+        const gap = getGapPercent(a);
+        return gap <= -2.0 && (a.quote.previousClose as number) > 0;
+      },
+      (a, b) => getGapPercent(a) - getGapPercent(b),
+      limit
+    );
+    res.json(results);
+  } catch (err) {
+    logger.error({ err }, "Scanner gap-down failed");
     res.json([]);
   }
 });

@@ -313,6 +313,7 @@ export interface ScannerResult {
   price: number;
   change: number;
   changePercent: number;
+  gapPercent: number;
   atlasScore: number;
   atlasLabel: string;
   bullishProbability: number;
@@ -429,6 +430,14 @@ limit?: number;
 };
 
 export type GetScannerMeanReversionParams = {
+limit?: number;
+};
+
+export type GetScannerGapUpParams = {
+limit?: number;
+};
+
+export type GetScannerGapDownParams = {
 limit?: number;
 };
 

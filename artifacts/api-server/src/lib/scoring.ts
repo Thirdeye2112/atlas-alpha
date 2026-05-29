@@ -225,7 +225,8 @@ export function calcScannerResult(
   momentum: MomentumResult,
   trend: TrendResult,
   sector: string | null,
-  volTotal: number
+  volTotal: number,
+  gapPercent = 0
 ): object {
   const catalysts: string[] = [];
   if (trend.goldenCross) catalysts.push("Golden Cross");
@@ -247,6 +248,7 @@ export function calcScannerResult(
     price,
     change,
     changePercent,
+    gapPercent,
     atlasScore: atlasScore.overall,
     atlasLabel: atlasScore.label,
     bullishProbability: atlasScore.bullishProbability,

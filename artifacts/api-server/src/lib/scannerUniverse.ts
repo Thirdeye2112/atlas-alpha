@@ -54,7 +54,7 @@ export const SCANNER_UNIVERSE: string[] = [
   "VTR", "WELL", "SPG", "MAA", "ARE",
 
   // ── High-momentum / Speculative ───────────────────────────────────────────
-  "PLTR", "IONQ", "GME", "AMC", "PTON", "PLUG", "RKLB", "JOBY", "SNOW", "NET",
+  "PLTR", "IONQ", "GME", "AMC", "PTON", "PLUG", "RKLB", "JOBY", "SNOW",
 
   // ── China / Emerging ──────────────────────────────────────────────────────
   "BABA", "JD", "PDD", "BIDU", "NIO",

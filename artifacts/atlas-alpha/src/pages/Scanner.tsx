@@ -9,13 +9,15 @@ import {
   useGetScannerShortSqueeze, getGetScannerShortSqueezeQueryKey,
   useGetScannerInstitutionalAccumulation, getGetScannerInstitutionalAccumulationQueryKey,
   useGetScannerMeanReversion, getGetScannerMeanReversionQueryKey,
+  useGetScannerGapUp, getGetScannerGapUpQueryKey,
+  useGetScannerGapDown, getGetScannerGapDownQueryKey,
   ScannerResult
 } from "@workspace/api-client-react";
 import { formatCurrency, formatPercent, getBgColorForScore, getColorForDirection } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 import { Link } from "wouter";
 
-function ScannerTable({ data, isLoading }: { data?: ScannerResult[], isLoading: boolean }) {
+function ScannerTable({ data, isLoading, showGap }: { data?: ScannerResult[], isLoading: boolean, showGap?: boolean }) {
   if (isLoading) {
     return <div className="p-8 text-center text-muted-foreground font-mono animate-pulse">SCANNING MARKET...</div>;
   }
@@ -29,44 +31,52 @@ function ScannerTable({ data, isLoading }: { data?: ScannerResult[], isLoading: 
       <table className="w-full text-sm font-mono text-left">
         <thead className="bg-muted/50 text-muted-foreground border-b border-border sticky top-0 z-10">
           <tr>
-            <th className="p-3 font-medium">TICKER</th>
-            <th className="p-3 font-medium text-right">PRICE</th>
-            <th className="p-3 font-medium text-right">CHG %</th>
-            <th className="p-3 font-medium text-center">ATLAS</th>
-            <th className="p-3 font-medium">DIRECTION</th>
-            <th className="p-3 font-medium text-right">CONF</th>
-            <th className="p-3 font-medium text-right">RSI</th>
-            <th className="p-3 font-medium text-right">RVOL</th>
-            <th className="p-3 font-medium hidden md:table-cell">SECTOR</th>
+            <th className="px-3 py-2 w-20">TICKER</th>
+            <th className="px-3 py-2">NAME</th>
+            <th className="px-3 py-2 text-right w-20">PRICE</th>
+            <th className="px-3 py-2 text-right w-20">CHG%</th>
+            {showGap && <th className="px-3 py-2 text-right w-20">GAP%</th>}
+            <th className="px-3 py-2 text-right w-20">SCORE</th>
+            <th className="px-3 py-2 text-right w-16">RSI</th>
+            <th className="px-3 py-2 text-right w-16">RVOL</th>
+            <th className="px-3 py-2 w-32">CATALYSTS</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
           {data.map((row) => (
-            <tr key={row.ticker} className="hover:bg-muted/30 transition-colors group">
-              <td className="p-3 font-bold text-primary">
-                <Link href={`/?ticker=${row.ticker}`} className="hover:underline">{row.ticker}</Link>
+            <tr key={row.ticker} className="hover:bg-muted/30 transition-colors cursor-pointer">
+              <td className="px-3 py-2">
+                <Link href={`/?ticker=${row.ticker}`} className="text-primary font-bold hover:underline">
+                  {row.ticker}
+                </Link>
               </td>
-              <td className="p-3 text-right">{formatCurrency(row.price)}</td>
-              <td className={cn("p-3 text-right", row.change >= 0 ? "text-success" : "text-destructive")}>
-                {row.change >= 0 ? "+" : ""}{formatPercent(row.changePercent)}
+              <td className="px-3 py-2 text-muted-foreground truncate max-w-[180px]">{row.name}</td>
+              <td className="px-3 py-2 text-right">{formatCurrency(row.price)}</td>
+              <td className={cn("px-3 py-2 text-right", row.changePercent >= 0 ? "text-success" : "text-destructive")}>
+                {formatPercent(row.changePercent)}
               </td>
-              <td className="p-3">
-                <div className="flex justify-center">
-                  <div className={cn("px-2 py-0.5 rounded text-xs font-bold w-12 text-center", getBgColorForScore(row.atlasScore), "text-background")}>
-                    {row.atlasScore.toFixed(0)}
-                  </div>
+              {showGap && (
+                <td className={cn("px-3 py-2 text-right font-bold", row.gapPercent >= 0 ? "text-success" : "text-destructive")}>
+                  {row.gapPercent > 0 ? "+" : ""}{row.gapPercent.toFixed(2)}%
+                </td>
+              )}
+              <td className="px-3 py-2 text-right">
+                <span className={cn("px-1.5 py-0.5 rounded text-xs font-bold", getBgColorForScore(row.atlasScore))}>
+                  {row.atlasScore}
+                </span>
+              </td>
+              <td className={cn("px-3 py-2 text-right", row.rsi > 70 ? "text-destructive" : row.rsi < 30 ? "text-success" : "text-foreground")}>
+                {row.rsi.toFixed(1)}
+              </td>
+              <td className={cn("px-3 py-2 text-right", row.relativeVolume > 2 ? "text-warning" : "text-foreground")}>
+                {row.relativeVolume.toFixed(1)}x
+              </td>
+              <td className="px-3 py-2">
+                <div className="flex flex-wrap gap-1">
+                  {row.catalysts.slice(0, 2).map((c, i) => (
+                    <span key={i} className="text-xs text-muted-foreground bg-muted px-1 rounded">{c}</span>
+                  ))}
                 </div>
-              </td>
-              <td className={cn("p-3 font-bold uppercase", getColorForDirection(row.direction))}>
-                {row.direction}
-              </td>
-              <td className="p-3 text-right">{formatPercent(row.confidenceScore)}</td>
-              <td className="p-3 text-right">{row.rsi.toFixed(1)}</td>
-              <td className={cn("p-3 text-right", row.relativeVolume > 2 ? "text-warning" : "")}>
-                {row.relativeVolume.toFixed(2)}x
-              </td>
-              <td className="p-3 text-muted-foreground hidden md:table-cell truncate max-w-[150px]">
-                {row.sector || '-'}
               </td>
             </tr>
           ))}
@@ -86,6 +96,8 @@ export default function Scanner() {
   const { data: ss, isLoading: ssLoading } = useGetScannerShortSqueeze({ limit }, { query: { queryKey: getGetScannerShortSqueezeQueryKey({ limit }) }});
   const { data: inst, isLoading: instLoading } = useGetScannerInstitutionalAccumulation({ limit }, { query: { queryKey: getGetScannerInstitutionalAccumulationQueryKey({ limit }) }});
   const { data: mean, isLoading: meanLoading } = useGetScannerMeanReversion({ limit }, { query: { queryKey: getGetScannerMeanReversionQueryKey({ limit }) }});
+  const { data: gapUp, isLoading: guLoading } = useGetScannerGapUp({ limit }, { query: { queryKey: getGetScannerGapUpQueryKey({ limit }) }});
+  const { data: gapDown, isLoading: gdLoading } = useGetScannerGapDown({ limit }, { query: { queryKey: getGetScannerGapDownQueryKey({ limit }) }});
 
   return (
     <div className="flex-1 p-6 overflow-hidden flex flex-col h-full">
@@ -100,6 +112,8 @@ export default function Scanner() {
           <TabsTrigger value="shorts" className="font-mono text-xs data-[state=active]:bg-destructive data-[state=active]:text-destructive-foreground">HIGH PROB SHORTS</TabsTrigger>
           <TabsTrigger value="breakouts" className="font-mono text-xs data-[state=active]:bg-success data-[state=active]:text-success-foreground">BREAKOUTS</TabsTrigger>
           <TabsTrigger value="breakdowns" className="font-mono text-xs data-[state=active]:bg-destructive data-[state=active]:text-destructive-foreground">BREAKDOWNS</TabsTrigger>
+          <TabsTrigger value="gap-up" className="font-mono text-xs data-[state=active]:bg-success data-[state=active]:text-success-foreground">GAP UP ↑</TabsTrigger>
+          <TabsTrigger value="gap-down" className="font-mono text-xs data-[state=active]:bg-destructive data-[state=active]:text-destructive-foreground">GAP DOWN ↓</TabsTrigger>
           <TabsTrigger value="gamma" className="font-mono text-xs data-[state=active]:bg-warning data-[state=active]:text-warning-foreground">GAMMA SQUEEZE</TabsTrigger>
           <TabsTrigger value="ss" className="font-mono text-xs data-[state=active]:bg-warning data-[state=active]:text-warning-foreground">SHORT SQUEEZE</TabsTrigger>
           <TabsTrigger value="inst" className="font-mono text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">INST ACCUM</TabsTrigger>
@@ -111,6 +125,8 @@ export default function Scanner() {
           <TabsContent value="shorts" className="m-0 h-full"><ScannerTable data={shorts} isLoading={sLoading} /></TabsContent>
           <TabsContent value="breakouts" className="m-0 h-full"><ScannerTable data={breakouts} isLoading={bLoading} /></TabsContent>
           <TabsContent value="breakdowns" className="m-0 h-full"><ScannerTable data={breakdowns} isLoading={bdLoading} /></TabsContent>
+          <TabsContent value="gap-up" className="m-0 h-full"><ScannerTable data={gapUp} isLoading={guLoading} showGap /></TabsContent>
+          <TabsContent value="gap-down" className="m-0 h-full"><ScannerTable data={gapDown} isLoading={gdLoading} showGap /></TabsContent>
           <TabsContent value="gamma" className="m-0 h-full"><ScannerTable data={gamma} isLoading={gLoading} /></TabsContent>
           <TabsContent value="ss" className="m-0 h-full"><ScannerTable data={ss} isLoading={ssLoading} /></TabsContent>
           <TabsContent value="inst" className="m-0 h-full"><ScannerTable data={inst} isLoading={instLoading} /></TabsContent>

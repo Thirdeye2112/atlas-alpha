@@ -288,6 +288,50 @@ paths:
                 items:
                   $ref: "#/components/schemas/ScannerResult"
 
+  /scanner/gap-up:
+    get:
+      operationId: getScannerGapUp
+      tags: [scanner]
+      summary: Gap-up candidates (open > prev close by ≥2%)
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 25
+      responses:
+        "200":
+          description: Gap-up candidates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ScannerResult"
+
+  /scanner/gap-down:
+    get:
+      operationId: getScannerGapDown
+      tags: [scanner]
+      summary: Gap-down candidates (open < prev close by ≥2%)
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 25
+      responses:
+        "200":
+          description: Gap-down candidates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ScannerResult"
+
   /watchlist:
     get:
       operationId: getWatchlist
@@ -838,6 +882,8 @@ components:
           type: number
         changePercent:
           type: number
+        gapPercent:
+          type: number
         atlasScore:
           type: number
         atlasLabel:
@@ -871,6 +917,7 @@ components:
         - price
         - change
         - changePercent
+        - gapPercent
         - atlasScore
         - atlasLabel
         - bullishProbability
