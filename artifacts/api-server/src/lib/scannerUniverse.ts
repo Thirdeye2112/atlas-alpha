@@ -59,8 +59,38 @@ export const SCANNER_UNIVERSE: string[] = [
   // ── China / Emerging ──────────────────────────────────────────────────────
   "BABA", "JD", "PDD", "BIDU", "NIO",
 
-  // ── ETFs — benchmarks & sector ────────────────────────────────────────────
-  "SPY", "QQQ", "IWM", "GLD", "SLV", "TLT", "HYG", "EEM", "IEMG", "ARKK",
+  // ── US Broad-Market Index ETFs ────────────────────────────────────────────
+  // S&P 500
+  "SPY", "IVV", "VOO", "RSP", "OEF", "SPYG", "SPYV",
+  // Nasdaq
+  "QQQ", "QQQM", "ONEQ", "QQEW",
+  // Dow Jones
+  "DIA",
+  // Russell
+  "IWM", "IWB", "IWV", "IWF", "IWD", "IWO", "IWN",
+  // S&P 400 Mid-Cap
+  "MDY", "IJH",
+  // S&P 600 Small-Cap
+  "IJR", "SPSM",
+  // Total US Market
+  "VTI", "ITOT", "SCHB",
+  // Growth / Value
+  "VUG", "VTV", "MGC", "MGK", "MGV",
+  // Equal-weight & factor
+  "EUSA", "QUAL", "MTUM", "VLUE", "SIZE",
+  // Volatility
+  "VXX", "UVXY", "SVXY",
+  // Leveraged index
+  "TQQQ", "SQQQ", "UPRO", "SPXU", "SSO", "SDS", "DDM", "DXD",
+
+  // ── Sector ETFs (SPDR + Vanguard) ────────────────────────────────────────
   "XLK", "XLF", "XLE", "XLV", "XLP", "XLI", "XLY", "XLU", "XLB", "XLRE", "XLC",
-  "TQQQ", "SQQQ", "VXX",
+  "VGT", "VFH", "VDE", "VHT", "VDC", "VIS", "VCR", "VPU", "VAW",
+
+  // ── Commodities & Bonds ───────────────────────────────────────────────────
+  "GLD", "SLV", "GDX", "GDXJ", "USO", "UNG",
+  "TLT", "TBT", "TMF", "IEF", "SHY", "AGG", "BND", "LQD", "HYG", "JNK",
+
+  // ── International & Emerging ─────────────────────────────────────────────
+  "EEM", "IEMG", "EFA", "VEA", "ARKK",
 ];
