@@ -85,16 +85,23 @@ export async function fetchOHLCV(ticker: string, period = "3mo", interval = "1d"
   const end = new Date();
   const start = new Date();
 
-  switch (period) {
-    case "1d": start.setDate(end.getDate() - 1); break;
-    case "5d": start.setDate(end.getDate() - 5); break;
-    case "1mo": start.setMonth(end.getMonth() - 1); break;
-    case "3mo": start.setMonth(end.getMonth() - 3); break;
-    case "6mo": start.setMonth(end.getMonth() - 6); break;
-    case "1y": start.setFullYear(end.getFullYear() - 1); break;
-    case "2y": start.setFullYear(end.getFullYear() - 2); break;
-    case "5y": start.setFullYear(end.getFullYear() - 5); break;
-    default: start.setMonth(end.getMonth() - 3);
+  const intradayIntervals = new Set(["1m","2m","5m","15m","30m","60m","90m","1h"]);
+  const isIntraday = intradayIntervals.has(interval);
+
+  if (period === "max") {
+    start.setFullYear(end.getFullYear() - 20);
+  } else {
+    switch (period) {
+      case "1d":  start.setDate(end.getDate() - 1); break;
+      case "5d":  start.setDate(end.getDate() - 5); break;
+      case "1mo": start.setMonth(end.getMonth() - 1); break;
+      case "3mo": start.setMonth(end.getMonth() - 3); break;
+      case "6mo": start.setMonth(end.getMonth() - 6); break;
+      case "1y":  start.setFullYear(end.getFullYear() - 1); break;
+      case "2y":  start.setFullYear(end.getFullYear() - 2); break;
+      case "5y":  start.setFullYear(end.getFullYear() - 5); break;
+      default:    start.setMonth(end.getMonth() - 3);
+    }
   }
 
   const validIntervals = ["1m","2m","5m","15m","30m","60m","90m","1h","1d","5d","1wk","1mo","3mo"] as const;
@@ -109,14 +116,20 @@ export async function fetchOHLCV(ticker: string, period = "3mo", interval = "1d"
 
   const bars: OHLCVBar[] = (historical.quotes ?? [])
     .filter(q => q.open != null && q.close != null)
-    .map(q => ({
-      time: q.date instanceof Date ? q.date.toISOString().split("T")[0] : String(q.date),
-      open: q.open ?? 0,
-      high: q.high ?? 0,
-      low: q.low ?? 0,
-      close: q.close ?? 0,
-      volume: q.volume ?? 0,
-    }));
+    .map(q => {
+      const date = q.date instanceof Date ? q.date : new Date(String(q.date));
+      const time = isIntraday
+        ? date.toISOString()
+        : date.toISOString().split("T")[0];
+      return {
+        time,
+        open: q.open ?? 0,
+        high: q.high ?? 0,
+        low: q.low ?? 0,
+        close: q.close ?? 0,
+        volume: q.volume ?? 0,
+      };
+    });
 
   ohlcvCache.set(key, bars);
   return bars;

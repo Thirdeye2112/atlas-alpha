@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { createChart, ColorType, CandlestickSeries } from "lightweight-charts";
+import { createChart, ColorType, CandlestickSeries, UTCTimestamp } from "lightweight-charts";
 import { OHLCVBar } from "@workspace/api-client-react";
 
 interface Props {
@@ -7,11 +7,20 @@ interface Props {
   height?: number;
 }
 
+function toChartTime(time: string): UTCTimestamp | string {
+  // Intraday: full ISO string → Unix seconds (UTCTimestamp)
+  if (time.length > 10) {
+    return Math.floor(new Date(time).getTime() / 1000) as UTCTimestamp;
+  }
+  // Daily/weekly/monthly: YYYY-MM-DD string (lightweight-charts BusinessDay)
+  return time;
+}
+
 export default function LightweightChart({ data, height = 400 }: Props) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!chartContainerRef.current) return;
+    if (!chartContainerRef.current || data.length === 0) return;
 
     const chart = createChart(chartContainerRef.current, {
       layout: {
@@ -23,7 +32,7 @@ export default function LightweightChart({ data, height = 400 }: Props) {
         horzLines: { color: "hsl(222 15% 18%)" },
       },
       width: chartContainerRef.current.clientWidth,
-      height: height,
+      height,
       timeScale: {
         timeVisible: true,
         secondsVisible: false,
@@ -51,13 +60,13 @@ export default function LightweightChart({ data, height = 400 }: Props) {
 
     const formattedData = data
       .map(d => ({
-        time: d.time as string,
+        time: toChartTime(d.time) as UTCTimestamp,
         open: d.open,
         high: d.high,
         low: d.low,
         close: d.close,
       }))
-      .sort((a, b) => a.time.localeCompare(b.time));
+      .sort((a, b) => (a.time as number) - (b.time as number));
 
     candlestickSeries.setData(formattedData);
     chart.timeScale().fitContent();

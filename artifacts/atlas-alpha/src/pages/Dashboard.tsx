@@ -1,10 +1,10 @@
 import React, { useState } from "react";
 import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { 
   useGetStockAnalysis, 
-  useGetStockOhlcv,
   getGetStockAnalysisQueryKey,
-  getGetStockOhlcvQueryKey
+  OHLCVBar,
 } from "@workspace/api-client-react";
 import WatchlistSidebar from "@/components/layout/WatchlistSidebar";
 import LightweightChart from "@/components/charts/LightweightChart";
@@ -16,6 +16,26 @@ import { Search, Info, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
+interface Timeframe {
+  label: string;
+  period: string;
+  interval: string;
+}
+
+const TIMEFRAMES: Timeframe[] = [
+  { label: "1D",  period: "1d",  interval: "1m"  },
+  { label: "5D",  period: "5d",  interval: "5m"  },
+  { label: "1M",  period: "1mo", interval: "60m" },
+  { label: "3M",  period: "3mo", interval: "1d"  },
+  { label: "6M",  period: "6mo", interval: "1d"  },
+  { label: "1Y",  period: "1y",  interval: "1d"  },
+  { label: "2Y",  period: "2y",  interval: "1wk" },
+  { label: "5Y",  period: "5y",  interval: "1wk" },
+  { label: "ALL", period: "max", interval: "1mo" },
+];
+
+const DEFAULT_TF = TIMEFRAMES[3]; // 3M / 1d
+
 export default function Dashboard() {
   const [location] = useLocation();
   const searchParams = new URLSearchParams(window.location.search);
@@ -23,13 +43,21 @@ export default function Dashboard() {
   
   const [ticker, setTicker] = useState(initialTicker);
   const [searchInput, setSearchInput] = useState(initialTicker);
+  const [timeframe, setTimeframe] = useState<Timeframe>(DEFAULT_TF);
 
   const { data: analysis, isLoading: analysisLoading } = useGetStockAnalysis(ticker, {
     query: { enabled: !!ticker, queryKey: getGetStockAnalysisQueryKey(ticker) }
   });
 
-  const { data: ohlcv, isLoading: ohlcvLoading } = useGetStockOhlcv(ticker, {
-    query: { enabled: !!ticker, queryKey: getGetStockOhlcvQueryKey(ticker) }
+  const { data: ohlcv, isLoading: ohlcvLoading } = useQuery<OHLCVBar[]>({
+    queryKey: ["ohlcv", ticker, timeframe.period, timeframe.interval],
+    queryFn: async ({ signal }) => {
+      const url = `/api/stock/${encodeURIComponent(ticker)}/ohlcv?period=${timeframe.period}&interval=${timeframe.interval}`;
+      const res = await fetch(url, { signal });
+      if (!res.ok) throw new Error("OHLCV fetch failed");
+      return res.json();
+    },
+    enabled: !!ticker,
   });
 
   const handleSearch = (e: React.FormEvent) => {
@@ -83,9 +111,27 @@ export default function Dashboard() {
         <div className="flex-1 p-4 flex flex-col gap-6">
           {/* Chart Section */}
           <div className="h-80 bg-card border border-border rounded-md overflow-hidden flex flex-col">
-            <div className="px-3 py-2 border-b border-border text-xs font-bold text-muted-foreground tracking-wider flex justify-between">
-              <span>{ticker} - PRICE ACTION (DAILY)</span>
-              <span>{ohlcv?.length || 0} BARS</span>
+            <div className="px-3 py-2 border-b border-border flex items-center justify-between gap-2">
+              <span className="text-xs font-bold text-muted-foreground tracking-wider shrink-0">
+                {ticker} · {timeframe.label} · {timeframe.interval.toUpperCase()}
+              </span>
+              <div className="flex items-center gap-0.5">
+                {TIMEFRAMES.map(tf => (
+                  <button
+                    key={tf.label}
+                    onClick={() => setTimeframe(tf)}
+                    className={cn(
+                      "px-2 py-0.5 text-xs font-mono font-bold rounded transition-colors",
+                      timeframe.label === tf.label
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                    )}
+                  >
+                    {tf.label}
+                  </button>
+                ))}
+              </div>
+              <span className="text-xs text-muted-foreground font-mono shrink-0">{ohlcv?.length || 0} BARS</span>
             </div>
             <div className="flex-1">
               {ohlcvLoading ? (
