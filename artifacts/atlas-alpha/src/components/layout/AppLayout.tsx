@@ -50,6 +50,24 @@ function MarketBar() {
         );
       })}
       <div className="flex-1" />
+      {data.pctAboveSma50 != null && (
+        <>
+          <div className="w-px h-4 bg-border" />
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <span>BREADTH</span>
+            <span className={cn(
+              "font-semibold",
+              data.pctAboveSma50 >= 60 ? "text-success" : data.pctAboveSma50 <= 40 ? "text-destructive" : "text-warning"
+            )}>SMA50 {data.pctAboveSma50}%</span>
+            <span className={cn(
+              "font-semibold",
+              data.pctAboveSma200 != null && data.pctAboveSma200 >= 60 ? "text-success" :
+              data.pctAboveSma200 != null && data.pctAboveSma200 <= 40 ? "text-destructive" : "text-warning"
+            )}>{data.pctAboveSma200 != null ? `SMA200 ${data.pctAboveSma200}%` : ""}</span>
+          </div>
+        </>
+      )}
+      <div className="w-px h-4 bg-border" />
       <div className="text-muted-foreground">ATLAS ALPHA V0.1.0</div>
     </div>
   );

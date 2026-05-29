@@ -15,13 +15,20 @@ export interface MarketOverview {
   vix: MarketQuote;
   marketRegime: MarketOverviewMarketRegime;
   marketRegimeScore: number;
-  /** @nullable */
-  advancingStocks: number | null;
-  /** @nullable */
-  decliningStocks: number | null;
-  /** @nullable */
-  newHighs: number | null;
-  /** @nullable */
-  newLows: number | null;
+  /**
+     * % of scanner universe with price above SMA50 (null until scanner has run)
+     * @nullable
+     */
+  pctAboveSma50: number | null;
+  /**
+     * % of scanner universe with price above SMA200 (null until scanner has run)
+     * @nullable
+     */
+  pctAboveSma200: number | null;
+  /**
+     * Number of tickers included in breadth calculation
+     * @nullable
+     */
+  breadthUniverse: number | null;
   timestamp: string;
 }

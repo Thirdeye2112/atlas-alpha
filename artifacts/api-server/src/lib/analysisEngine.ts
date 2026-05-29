@@ -8,6 +8,7 @@ import {
 } from "./indicators.js";
 import { calcAtlasScore, type AtlasAlphaScore } from "./scoring.js";
 import { analysisCache } from "./cache.js";
+import { SCANNER_UNIVERSE } from "./scannerUniverse.js";
 import { logger } from "./logger.js";
 
 export interface AnalysisResult {
@@ -96,7 +97,6 @@ export async function runHistoricalAnalysis(ticker: string, asOf: string) {
 
   const sym = ticker.toUpperCase();
 
-  // Fetch 2 years so we have enough bars for SMA200, even when sliced to a past date
   const [allBars, allSpyBars, allQqqBars, allIwmBars] = await Promise.all([
     fetchOHLCV(sym, "2y", "1d"),
     fetchOHLCV("SPY", "2y", "1d"),
@@ -104,8 +104,7 @@ export async function runHistoricalAnalysis(ticker: string, asOf: string) {
     fetchOHLCV("IWM", "2y", "1d"),
   ]);
 
-  // Slice each series to only data on or before asOf (point-in-time)
-  const bars = allBars.filter(b => b.time <= asOf);
+  const bars    = allBars.filter(b => b.time <= asOf);
   const spyBars = allSpyBars.filter(b => b.time <= asOf);
   const qqqBars = allQqqBars.filter(b => b.time <= asOf);
   const iwmBars = allIwmBars.filter(b => b.time <= asOf);
@@ -129,7 +128,7 @@ export async function runHistoricalAnalysis(ticker: string, asOf: string) {
     volume: lastBar.volume, avgVolume,
     marketCap: null,
     week52High: Math.max(...historicalBars252.map(b => b.high)),
-    week52Low: Math.min(...historicalBars252.map(b => b.low)),
+    week52Low:  Math.min(...historicalBars252.map(b => b.low)),
     beta: null, pe: null, eps: null, sector: null, industry: null,
     timestamp: new Date(asOf).toISOString(),
   };
@@ -139,4 +138,27 @@ export async function runHistoricalAnalysis(ticker: string, asOf: string) {
   analysisCache.set(cacheKey, result);
   logger.info({ ticker: sym, asOf, atlasScore: result.atlasScore.overall }, "Historical analysis complete");
   return result;
+}
+
+/** Compute breadth from currently cached analyses across the scanner universe.
+ *  Returns null percentages if fewer than 20 tickers are cached (scanner hasn't run yet). */
+export function getCachedBreadth(): { total: number; pctAboveSma50: number | null; pctAboveSma200: number | null } {
+  let aboveSma50 = 0;
+  let aboveSma200 = 0;
+  let total = 0;
+
+  for (const ticker of SCANNER_UNIVERSE) {
+    const cached = analysisCache.get<AnalysisResult>(`analysis:${ticker}`);
+    if (!cached) continue;
+    total++;
+    const price = cached.quote.price as number;
+    if (cached.trend.sma50  > 0 && price > cached.trend.sma50)  aboveSma50++;
+    if (cached.trend.sma200 > 0 && price > cached.trend.sma200) aboveSma200++;
+  }
+
+  return {
+    total,
+    pctAboveSma50:  total >= 20 ? Math.round(aboveSma50  / total * 100) : null,
+    pctAboveSma200: total >= 20 ? Math.round(aboveSma200 / total * 100) : null,
+  };
 }

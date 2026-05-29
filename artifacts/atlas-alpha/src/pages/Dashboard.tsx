@@ -15,12 +15,23 @@ import { Search, Info, TrendingUp, TrendingDown, Minus, Clock, X, ChevronDown, C
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
-interface BacktestPoint { x: number; y: number; date: string; }
+interface BacktestPoint  { x: number; y: number; date: string; }
 interface BacktestBucket { count: number; hitRate: number | null; avgReturn: number | null; }
+interface BacktestDecile { bucket: string; count: number; hitRate: number | null; avgReturn: number | null; }
+interface BacktestCatIC  { trend: number; momentum: number; volume: number; relativeStrength: number; regime: number; }
+interface BacktestWeights { trend: number; momentum: number; volume: number; relativeStrength: number; regime: number; }
 interface BacktestResult {
-  ticker: string; horizon: number; ic: number; icRating: string;
+  ticker: string; horizon: number;
+  marketCap: number | null; marketCapBucket: string; marketCapNote: string;
+  ic: number; icRating: string;
+  rankIC: number; rankICRating: string; icTStat: number;
   totalObservations: number;
+  calibratedSlope: number; calibratedIntercept: number;
+  categoryIC: BacktestCatIC;
+  optimalWeights: BacktestWeights | null;
+  currentWeights: BacktestWeights;
   bull: BacktestBucket; neutral: BacktestBucket; bear: BacktestBucket;
+  deciles: BacktestDecile[];
   scatter: BacktestPoint[];
 }
 
@@ -77,7 +88,11 @@ function ScatterPlot({ data, width = 240, height = 110 }: { data: BacktestPoint[
   );
 }
 
-function BacktestPanel({ ticker }: { ticker: string }) {
+function icColor(rating: string): string {
+  return rating === "strong" ? "text-success" : rating === "moderate" ? "text-warning" : "text-muted-foreground";
+}
+
+function BacktestPanel({ ticker, currentScore }: { ticker: string; currentScore?: number }) {
   const [open, setOpen] = useState(false);
   const [horizon, setHorizon] = useState(10);
   const [data, setData] = useState<BacktestResult | null>(null);
@@ -103,11 +118,27 @@ function BacktestPanel({ ticker }: { ticker: string }) {
 
   useEffect(() => { if (open) run(horizon); }, [open, ticker]);
 
-  const icColor = data
-    ? data.icRating === "strong" ? "text-success"
-    : data.icRating === "moderate" ? "text-warning"
-    : "text-muted-foreground"
-    : "";
+  // Calibrated vs heuristic probability for current score
+  const calibratedProb = (data && currentScore !== undefined)
+    ? Math.round((1 / (1 + Math.exp(-(data.calibratedSlope * currentScore + data.calibratedIntercept)))) * 100)
+    : null;
+  const heuristicProb  = currentScore !== undefined
+    ? Math.round((1 / (1 + Math.exp(-0.08 * (currentScore - 50)))) * 100)
+    : null;
+
+  const CAP_LABELS: Record<string, string> = {
+    mega: "MEGA", large: "LARGE", mid: "MID", small: "SMALL", unknown: "?",
+  };
+
+  const FACTOR_LABELS: Array<[keyof BacktestCatIC, string]> = [
+    ["trend", "TREND"], ["momentum", "MOMENTUM"], ["volume", "VOLUME"],
+    ["relativeStrength", "REL STR"], ["regime", "REGIME"],
+  ];
+
+  const WEIGHT_LABELS: Array<[keyof BacktestWeights, string]> = [
+    ["trend", "TREND"], ["momentum", "MOMENTUM"], ["volume", "VOLUME"],
+    ["relativeStrength", "REL STR"], ["regime", "REGIME"],
+  ];
 
   return (
     <div className="border-t border-border mt-4">
@@ -120,60 +151,97 @@ function BacktestPanel({ ticker }: { ticker: string }) {
       </button>
 
       {open && (
-        <div className="space-y-3 pb-4">
+        <div className="space-y-4 pb-4">
           {/* Horizon selector */}
           <div className="flex items-center gap-1">
             {[5, 10, 20].map(h => (
-              <button
-                key={h}
-                onClick={() => { setHorizon(h); run(h); }}
-                className={cn(
-                  "px-2 py-0.5 text-xs font-mono border rounded transition-colors",
-                  horizon === h
-                    ? "border-primary text-primary bg-primary/10"
-                    : "border-border text-muted-foreground hover:border-foreground"
-                )}
-              >{h}D</button>
+              <button key={h} onClick={() => { setHorizon(h); run(h); }}
+                className={cn("px-2 py-0.5 text-xs font-mono border rounded transition-colors",
+                  horizon === h ? "border-primary text-primary bg-primary/10" : "border-border text-muted-foreground hover:border-foreground"
+                )}>{h}D</button>
             ))}
             <span className="ml-auto text-xs text-muted-foreground font-mono">fwd horizon</span>
           </div>
 
-          {loading && (
-            <div className="text-xs text-muted-foreground font-mono animate-pulse py-4 text-center">
-              COMPUTING {data ? "(cached)" : "~10–20s"}…
-            </div>
-          )}
-          {error && <div className="text-xs text-destructive font-mono">{error}</div>}
+          {loading && <div className="text-xs text-muted-foreground font-mono animate-pulse py-4 text-center">COMPUTING ~10–20s…</div>}
+          {error   && <div className="text-xs text-destructive font-mono">{error}</div>}
 
           {data && !loading && (
-            <div className="space-y-3">
-              {/* IC stat */}
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground font-mono">PEARSON IC</span>
-                <span className={cn("text-sm font-bold font-mono", icColor)}>
-                  {data.ic > 0 ? "+" : ""}{data.ic.toFixed(3)}
-                  <span className="text-xs font-normal ml-1 text-muted-foreground">({data.icRating})</span>
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground font-mono">OBSERVATIONS</span>
-                <span className="text-xs font-mono">{data.totalObservations} days</span>
+            <div className="space-y-4">
+
+              {/* ── IC Summary ─────────────────────────────────── */}
+              <div className="space-y-1.5">
+                <div className="text-xs font-bold text-muted-foreground/60 tracking-wider">IC METRICS</div>
+                {[
+                  { label: "RANK IC (Spearman)", val: data.rankIC, rating: data.rankICRating },
+                  { label: "PEARSON IC", val: data.ic, rating: data.icRating },
+                ].map(({ label, val, rating }) => (
+                  <div key={label} className="flex items-center justify-between text-xs font-mono">
+                    <span className="text-muted-foreground">{label}</span>
+                    <span className={cn("font-bold", icColor(rating))}>
+                      {val > 0 ? "+" : ""}{val.toFixed(3)}
+                      <span className="font-normal text-muted-foreground/70 ml-1">({rating})</span>
+                    </span>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between text-xs font-mono">
+                  <span className="text-muted-foreground">T-STAT (n={data.totalObservations})</span>
+                  <span className={cn("font-bold",
+                    Math.abs(data.icTStat) >= 2 ? "text-success" : Math.abs(data.icTStat) >= 1.5 ? "text-warning" : "text-muted-foreground"
+                  )}>{data.icTStat > 0 ? "+" : ""}{data.icTStat.toFixed(2)}
+                    <span className="font-normal text-muted-foreground/70 ml-1">
+                      {Math.abs(data.icTStat) >= 2 ? "(sig)" : "(insig)"}
+                    </span>
+                  </span>
+                </div>
               </div>
 
-              {/* Bucket hit rates */}
-              <div className="space-y-1.5 pt-1">
+              {/* ── Market Cap Note ─────────────────────────────── */}
+              <div className="bg-card border border-border/60 rounded p-2.5 space-y-1">
+                <div className="flex items-center gap-2 text-xs font-mono font-bold">
+                  <span className="px-1.5 py-0.5 bg-primary/15 text-primary rounded text-[10px]">
+                    {CAP_LABELS[data.marketCapBucket] ?? data.marketCapBucket.toUpperCase()}-CAP
+                  </span>
+                  {data.marketCap && (
+                    <span className="text-muted-foreground/60 font-normal">
+                      ${(data.marketCap / 1e9).toFixed(1)}B
+                    </span>
+                  )}
+                </div>
+                <p className="text-[10px] text-muted-foreground/70 leading-relaxed">{data.marketCapNote}</p>
+              </div>
+
+              {/* ── Calibration ─────────────────────────────────── */}
+              <div className="space-y-1.5">
+                <div className="text-xs font-bold text-muted-foreground/60 tracking-wider">LOGISTIC CALIBRATION</div>
+                <div className="flex gap-4 text-xs font-mono text-muted-foreground">
+                  <span>slope <span className="text-foreground">{data.calibratedSlope.toFixed(3)}</span></span>
+                  <span>intercept <span className="text-foreground">{data.calibratedIntercept.toFixed(2)}</span></span>
+                </div>
+                {calibratedProb !== null && heuristicProb !== null && (
+                  <div className="flex items-center justify-between text-xs font-mono bg-border/20 rounded p-2">
+                    <span className="text-muted-foreground">SCORE {currentScore} HIT RATE</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-primary">{calibratedProb}% fitted</span>
+                      <span className="text-muted-foreground/50">vs {heuristicProb}% heuristic</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ── Bucket hit rates ─────────────────────────────── */}
+              <div className="space-y-1.5">
+                <div className="text-xs font-bold text-muted-foreground/60 tracking-wider">BUCKET HIT RATES</div>
                 {[
-                  { label: "BULL (≥60)", b: data.bull, positive: true, color: "text-success" },
-                  { label: "NEUTRAL", b: data.neutral, positive: true, color: "text-muted-foreground" },
-                  { label: "BEAR (≤40)", b: data.bear, positive: false, color: "text-destructive" },
+                  { label: "BULL (≥60)", b: data.bull,    positive: true,  color: "text-success" },
+                  { label: "NEUTRAL",    b: data.neutral, positive: true,  color: "text-muted-foreground" },
+                  { label: "BEAR (≤40)", b: data.bear,    positive: false, color: "text-destructive" },
                 ].map(({ label, b, positive, color }) => (
                   <div key={label} className="flex items-center gap-2 text-xs font-mono">
                     <span className="text-muted-foreground w-20 shrink-0">{label}</span>
                     <div className="flex-1 bg-border/30 rounded-full h-1.5 overflow-hidden">
-                      <div
-                        className={cn("h-full rounded-full", positive ? "bg-success/60" : "bg-destructive/60")}
-                        style={{ width: `${b.hitRate ?? 0}%` }}
-                      />
+                      <div className={cn("h-full rounded-full", positive ? "bg-success/60" : "bg-destructive/60")}
+                        style={{ width: `${b.hitRate ?? 0}%` }} />
                     </div>
                     <span className={cn("w-8 text-right", color)}>{b.hitRate ?? "—"}%</span>
                     <span className="text-muted-foreground/60 w-12 text-right">
@@ -183,14 +251,85 @@ function BacktestPanel({ ticker }: { ticker: string }) {
                 ))}
               </div>
 
-              {/* Scatter */}
-              <div className="pt-1">
-                <div className="text-xs text-muted-foreground font-mono mb-1">SCORE vs {data.horizon}D RETURN</div>
-                <ScatterPlot data={data.scatter} width={236} height={110} />
+              {/* ── Scatter ──────────────────────────────────────── */}
+              <div>
+                <div className="text-xs text-muted-foreground font-mono mb-1 font-bold tracking-wider">SCORE vs {data.horizon}D RETURN</div>
+                <ScatterPlot data={data.scatter} width={236} height={100} />
               </div>
 
-              <p className="text-xs text-muted-foreground/50 font-mono leading-relaxed pt-1">
-                Walk-forward: scored daily using only prior data. IC {'>'} 0.05 = signal exists. Hit rate = % correct direction calls.
+              {/* ── Decile table ─────────────────────────────────── */}
+              <div className="space-y-1">
+                <div className="text-xs font-bold text-muted-foreground/60 tracking-wider">DECILE TABLE (monotonicity check)</div>
+                <div className="grid text-[10px] font-mono gap-y-0.5">
+                  <div className="grid grid-cols-4 text-muted-foreground/50 border-b border-border/40 pb-0.5">
+                    <span>SCORE</span><span className="text-right">N</span>
+                    <span className="text-right">HIT%</span><span className="text-right">AVG RET</span>
+                  </div>
+                  {data.deciles.map(d => (
+                    <div key={d.bucket} className={cn(
+                      "grid grid-cols-4",
+                      d.hitRate !== null && d.hitRate >= 55 ? "text-success/80" :
+                      d.hitRate !== null && d.hitRate <= 45 ? "text-destructive/70" : "text-muted-foreground/70"
+                    )}>
+                      <span>{d.bucket}</span>
+                      <span className="text-right">{d.count}</span>
+                      <span className="text-right">{d.hitRate !== null ? `${d.hitRate}%` : "—"}</span>
+                      <span className="text-right">{d.avgReturn !== null ? `${d.avgReturn > 0 ? "+" : ""}${d.avgReturn}%` : "—"}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* ── Category IC ──────────────────────────────────── */}
+              <div className="space-y-1.5">
+                <div className="text-xs font-bold text-muted-foreground/60 tracking-wider">FACTOR IC (SPEARMAN)</div>
+                {FACTOR_LABELS.map(([key, label]) => {
+                  const v = data.categoryIC[key];
+                  const w = Math.min(Math.abs(v) / 0.15 * 100, 100);
+                  return (
+                    <div key={key} className="flex items-center gap-2 text-xs font-mono">
+                      <span className="text-muted-foreground w-20 shrink-0">{label}</span>
+                      <div className="flex-1 bg-border/30 rounded-full h-1.5 overflow-hidden">
+                        <div className={cn("h-full rounded-full", v >= 0 ? "bg-success/60" : "bg-destructive/50")}
+                          style={{ width: `${w}%` }} />
+                      </div>
+                      <span className={cn("w-14 text-right font-bold", icColor(Math.abs(v) >= 0.10 ? "strong" : Math.abs(v) >= 0.05 ? "moderate" : "noise"))}>
+                        {v > 0 ? "+" : ""}{v.toFixed(3)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* ── IC²-Optimal vs Current Weights ───────────────── */}
+              {data.optimalWeights && (
+                <div className="space-y-1.5">
+                  <div className="text-xs font-bold text-muted-foreground/60 tracking-wider">IC²-OPTIMAL vs CURRENT WEIGHTS</div>
+                  <div className="grid text-[10px] font-mono gap-y-0.5">
+                    <div className="grid grid-cols-4 text-muted-foreground/50 border-b border-border/40 pb-0.5">
+                      <span className="col-span-2">FACTOR</span>
+                      <span className="text-right">CUR</span><span className="text-right">OPT</span>
+                    </div>
+                    {WEIGHT_LABELS.map(([key, label]) => {
+                      const cur = data.currentWeights[key];
+                      const opt = data.optimalWeights![key];
+                      const diff = opt - cur;
+                      return (
+                        <div key={key} className="grid grid-cols-4">
+                          <span className="col-span-2 text-muted-foreground/70">{label}</span>
+                          <span className="text-right text-muted-foreground/70">{cur}%</span>
+                          <span className={cn("text-right font-bold",
+                            diff > 5 ? "text-success" : diff < -5 ? "text-destructive" : "text-muted-foreground"
+                          )}>{opt}% {diff > 5 ? "▲" : diff < -5 ? "▼" : "="}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <p className="text-[10px] text-muted-foreground/40 font-mono leading-relaxed pt-1">
+                Walk-forward: scored daily using only prior data. IC {'>'} 0.05 = signal. |t| {'>'} 2 = statistically significant.
               </p>
             </div>
           )}
@@ -508,11 +647,11 @@ export default function Dashboard() {
 
             <div className="p-4 space-y-4 border-b border-border font-mono text-sm">
               <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">BULL PROB</span>
+                <span className="text-muted-foreground" title="Heuristic signal strength via logistic sigmoid — run backtest for calibrated probability">SIGNAL STR ⚠</span>
                 <span className="text-success font-bold">{formatPercent(displayAnalysis.atlasScore.bullishProbability)}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">BEAR PROB</span>
+                <span className="text-muted-foreground" title="Inverse of signal strength">BEAR STR ⚠</span>
                 <span className="text-destructive font-bold">{formatPercent(displayAnalysis.atlasScore.bearishProbability)}</span>
               </div>
               <div className="flex justify-between items-center">
@@ -551,7 +690,7 @@ export default function Dashboard() {
                 </ul>
               </div>
 
-              {!isHistoricalMode && <BacktestPanel ticker={ticker} />}
+              {!isHistoricalMode && <BacktestPanel ticker={ticker} currentScore={displayAnalysis.atlasScore.overall} />}
 
               {!isHistoricalMode && (
                 <p className="mt-4 text-xs text-muted-foreground font-mono border-t border-border pt-4">

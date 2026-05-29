@@ -597,10 +597,9 @@ export const GetMarketOverviewResponse = zod.object({
 }),
   "marketRegime": zod.enum(['risk_on', 'neutral', 'risk_off']),
   "marketRegimeScore": zod.number(),
-  "advancingStocks": zod.number().nullable(),
-  "decliningStocks": zod.number().nullable(),
-  "newHighs": zod.number().nullable(),
-  "newLows": zod.number().nullable(),
+  "pctAboveSma50": zod.number().nullable().describe('% of scanner universe with price above SMA50 (null until scanner has run)'),
+  "pctAboveSma200": zod.number().nullable().describe('% of scanner universe with price above SMA200 (null until scanner has run)'),
+  "breadthUniverse": zod.number().nullable().describe('Number of tickers included in breadth calculation'),
   "timestamp": zod.string()
 })
 

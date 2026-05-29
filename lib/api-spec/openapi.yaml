@@ -1035,14 +1035,15 @@ components:
           enum: [risk_on, neutral, risk_off]
         marketRegimeScore:
           type: number
-        advancingStocks:
+        pctAboveSma50:
+          type: ["number", "null"]
+          description: "% of scanner universe with price above SMA50 (null until scanner has run)"
+        pctAboveSma200:
+          type: ["number", "null"]
+          description: "% of scanner universe with price above SMA200 (null until scanner has run)"
+        breadthUniverse:
           type: ["integer", "null"]
-        decliningStocks:
-          type: ["integer", "null"]
-        newHighs:
-          type: ["integer", "null"]
-        newLows:
-          type: ["integer", "null"]
+          description: "Number of tickers included in breadth calculation"
         timestamp:
           type: string
       required:
@@ -1052,8 +1053,7 @@ components:
         - vix
         - marketRegime
         - marketRegimeScore
-        - advancingStocks
-        - decliningStocks
-        - newHighs
-        - newLows
+        - pctAboveSma50
+        - pctAboveSma200
+        - breadthUniverse
         - timestamp

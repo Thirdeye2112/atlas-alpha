@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { fetchQuote, fetchOHLCV } from "../lib/marketData.js";
 import { marketCache } from "../lib/cache.js";
 import { calcTrend, calcRegimeIndicators } from "../lib/indicators.js";
+import { getCachedBreadth } from "../lib/analysisEngine.js";
 
 const router: IRouter = Router();
 
@@ -33,7 +34,6 @@ router.get("/market/overview", async (req, res): Promise<void> => {
   const regime = calcRegimeIndicators(spyBars, spyTrend);
   const vixPrice = vix.price;
 
-  // Classify market regime using enhanced regime score + VIX overlay
   let marketRegime: "risk_on" | "neutral" | "risk_off" = "neutral";
   let marketRegimeScore = regime.regimeScore;
 
@@ -47,6 +47,9 @@ router.get("/market/overview", async (req, res): Promise<void> => {
     marketRegime = "risk_off";
   }
 
+  // Breadth from cached scanner analyses (null until scanner has run)
+  const breadth = getCachedBreadth();
+
   const overview = {
     spy: toMarketQuote(spy),
     qqq: toMarketQuote(qqq),
@@ -58,10 +61,9 @@ router.get("/market/overview", async (req, res): Promise<void> => {
     adxTrending: regime.adxTrending,
     realizedVol20: regime.realizedVol20,
     realizedVolPct: regime.realizedVolPct,
-    advancingStocks: null,
-    decliningStocks: null,
-    newHighs: null,
-    newLows: null,
+    pctAboveSma50:  breadth.pctAboveSma50,
+    pctAboveSma200: breadth.pctAboveSma200,
+    breadthUniverse: breadth.total > 0 ? breadth.total : null,
     timestamp: new Date().toISOString(),
   };
 
