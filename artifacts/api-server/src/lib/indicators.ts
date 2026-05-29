@@ -9,6 +9,7 @@ import {
   ROC,
   OBV,
   ATR,
+  ADX,
 } from "technicalindicators";
 import type { OHLCVBar } from "./marketData.js";
 
@@ -556,6 +557,63 @@ export function calcChartSignals(bars: OHLCVBar[]): ChartSignal[] {
     }
   }
   return deduped.slice(0, 20);
+}
+
+export interface RegimeIndicators {
+  adx: number;
+  adxTrending: boolean;
+  realizedVol20: number;
+  realizedVolPct: number;
+  regimeScore: number;
+}
+
+export function calcRegimeIndicators(bars: OHLCVBar[], spyTrend: TrendResult): RegimeIndicators {
+  const highs = bars.map(b => b.high);
+  const lows = bars.map(b => b.low);
+  const closes = bars.map(b => b.close);
+
+  // ADX — trend strength; >20 = trending, >40 = strongly trending
+  const adxArr = ADX.calculate({ high: highs, low: lows, close: closes, period: 14 });
+  const adxVal = adxArr.length > 0 ? (adxArr[adxArr.length - 1].adx ?? 25) : 25;
+  const adxTrending = adxVal > 20;
+
+  // 20-day realized volatility (annualized %)
+  const logReturns = closes.slice(1).map((c, i) => Math.log(c / closes[i]));
+  const last20 = logReturns.slice(-20);
+  const meanR = last20.reduce((a, b) => a + b, 0) / 20;
+  const variance = last20.reduce((a, r) => a + (r - meanR) ** 2, 0) / Math.max(1, last20.length - 1);
+  const realizedVol20 = Math.sqrt(variance * 252) * 100;
+
+  // Percentile of current vol vs rolling 20-day vols over all available history
+  const rollingVols: number[] = [];
+  for (let i = 20; i <= logReturns.length; i++) {
+    const slice = logReturns.slice(i - 20, i);
+    const m = slice.reduce((a, b) => a + b, 0) / 20;
+    const v = slice.reduce((a, r) => a + (r - m) ** 2, 0) / Math.max(1, slice.length - 1);
+    rollingVols.push(Math.sqrt(v * 252) * 100);
+  }
+  const rank = rollingVols.filter(v => v < realizedVol20).length;
+  const realizedVolPct = rollingVols.length > 0 ? (rank / rollingVols.length) * 100 : 50;
+
+  // Composite regime score:
+  //   50% SPY SMA alignment (trend direction)
+  //   30% vol state (low vol = calm market = high score)
+  //   20% ADX (whether there's a clear trend to ride)
+  const volFactor = 100 - realizedVolPct;
+  const adxFactor = clamp((adxVal - 15) * 5); // ADX 15→0, ADX 35→100
+  const regimeScore = clamp(
+    spyTrend.trendAlignmentScore * 0.50 +
+    volFactor * 0.30 +
+    adxFactor * 0.20
+  );
+
+  return {
+    adx: Math.round(adxVal * 10) / 10,
+    adxTrending,
+    realizedVol20: Math.round(realizedVol20 * 10) / 10,
+    realizedVolPct: Math.round(realizedVolPct),
+    regimeScore: Math.round(regimeScore),
+  };
 }
 
 export function calcRelativeStrength(

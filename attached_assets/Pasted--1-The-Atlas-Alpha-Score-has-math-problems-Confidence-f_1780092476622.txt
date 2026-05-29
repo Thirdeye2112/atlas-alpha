@@ -1,0 +1,64 @@
+## 1. The Atlas Alpha Score has math problems
+
+**Confidence formula is broken:**
+`confidenceScore = max(bullishCount, bearishCount) / 18 * 100`
+
+This rewards *one-sided* signal counts, not signal *quality*. 18 redundant momentum indicators all firing bull tells you nothing new — RSI, MACD, Stochastic, CCI, ROC are ~70% correlated. You're measuring redundancy as conviction.
+
+**Fix:** Use signal *agreement across independent categories* (trend, momentum, volume, RS, regime). Confidence = number of categories agreeing / 5, not raw signal count / 18.
+
+**Logistic mapping is arbitrary:**
+`1/(1+exp(-0.08*(score-50)))*100`
+
+The 0.08 slope and 50 midpoint are unvalidated. **Fit this logistic on historical score → actual forward return outcomes.** Right now it's a cosmetic transformation, not a calibrated probability.
+
+## 2. Category weights are guessed, not learned
+
+30/20/15/10/15/10 is a Bloomberg-flavored guess. Run a regression of each category's standalone IC (information coefficient vs forward 5–20d returns) and weight inversely to noise. Options at 10% is probably still too high given it's a BB-in-Keltner *proxy* — either drop it or rename it "Volatility Squeeze."
+
+## 3. Momentum category double-counts hard
+
+RSI14, MACD, Stochastic, CCI, ROC, RSI divergence — that's 6 signals measuring the same thing. Keep **MACD histogram + RSI divergence** and drop the rest, or PCA them into one factor.
+
+## 4. Market Regime is too thin
+
+SPY SMA alignment alone misses the regimes that matter most. Add:
+- **Breadth:** % of S&P above 50/200 SMA (compute from your 300-ticker universe — you already have the data)
+- **Volatility regime:** realized vol percentile (no VIX needed)
+- **Trend quality:** ADX on SPY
+
+## 5. Historical replay uses adjusted prices
+
+You flagged this. It's a **silent leakage source** — splits/dividends retroactively change "historical" signals. Use unadjusted OHLC for signal computation, adjusted only for return calculation.
+
+## 6. No walk-forward validation mentioned
+
+Nothing in the doc shows you've measured whether the score actually predicts returns. **Add a `/api/backtest/score-ic` endpoint** that reports rolling IC and hit rate by score decile. If decile 10 doesn't beat decile 1 out-of-sample, the score is decoration.
+
+**Priority order:** Fix confidence formula → calibrate logistic on real data → deduplicate momentum → add breadth to regime → build the IC endpoint. Paste `score.ts` next and I'll rewrite it.
+
+**Atlas Alpha Review & Predictability Fixes**
+
+The scoring formula (Trend 30% + Momentum 20% + Volume 15% + Options 10% + RelStrength 15% + Regime 10%) is a classic multi-factor TA blend. While comprehensive on paper, it is vulnerable to redundancy, weak regime awareness, and several documented limitations that erode real-world edge.
+
+### Highest-impact issues
+1. **Redundant momentum signals**  
+   RSI, MACD, Stochastic, CCI, and ROC largely measure the same short-term price velocity. Adding them together inflates the momentum weight without adding orthogonal information. This often produces noisy scores that flip frequently.
+
+2. **Weak regime filter**  
+   Current regime is only SPY SMA alignment. It misses volatility state (VIX or realized vol), market breadth, and trend strength (ADX). Without this, trend and momentum signals fire indiscriminately in choppy or high-vol regimes where they historically underperform.
+
+3. **Options proxy limitation**  
+   The 10% options bucket relies on a Bollinger-Keltner squeeze proxy. This is a volatility signal, not true options flow. It dilutes the overall score and should be down-weighted or replaced until real options data is available.
+
+4. **No explicit target or validation**  
+   The platform generates signals but does not appear to define a clean forward-looking target (e.g., 5-day volatility-adjusted return or triple-barrier) or run purged walk-forward tests. Historical replay on adjusted prices also introduces survivorship and look-ahead risk.
+
+### Concrete recommendations
+- **Trim the feature set**: Keep one trend (SMA/EMA stack), one momentum (RSI + MACD only), one volume (OBV + relative volume), Mansfield RS, and an expanded regime layer (ADX + VIX state + SPY trend). Drop or halve the options weight.
+- **Add regime gating**: Only allow trend/momentum signals when regime score > 60 or when ADX > 20. This alone usually lifts Sharpe more than adding indicators.
+- **Fix evaluation**: Implement chronological walk-forward validation, include realistic slippage/spreads, and track precision-recall, calibration, and turnover-adjusted returns instead of raw signal count.
+- **Address listed limitations**: Replace the VWMA “VWAP,” add basic VIX or breadth data for regime, and cap scanner results to liquid names to reduce noise.
+
+Start by auditing the scoring function and regime calculation. Paste those two code sections next for line-by-line fixes. These changes will improve out-of-sample signal quality more than expanding the indicator list.
+

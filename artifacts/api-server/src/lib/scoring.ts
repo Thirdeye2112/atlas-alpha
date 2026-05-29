@@ -1,4 +1,4 @@
-import type { TrendResult, MomentumResult, VolumeResult, OptionsResult, RelativeStrengthResult, PatternResult } from "./indicators.js";
+import type { TrendResult, MomentumResult, VolumeResult, OptionsResult, RelativeStrengthResult } from "./indicators.js";
 
 export type AtlasLabel = "extreme_bearish" | "bearish" | "neutral" | "bullish" | "extreme_bullish";
 export type Direction = "bullish" | "bearish" | "neutral";
@@ -37,7 +37,7 @@ function labelFromScore(score: number): AtlasLabel {
   return "extreme_bearish";
 }
 
-// Logistic calibration: score 50→50%, 70→84%, 30→16%, 80→93%, 20→7%
+// Logistic calibration: score 50→50%, 70→84%, 80→93%, 30→16%
 function logisticProb(score: number): number {
   return clamp(Math.round((1 / (1 + Math.exp(-0.08 * (score - 50)))) * 100));
 }
@@ -51,11 +51,18 @@ export function calcAtlasScore(
   marketRegimeScore: number,
   expectedMovePercent: number
 ): AtlasAlphaScore {
-  // Weighted composite: Trend 30% + Momentum 20% + Volume 15% + Options 10% + RS 15% + Regime 10%
-  // Options reduced (proxy data); Trend + RS raised (verifiable price-based signals)
+  // Regime gate: in choppy/fearful markets (low regime), dampen trend+momentum
+  // because price-based signals produce more false positives without a clear trend.
+  // ADX < 20 and high realized vol are captured in the regime score.
+  const regimeGate = marketRegimeScore < 35 ? 0.70
+    : marketRegimeScore < 50 ? 0.85
+    : 1.0;
+
+  // Weighted composite: Trend 30% + Momentum 20% + Volume 15% + VolSqueeze 10% + RS 15% + Regime 10%
+  // Trend and Momentum are gated by regime to avoid false signals in choppy markets.
   const overall = clamp(
-    trend.trendAlignmentScore * 0.30 +
-    momentum.momentumScore    * 0.20 +
+    trend.trendAlignmentScore * 0.30 * regimeGate +
+    momentum.momentumScore    * 0.20 * regimeGate +
     volume.volumeScore        * 0.15 +
     options.optionsScore      * 0.10 +
     rs.rsScore                * 0.15 +
@@ -64,70 +71,46 @@ export function calcAtlasScore(
 
   const label = labelFromScore(overall);
 
-  // Indicator agreement — 18 independent signals (redundant vsSpy>2 slot removed)
-  const bullishSignals: boolean[] = [
-    trend.trendDirection === "strong_up" || trend.trendDirection === "up",
-    trend.goldenCross,
-    momentum.rsi > 50 && momentum.rsi < 70,
-    momentum.macd > momentum.macdSignal,
-    momentum.macdCrossover === "bullish",
-    momentum.stochK > momentum.stochD && momentum.stochK < 80,
-    momentum.cci > 0,
-    momentum.roc > 0,
-    volume.obvTrend === "rising",
-    volume.chaikinMoneyFlow > 0,
-    volume.volumeSpike && overall > 50,
-    options.optionsScore > 60,
-    options.unusualActivity && overall > 50,
-    rs.vsSpy > 0,                      // multi-timeframe weighted RS vs SPY
-    trend.priceVsSma50 > 0,
-    trend.priceVsSma200 > 0,
-    momentum.rsiDivergence === "bullish",
-    momentum.rsiSignal === "oversold",
-  ];
+  // ── Category-level confidence (5 independent buckets) ─────────────────────
+  // Each bucket is an orthogonal data dimension. Asking "does each category
+  // agree?" avoids the correlated-indicator inflation of raw signal counts.
+  const bullCats = [
+    trend.trendAlignmentScore > 60,
+    momentum.momentumScore > 60,
+    volume.volumeScore > 60,
+    rs.rsScore > 60,
+    marketRegimeScore > 60,
+  ].filter(Boolean).length;
 
-  const bearishSignals: boolean[] = [
-    trend.trendDirection === "strong_down" || trend.trendDirection === "down",
-    trend.deathCross,
-    momentum.rsi < 50 && momentum.rsi > 30,
-    momentum.macd < momentum.macdSignal,
-    momentum.macdCrossover === "bearish",
-    momentum.stochK < momentum.stochD && momentum.stochK > 20,
-    momentum.cci < 0,
-    momentum.roc < 0,
-    volume.obvTrend === "falling",
-    volume.chaikinMoneyFlow < 0,
-    volume.volumeSpike && overall < 50,
-    options.optionsScore < 40,
-    options.unusualActivity && overall < 50,
-    rs.vsSpy < 0,
-    trend.priceVsSma50 < 0,
-    trend.priceVsSma200 < 0,
-    momentum.rsiDivergence === "bearish",
-    momentum.rsiSignal === "overbought",
-  ];
+  const bearCats = [
+    trend.trendAlignmentScore < 40,
+    momentum.momentumScore < 40,
+    volume.volumeScore < 40,
+    rs.rsScore < 40,
+    marketRegimeScore < 40,
+  ].filter(Boolean).length;
 
-  const totalIndicators = bullishSignals.length;
-  const bullCount = bullishSignals.filter(Boolean).length;
-  const bearCount = bearishSignals.filter(Boolean).length;
-  const indicatorsAgreeing = overall >= 50 ? bullCount : bearCount;
+  const totalIndicators = 5;
+  const indicatorsAgreeing = overall >= 50 ? bullCats : bearCats;
+  const confidenceScore = clamp(Math.max(bullCats, bearCats) / totalIndicators * 100);
 
-  const agreementRatio = Math.max(bullCount, bearCount) / totalIndicators;
-  const confidenceScore = clamp(agreementRatio * 100);
-
-  // Logistic-calibrated probabilities (not just the raw score)
+  // Logistic-calibrated probability
   const bullishProbability = logisticProb(overall);
   const bearishProbability = clamp(100 - bullishProbability);
 
   const direction: Direction = overall >= 60 ? "bullish" : overall <= 40 ? "bearish" : "neutral";
 
   let timeHorizon: TimeHorizon = "1-2w";
-  if (confidenceScore > 80 && Math.abs(overall - 50) > 25) timeHorizon = "1-3d";
-  else if (confidenceScore < 55) timeHorizon = "1-3m";
+  if (confidenceScore >= 80 && Math.abs(overall - 50) > 25) timeHorizon = "1-3d";
+  else if (confidenceScore < 60) timeHorizon = "1-3m";
 
   const riskScore = clamp(100 - confidenceScore + (expectedMovePercent > 5 ? 20 : 0));
 
-  const signalNarrative = buildNarrative(trend, momentum, volume, options, rs, direction, overall, confidenceScore, bullCount, totalIndicators);
+  const signalNarrative = buildNarrative(
+    trend, momentum, volume, options, rs,
+    direction, overall, confidenceScore,
+    bullCats, bearCats, totalIndicators, regimeGate
+  );
 
   return {
     overall: Math.round(overall),
@@ -160,65 +143,72 @@ function buildNarrative(
   direction: Direction,
   overall: number,
   confidence: number,
-  agreeing: number,
-  total: number
+  bullCats: number,
+  bearCats: number,
+  totalCats: number,
+  regimeGate: number
 ): string {
   const parts: string[] = [];
   const strength = overall >= 75 ? "Strong" : overall >= 60 ? "Moderate" : overall <= 25 ? "Strong bearish" : overall <= 40 ? "Moderate bearish" : "Mixed";
+  const agreeing = overall >= 50 ? bullCats : bearCats;
 
-  parts.push(`${strength} ${direction} setup detected. Signal confidence: ${Math.round(confidence)}% (${agreeing}/${total} indicators in agreement).`);
+  parts.push(`${strength} ${direction} setup detected. ${agreeing}/${totalCats} independent categories in agreement (confidence: ${Math.round(confidence)}%).`);
+
+  if (regimeGate < 1.0) {
+    parts.push(`Regime gate active (${regimeGate === 0.70 ? "risk-off" : "choppy"} market): trend and momentum signals dampened — false-positive risk elevated.`);
+  }
 
   if (trend.trendDirection === "strong_up") {
-    parts.push(`Price maintains alignment above key moving averages — SMA50 (+${trend.priceVsSma50.toFixed(1)}%), SMA200 (+${trend.priceVsSma200.toFixed(1)}%).`);
+    parts.push(`Price maintains alignment above major moving averages — SMA50 (+${trend.priceVsSma50.toFixed(1)}%), SMA200 (+${trend.priceVsSma200.toFixed(1)}%).`);
   } else if (trend.trendDirection === "strong_down") {
-    parts.push(`Price trading below all key moving averages — a bearish structure. Distance from SMA200: ${trend.priceVsSma200.toFixed(1)}%.`);
+    parts.push(`Price trading below all major moving averages. Distance from SMA200: ${trend.priceVsSma200.toFixed(1)}%.`);
   } else if (trend.trendDirection === "up") {
     parts.push(`Trend structure is constructive with price above key moving averages.`);
   }
 
   if (trend.goldenCross) {
-    parts.push(`Golden Cross confirmed — SMA50 crossed above SMA200, a historically significant bullish signal.`);
+    parts.push(`Golden Cross confirmed — SMA50 crossed above SMA200, a historically significant long-term bullish signal.`);
   }
   if (trend.deathCross) {
-    parts.push(`Death Cross detected — SMA50 crossed below SMA200, a bearish structural event.`);
+    parts.push(`Death Cross detected — SMA50 crossed below SMA200, a major structural bearish event.`);
   }
 
   if (momentum.rsiSignal === "oversold") {
-    parts.push(`RSI reading of ${momentum.rsi.toFixed(1)} indicates oversold conditions — potential mean reversion setup.`);
+    parts.push(`RSI at ${momentum.rsi.toFixed(1)} — oversold territory. Potential mean reversion setup if volume confirms.`);
   } else if (momentum.rsiSignal === "overbought") {
-    parts.push(`RSI at ${momentum.rsi.toFixed(1)} reflects overbought conditions; short-term consolidation risk elevated.`);
+    parts.push(`RSI at ${momentum.rsi.toFixed(1)} — overbought. Short-term consolidation or pullback risk is elevated.`);
   } else {
-    parts.push(`RSI at ${momentum.rsi.toFixed(1)} remains in neutral territory with ${momentum.macd > momentum.macdSignal ? "positive" : "negative"} MACD momentum.`);
+    parts.push(`RSI at ${momentum.rsi.toFixed(1)} — neutral range. MACD momentum is ${momentum.macd > momentum.macdSignal ? "positive" : "negative"}.`);
   }
 
   if (momentum.macdCrossover === "bullish") {
-    parts.push(`MACD recently crossed bullish — histogram expansion suggests accelerating momentum.`);
+    parts.push(`MACD bullish crossover — histogram expansion suggests accelerating upside momentum.`);
   } else if (momentum.macdCrossover === "bearish") {
-    parts.push(`MACD crossed bearish — momentum deteriorating on the daily.`);
-  }
-
-  if (volume.relativeVolume > 2) {
-    parts.push(`Volume surging at ${volume.relativeVolume.toFixed(1)}x average — ${volume.chaikinMoneyFlow > 0 ? "smart money accumulation" : "distribution pressure"} detected.`);
-  } else if (volume.obvTrend === "rising") {
-    parts.push(`On-Balance Volume trending higher, suggesting quiet institutional accumulation.`);
-  } else if (volume.obvTrend === "falling") {
-    parts.push(`OBV in decline — distribution pressure remains elevated below the surface.`);
-  }
-
-  if (options.unusualActivity) {
-    parts.push(`Unusual activity flagged in the derivatives market. ${direction === "bullish" ? "Call buying pressure" : "Put activity"} elevated relative to average.`);
-  }
-
-  if (rs.vsSpy > 3) {
-    parts.push(`Outperforming SPY by ${rs.vsSpy.toFixed(1)}% (multi-timeframe composite) — institutional relative strength thesis intact.`);
-  } else if (rs.vsSpy < -3) {
-    parts.push(`Underperforming SPY by ${Math.abs(rs.vsSpy).toFixed(1)}% (multi-timeframe composite) — sector rotation risk should be monitored.`);
+    parts.push(`MACD bearish crossover — momentum deteriorating on the daily timeframe.`);
   }
 
   if (momentum.rsiDivergence === "bullish") {
-    parts.push(`Bullish RSI divergence detected — price making lower lows while RSI forms higher lows, a historically reliable reversal signal.`);
+    parts.push(`Bullish RSI divergence: price making lower lows while RSI forms higher lows — a reliable early reversal signal.`);
   } else if (momentum.rsiDivergence === "bearish") {
-    parts.push(`Bearish RSI divergence present — momentum not confirming price highs. Distribution risk elevated.`);
+    parts.push(`Bearish RSI divergence: momentum not confirming price highs. Distribution risk is elevated.`);
+  }
+
+  if (volume.relativeVolume > 2) {
+    parts.push(`Volume surge at ${volume.relativeVolume.toFixed(1)}x average — ${volume.chaikinMoneyFlow > 0 ? "institutional accumulation" : "distribution pressure"} detected.`);
+  } else if (volume.obvTrend === "rising") {
+    parts.push(`On-Balance Volume trending higher — quiet accumulation likely ongoing.`);
+  } else if (volume.obvTrend === "falling") {
+    parts.push(`OBV declining — distribution pressure building beneath the surface.`);
+  }
+
+  if (options.unusualActivity) {
+    parts.push(`Volatility squeeze signal active. ${direction === "bullish" ? "Expansion likely bullish." : "Watch for directional break."}`);
+  }
+
+  if (rs.vsSpy > 3) {
+    parts.push(`Outperforming SPY by ${rs.vsSpy.toFixed(1)}% (multi-timeframe composite) — relative strength thesis intact.`);
+  } else if (rs.vsSpy < -3) {
+    parts.push(`Underperforming SPY by ${Math.abs(rs.vsSpy).toFixed(1)}% (multi-timeframe composite) — sector rotation risk is a factor.`);
   }
 
   return parts.join(" ");
@@ -247,7 +237,9 @@ export function calcScannerResult(
   if (momentum.rsiSignal === "overbought") catalysts.push("RSI Overbought");
   if (momentum.rsiDivergence) catalysts.push(`RSI ${momentum.rsiDivergence} divergence`);
 
-  const signalStrength = atlasScore.confidenceScore >= 75 ? "strong" : atlasScore.confidenceScore >= 55 ? "moderate" : "weak";
+  const signalStrength = atlasScore.confidenceScore >= 80 ? "strong"
+    : atlasScore.confidenceScore >= 60 ? "moderate"
+    : "weak";
 
   return {
     ticker,

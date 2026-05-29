@@ -1,10 +1,10 @@
 import { fetchQuote, fetchOHLCV, type OHLCVBar } from "./marketData.js";
 import {
   calcTrend, calcMomentum, calcVolume, calcVolatility, calcOptions,
-  calcPatterns, calcRelativeStrength, calcChartSignals,
+  calcPatterns, calcRelativeStrength, calcChartSignals, calcRegimeIndicators,
   type TrendResult, type MomentumResult, type VolumeResult,
   type VolatilityResult, type OptionsResult, type PatternResult,
-  type RelativeStrengthResult, type ChartSignal,
+  type RelativeStrengthResult, type ChartSignal, type RegimeIndicators,
 } from "./indicators.js";
 import { calcAtlasScore, type AtlasAlphaScore } from "./scoring.js";
 import { analysisCache } from "./cache.js";
@@ -20,6 +20,7 @@ export interface AnalysisResult {
   options: OptionsResult;
   patterns: PatternResult;
   relativeStrength: RelativeStrengthResult;
+  regimeIndicators: RegimeIndicators;
   chartSignals: ChartSignal[];
   historicalDate?: string;
   cachedAt: string;
@@ -43,8 +44,8 @@ function buildResult(
   const patterns = calcPatterns(bars, trend, volatility);
   const rs = calcRelativeStrength(sym, bars, spyBars, qqqBars, iwmBars, (quoteOverride.sector as string | null) ?? null);
   const spyTrend = calcTrend(spyBars, spyBars[spyBars.length - 1]?.close ?? 500);
-  const marketRegimeScore = spyTrend.trendAlignmentScore;
-  const atlasScore = calcAtlasScore(trend, momentum, volume, options, rs, marketRegimeScore, volatility.expectedMovePercent);
+  const regimeIndicators = calcRegimeIndicators(spyBars, spyTrend);
+  const atlasScore = calcAtlasScore(trend, momentum, volume, options, rs, regimeIndicators.regimeScore, volatility.expectedMovePercent);
   const chartSignals = calcChartSignals(bars);
 
   return {
@@ -57,6 +58,7 @@ function buildResult(
     options,
     patterns,
     relativeStrength: rs,
+    regimeIndicators,
     chartSignals,
     ...(historicalDate ? { historicalDate } : {}),
     cachedAt: new Date().toISOString(),
