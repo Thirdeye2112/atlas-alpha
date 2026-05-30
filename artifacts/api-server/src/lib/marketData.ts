@@ -70,7 +70,13 @@ export interface YahooQuote {
   sector: string | null;
   industry: string | null;
   timestamp: string;
-  earningsTimestamp: number | null;  // Unix seconds; null if not available
+  earningsTimestamp: number | null;
+  // Extended hours — null when market is in regular session or data unavailable
+  marketState: string | null;           // "REGULAR" | "PRE" | "POST" | "POSTPOST" | "PREPRE" | "CLOSED"
+  preMarketPrice: number | null;
+  preMarketChangePercent: number | null;
+  postMarketPrice: number | null;
+  postMarketChangePercent: number | null;
 }
 
 export interface OHLCVBar {
@@ -118,6 +124,11 @@ export async function fetchQuote(ticker: string): Promise<YahooQuote> {
     industry: summary?.assetProfile?.industry ?? null,
     timestamp: new Date().toISOString(),
     earningsTimestamp: (q as unknown as { earningsTimestamp?: number }).earningsTimestamp ?? null,
+    marketState: (q as unknown as { marketState?: string }).marketState ?? null,
+    preMarketPrice: (q as unknown as { preMarketPrice?: number }).preMarketPrice ?? null,
+    preMarketChangePercent: (q as unknown as { preMarketChangePercent?: number }).preMarketChangePercent ?? null,
+    postMarketPrice: (q as unknown as { postMarketPrice?: number }).postMarketPrice ?? null,
+    postMarketChangePercent: (q as unknown as { postMarketChangePercent?: number }).postMarketChangePercent ?? null,
   };
 
   quoteCache.set(ticker, result);

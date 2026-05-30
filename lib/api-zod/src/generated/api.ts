@@ -44,7 +44,12 @@ export const GetStockQuoteResponse = zod.object({
   "eps": zod.number().nullable(),
   "sector": zod.string().nullable(),
   "industry": zod.string().nullable(),
-  "timestamp": zod.string()
+  "timestamp": zod.string(),
+  "marketState": zod.string().nullish().describe('REGULAR | PRE | POST | POSTPOST | PREPRE | CLOSED'),
+  "preMarketPrice": zod.number().nullish(),
+  "preMarketChangePercent": zod.number().nullish(),
+  "postMarketPrice": zod.number().nullish(),
+  "postMarketChangePercent": zod.number().nullish()
 })
 
 
@@ -76,7 +81,12 @@ export const GetStockAnalysisResponse = zod.object({
   "eps": zod.number().nullable(),
   "sector": zod.string().nullable(),
   "industry": zod.string().nullable(),
-  "timestamp": zod.string()
+  "timestamp": zod.string(),
+  "marketState": zod.string().nullish().describe('REGULAR | PRE | POST | POSTPOST | PREPRE | CLOSED'),
+  "preMarketPrice": zod.number().nullish(),
+  "preMarketChangePercent": zod.number().nullish(),
+  "postMarketPrice": zod.number().nullish(),
+  "postMarketChangePercent": zod.number().nullish()
 }),
   "atlasScore": zod.object({
   "overall": zod.number(),

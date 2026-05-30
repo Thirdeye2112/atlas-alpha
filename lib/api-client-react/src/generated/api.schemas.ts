@@ -40,6 +40,19 @@ export interface StockQuote {
   /** @nullable */
   industry: string | null;
   timestamp: string;
+  /**
+     * REGULAR | PRE | POST | POSTPOST | PREPRE | CLOSED
+     * @nullable
+     */
+  marketState?: string | null;
+  /** @nullable */
+  preMarketPrice?: number | null;
+  /** @nullable */
+  preMarketChangePercent?: number | null;
+  /** @nullable */
+  postMarketPrice?: number | null;
+  /** @nullable */
+  postMarketChangePercent?: number | null;
 }
 
 export interface OHLCVBar {

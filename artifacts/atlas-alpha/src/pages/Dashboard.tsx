@@ -7,7 +7,7 @@ import {
   OHLCVBar,
 } from "@workspace/api-client-react";
 import WatchlistSidebar from "@/components/layout/WatchlistSidebar";
-import LightweightChart, { ChartPriceLine, ChartSignalMarker } from "@/components/charts/LightweightChart";
+import LightweightChart, { ChartPriceLine, ChartSignalMarker, ExtendedHoursPoint } from "@/components/charts/LightweightChart";
 import ScoreGauge from "@/components/charts/ScoreGauge";
 import MiniGauge from "@/components/charts/MiniGauge";
 import RsiMiniChart from "@/components/charts/RsiMiniChart";
@@ -502,6 +502,36 @@ export default function Dashboard() {
                   <span className="text-muted-foreground mr-2">VOL</span>
                   <span>{formatNumber(displayAnalysis.quote.volume, true)}</span>
                 </div>
+                {/* Extended hours badge */}
+                {(() => {
+                  const q = displayAnalysis.quote;
+                  const state = q.marketState;
+                  if (state === "PRE" && q.preMarketPrice && q.preMarketChangePercent != null) {
+                    const sign = q.preMarketChangePercent >= 0 ? "+" : "";
+                    return (
+                      <div className="flex items-center gap-1.5 border border-indigo-500/40 bg-indigo-500/10 rounded px-2 py-0.5">
+                        <span className="text-[10px] text-indigo-400 font-bold tracking-wide">PRE</span>
+                        <span className="text-indigo-200 font-bold">{formatCurrency(q.preMarketPrice)}</span>
+                        <span className={q.preMarketChangePercent >= 0 ? "text-success text-xs" : "text-destructive text-xs"}>
+                          {sign}{q.preMarketChangePercent.toFixed(2)}%
+                        </span>
+                      </div>
+                    );
+                  }
+                  if ((state === "POST" || state === "POSTPOST" || state === "CLOSED") && q.postMarketPrice && q.postMarketChangePercent != null) {
+                    const sign = q.postMarketChangePercent >= 0 ? "+" : "";
+                    return (
+                      <div className="flex items-center gap-1.5 border border-amber-500/40 bg-amber-500/10 rounded px-2 py-0.5">
+                        <span className="text-[10px] text-amber-400 font-bold tracking-wide">AH</span>
+                        <span className="text-amber-200 font-bold">{formatCurrency(q.postMarketPrice)}</span>
+                        <span className={q.postMarketChangePercent >= 0 ? "text-success text-xs" : "text-destructive text-xs"}>
+                          {sign}{q.postMarketChangePercent.toFixed(2)}%
+                        </span>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
             )}
           </form>
@@ -542,6 +572,16 @@ export default function Dashboard() {
                   onCandleClick={timeframe.interval === "1d" || timeframe.interval === "1wk" || timeframe.interval === "1mo" ? handleCandleClick : undefined}
                   priceLines={analysis ? buildPriceLines(analysis) : []}
                   signals={(timeframe.interval === "1d" || timeframe.interval === "1wk" || timeframe.interval === "1mo") && displayAnalysis?.chartSignals ? displayAnalysis.chartSignals as ChartSignalMarker[] : []}
+                  extendedHours={(() => {
+                    if (!displayAnalysis || timeframe.interval !== "1d") return undefined;
+                    const q = displayAnalysis.quote;
+                    const state = q.marketState;
+                    if (state === "PRE" && q.preMarketPrice && q.preMarketChangePercent != null)
+                      return { price: q.preMarketPrice, changePercent: q.preMarketChangePercent, type: "pre" } as ExtendedHoursPoint;
+                    if ((state === "POST" || state === "POSTPOST" || state === "CLOSED") && q.postMarketPrice && q.postMarketChangePercent != null)
+                      return { price: q.postMarketPrice, changePercent: q.postMarketChangePercent, type: "post" } as ExtendedHoursPoint;
+                    return undefined;
+                  })()}
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">NO DATA</div>

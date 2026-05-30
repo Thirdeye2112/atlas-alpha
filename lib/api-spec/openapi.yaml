@@ -513,6 +513,17 @@ components:
           type: ["string", "null"]
         timestamp:
           type: string
+        marketState:
+          type: ["string", "null"]
+          description: "REGULAR | PRE | POST | POSTPOST | PREPRE | CLOSED"
+        preMarketPrice:
+          type: ["number", "null"]
+        preMarketChangePercent:
+          type: ["number", "null"]
+        postMarketPrice:
+          type: ["number", "null"]
+        postMarketChangePercent:
+          type: ["number", "null"]
       required:
         - ticker
         - name

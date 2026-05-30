@@ -28,12 +28,19 @@ export interface ChartSignalMarker {
   strength: "strong" | "moderate";
 }
 
+export interface ExtendedHoursPoint {
+  price: number;
+  changePercent: number;
+  type: "pre" | "post";
+}
+
 interface Props {
   data: OHLCVBar[];
   height?: number;
   onCandleClick?: (date: string, close: number) => void;
   priceLines?: ChartPriceLine[];
   signals?: ChartSignalMarker[];
+  extendedHours?: ExtendedHoursPoint;
 }
 
 function toChartTime(time: string): UTCTimestamp | string {
@@ -48,6 +55,18 @@ function toDateString(time: UTCTimestamp | string): string {
     return new Date(time * 1000).toISOString().split("T")[0];
   }
   return String(time);
+}
+
+/** Advance a YYYY-MM-DD date string by N calendar days, skipping weekends. */
+function nextTradingDay(dateStr: string, skip = 1): string {
+  const d = new Date(dateStr + "T12:00:00Z");
+  let added = 0;
+  while (added < skip) {
+    d.setUTCDate(d.getUTCDate() + 1);
+    const dow = d.getUTCDay();
+    if (dow !== 0 && dow !== 6) added++;
+  }
+  return d.toISOString().split("T")[0];
 }
 
 const LS_MAP: Record<string, LineStyle> = {
@@ -71,6 +90,7 @@ export default function LightweightChart({
   onCandleClick,
   priceLines = [],
   signals = [],
+  extendedHours,
 }: Props) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -194,6 +214,45 @@ export default function LightweightChart({
       }
     }
 
+    // ── Extended hours price point ────────────────────────────────────────────
+    // When pre/post market data is available, plot a projected price dot at
+    // the next trading day and draw a dashed horizontal price line across the chart.
+    if (extendedHours && formattedData.length > 0) {
+      const lastBar = formattedData[formattedData.length - 1];
+      const lastDateStr = toDateString(lastBar.time);
+      // Only show on daily timeframes (date strings, not intraday timestamps)
+      const isDaily = typeof lastBar.time === "string" || String(lastBar.time).length === 10;
+      if (isDaily || typeof lastBar.time === "string") {
+        const nextDay = nextTradingDay(lastDateStr);
+        const isPost = extendedHours.type === "post";
+        const ehColor = isPost ? "#f59e0b" : "#818cf8"; // amber = post, indigo = pre
+        const chgSign = extendedHours.changePercent >= 0 ? "+" : "";
+        const label = `${isPost ? "AH" : "PM"} ${chgSign}${extendedHours.changePercent.toFixed(2)}%`;
+
+        // Dashed horizontal price line spanning the last 2 real bars + next day
+        const ehLineSeries = chart.addSeries(LineSeries, {
+          color: ehColor,
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          priceLineVisible: false,
+          lastValueVisible: true,
+          crosshairMarkerVisible: true,
+          crosshairMarkerRadius: 5,
+          title: label,
+        });
+
+        const prev2Bar = formattedData.length >= 2
+          ? formattedData[formattedData.length - 2]
+          : lastBar;
+
+        ehLineSeries.setData([
+          { time: prev2Bar.time, value: extendedHours.price },
+          { time: lastBar.time,  value: extendedHours.price },
+          { time: nextDay as unknown as UTCTimestamp,       value: extendedHours.price },
+        ]);
+      }
+    }
+
     // Signal markers — only meaningful on daily bars (date strings)
     if (signals.length > 0) {
       const dataTimeSet = new Set(formattedData.map(d => String(d.time)));
@@ -245,7 +304,7 @@ export default function LightweightChart({
       chartRef.current = null;
       seriesRef.current = null;
     };
-  }, [data, height, onCandleClick, priceLines, signals]);
+  }, [data, height, onCandleClick, priceLines, signals, extendedHours]);
 
   return (
     <div
