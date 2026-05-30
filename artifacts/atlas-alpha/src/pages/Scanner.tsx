@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   useGetScannerTopLongs, getGetScannerTopLongsQueryKey,
@@ -13,37 +13,89 @@ import {
   useGetScannerGapDown, getGetScannerGapDownQueryKey,
   ScannerResult
 } from "@workspace/api-client-react";
-import { formatCurrency, formatPercent, getBgColorForScore, getColorForDirection } from "@/lib/formatters";
+import { formatCurrency, formatPercent, getBgColorForScore } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 import { Link } from "wouter";
+import { ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 
-function ScannerTable({ data, isLoading, showGap }: { data?: ScannerResult[], isLoading: boolean, showGap?: boolean }) {
+type SortCol = "ticker" | "name" | "price" | "changePercent" | "gapPercent" | "atlasScore" | "rsi" | "relativeVolume";
+type SortDir = "asc" | "desc";
+
+function SortIcon({ col, sortCol, sortDir }: { col: SortCol; sortCol: SortCol | null; sortDir: SortDir }) {
+  if (sortCol !== col) return <ChevronsUpDown className="inline w-3 h-3 ml-0.5 opacity-30" />;
+  return sortDir === "asc"
+    ? <ChevronUp className="inline w-3 h-3 ml-0.5 text-primary" />
+    : <ChevronDown className="inline w-3 h-3 ml-0.5 text-primary" />;
+}
+
+function SortableTh({
+  col, label, sortCol, sortDir, onSort, className,
+}: {
+  col: SortCol; label: string; sortCol: SortCol | null; sortDir: SortDir;
+  onSort: (col: SortCol) => void; className?: string;
+}) {
+  return (
+    <th
+      className={cn("px-3 py-2 cursor-pointer select-none hover:text-foreground transition-colors", className)}
+      onClick={() => onSort(col)}
+    >
+      {label}
+      <SortIcon col={col} sortCol={sortCol} sortDir={sortDir} />
+    </th>
+  );
+}
+
+function ScannerTable({ data, isLoading, showGap }: { data?: ScannerResult[]; isLoading: boolean; showGap?: boolean }) {
+  const [sortCol, setSortCol] = useState<SortCol | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+
+  function handleSort(col: SortCol) {
+    if (sortCol === col) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortCol(col);
+      setSortDir("desc");
+    }
+  }
+
   if (isLoading) {
     return <div className="p-8 text-center text-muted-foreground font-mono animate-pulse">SCANNING MARKET...</div>;
   }
-
   if (!data || data.length === 0) {
     return <div className="p-8 text-center text-muted-foreground font-mono">NO RESULTS FOUND FOR CURRENT CRITERIA</div>;
   }
+
+  const sorted = sortCol
+    ? [...data].sort((a, b) => {
+        const av = a[sortCol] ?? "";
+        const bv = b[sortCol] ?? "";
+        const cmp = typeof av === "number" && typeof bv === "number"
+          ? av - bv
+          : String(av).localeCompare(String(bv));
+        return sortDir === "asc" ? cmp : -cmp;
+      })
+    : data;
+
+  const thProps = { sortCol, sortDir, onSort: handleSort };
 
   return (
     <div className="overflow-auto border border-border rounded-md bg-card">
       <table className="w-full text-sm font-mono text-left">
         <thead className="bg-muted/50 text-muted-foreground border-b border-border sticky top-0 z-10">
           <tr>
-            <th className="px-3 py-2 w-20">TICKER</th>
-            <th className="px-3 py-2">NAME</th>
-            <th className="px-3 py-2 text-right w-20">PRICE</th>
-            <th className="px-3 py-2 text-right w-20">CHG%</th>
-            {showGap && <th className="px-3 py-2 text-right w-20">GAP%</th>}
-            <th className="px-3 py-2 text-right w-20">SCORE</th>
-            <th className="px-3 py-2 text-right w-16">RSI</th>
-            <th className="px-3 py-2 text-right w-16">RVOL</th>
+            <SortableTh col="ticker"         label="TICKER" className="w-20"      {...thProps} />
+            <SortableTh col="name"           label="NAME"                         {...thProps} />
+            <SortableTh col="price"          label="PRICE"  className="text-right w-20" {...thProps} />
+            <SortableTh col="changePercent"  label="CHG%"   className="text-right w-20" {...thProps} />
+            {showGap && <SortableTh col="gapPercent" label="GAP%" className="text-right w-20" {...thProps} />}
+            <SortableTh col="atlasScore"     label="SCORE"  className="text-right w-20" {...thProps} />
+            <SortableTh col="rsi"            label="RSI"    className="text-right w-16" {...thProps} />
+            <SortableTh col="relativeVolume" label="RVOL"   className="text-right w-16" {...thProps} />
             <th className="px-3 py-2 w-32">CATALYSTS</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
-          {data.map((row) => (
+          {sorted.map((row) => (
             <tr key={row.ticker} className="hover:bg-muted/30 transition-colors cursor-pointer">
               <td className="px-3 py-2">
                 <Link href={`/?ticker=${row.ticker}`} className="text-primary font-bold hover:underline">
@@ -88,16 +140,16 @@ function ScannerTable({ data, isLoading, showGap }: { data?: ScannerResult[], is
 
 export default function Scanner() {
   const limit = 25;
-  const { data: longs, isLoading: lLoading } = useGetScannerTopLongs({ limit }, { query: { queryKey: getGetScannerTopLongsQueryKey({ limit }) }});
-  const { data: shorts, isLoading: sLoading } = useGetScannerTopShorts({ limit }, { query: { queryKey: getGetScannerTopShortsQueryKey({ limit }) }});
-  const { data: breakouts, isLoading: bLoading } = useGetScannerBreakouts({ limit }, { query: { queryKey: getGetScannerBreakoutsQueryKey({ limit }) }});
-  const { data: breakdowns, isLoading: bdLoading } = useGetScannerBreakdowns({ limit }, { query: { queryKey: getGetScannerBreakdownsQueryKey({ limit }) }});
-  const { data: gamma, isLoading: gLoading } = useGetScannerGammaSqueeze({ limit }, { query: { queryKey: getGetScannerGammaSqueezeQueryKey({ limit }) }});
-  const { data: ss, isLoading: ssLoading } = useGetScannerShortSqueeze({ limit }, { query: { queryKey: getGetScannerShortSqueezeQueryKey({ limit }) }});
-  const { data: inst, isLoading: instLoading } = useGetScannerInstitutionalAccumulation({ limit }, { query: { queryKey: getGetScannerInstitutionalAccumulationQueryKey({ limit }) }});
-  const { data: mean, isLoading: meanLoading } = useGetScannerMeanReversion({ limit }, { query: { queryKey: getGetScannerMeanReversionQueryKey({ limit }) }});
-  const { data: gapUp, isLoading: guLoading } = useGetScannerGapUp({ limit }, { query: { queryKey: getGetScannerGapUpQueryKey({ limit }) }});
-  const { data: gapDown, isLoading: gdLoading } = useGetScannerGapDown({ limit }, { query: { queryKey: getGetScannerGapDownQueryKey({ limit }) }});
+  const { data: longs,     isLoading: lLoading    } = useGetScannerTopLongs({ limit }, { query: { queryKey: getGetScannerTopLongsQueryKey({ limit }) }});
+  const { data: shorts,    isLoading: sLoading    } = useGetScannerTopShorts({ limit }, { query: { queryKey: getGetScannerTopShortsQueryKey({ limit }) }});
+  const { data: breakouts, isLoading: bLoading    } = useGetScannerBreakouts({ limit }, { query: { queryKey: getGetScannerBreakoutsQueryKey({ limit }) }});
+  const { data: breakdowns,isLoading: bdLoading   } = useGetScannerBreakdowns({ limit }, { query: { queryKey: getGetScannerBreakdownsQueryKey({ limit }) }});
+  const { data: gamma,     isLoading: gLoading    } = useGetScannerGammaSqueeze({ limit }, { query: { queryKey: getGetScannerGammaSqueezeQueryKey({ limit }) }});
+  const { data: ss,        isLoading: ssLoading   } = useGetScannerShortSqueeze({ limit }, { query: { queryKey: getGetScannerShortSqueezeQueryKey({ limit }) }});
+  const { data: inst,      isLoading: instLoading } = useGetScannerInstitutionalAccumulation({ limit }, { query: { queryKey: getGetScannerInstitutionalAccumulationQueryKey({ limit }) }});
+  const { data: mean,      isLoading: meanLoading } = useGetScannerMeanReversion({ limit }, { query: { queryKey: getGetScannerMeanReversionQueryKey({ limit }) }});
+  const { data: gapUp,     isLoading: guLoading   } = useGetScannerGapUp({ limit }, { query: { queryKey: getGetScannerGapUpQueryKey({ limit }) }});
+  const { data: gapDown,   isLoading: gdLoading   } = useGetScannerGapDown({ limit }, { query: { queryKey: getGetScannerGapDownQueryKey({ limit }) }});
 
   return (
     <div className="flex-1 p-6 overflow-hidden flex flex-col h-full">
@@ -108,29 +160,29 @@ export default function Scanner() {
 
       <Tabs defaultValue="longs" className="flex-1 flex flex-col min-h-0">
         <TabsList className="bg-card border border-border w-full justify-start h-auto flex-wrap p-1 gap-1">
-          <TabsTrigger value="longs" className="font-mono text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">HIGH PROB LONGS</TabsTrigger>
-          <TabsTrigger value="shorts" className="font-mono text-xs data-[state=active]:bg-destructive data-[state=active]:text-destructive-foreground">HIGH PROB SHORTS</TabsTrigger>
+          <TabsTrigger value="longs"     className="font-mono text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">HIGH PROB LONGS</TabsTrigger>
+          <TabsTrigger value="shorts"    className="font-mono text-xs data-[state=active]:bg-destructive data-[state=active]:text-destructive-foreground">HIGH PROB SHORTS</TabsTrigger>
           <TabsTrigger value="breakouts" className="font-mono text-xs data-[state=active]:bg-success data-[state=active]:text-success-foreground">BREAKOUTS</TabsTrigger>
-          <TabsTrigger value="breakdowns" className="font-mono text-xs data-[state=active]:bg-destructive data-[state=active]:text-destructive-foreground">BREAKDOWNS</TabsTrigger>
-          <TabsTrigger value="gap-up" className="font-mono text-xs data-[state=active]:bg-success data-[state=active]:text-success-foreground">GAP UP ↑</TabsTrigger>
-          <TabsTrigger value="gap-down" className="font-mono text-xs data-[state=active]:bg-destructive data-[state=active]:text-destructive-foreground">GAP DOWN ↓</TabsTrigger>
-          <TabsTrigger value="gamma" className="font-mono text-xs data-[state=active]:bg-warning data-[state=active]:text-warning-foreground">GAMMA SQUEEZE</TabsTrigger>
-          <TabsTrigger value="ss" className="font-mono text-xs data-[state=active]:bg-warning data-[state=active]:text-warning-foreground">SHORT SQUEEZE</TabsTrigger>
-          <TabsTrigger value="inst" className="font-mono text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">INST ACCUM</TabsTrigger>
-          <TabsTrigger value="mean" className="font-mono text-xs data-[state=active]:bg-muted-foreground data-[state=active]:text-background">MEAN REVERSION</TabsTrigger>
+          <TabsTrigger value="breakdowns"className="font-mono text-xs data-[state=active]:bg-destructive data-[state=active]:text-destructive-foreground">BREAKDOWNS</TabsTrigger>
+          <TabsTrigger value="gap-up"    className="font-mono text-xs data-[state=active]:bg-success data-[state=active]:text-success-foreground">GAP UP ↑</TabsTrigger>
+          <TabsTrigger value="gap-down"  className="font-mono text-xs data-[state=active]:bg-destructive data-[state=active]:text-destructive-foreground">GAP DOWN ↓</TabsTrigger>
+          <TabsTrigger value="gamma"     className="font-mono text-xs data-[state=active]:bg-warning data-[state=active]:text-warning-foreground">GAMMA SQUEEZE</TabsTrigger>
+          <TabsTrigger value="ss"        className="font-mono text-xs data-[state=active]:bg-warning data-[state=active]:text-warning-foreground">SHORT SQUEEZE</TabsTrigger>
+          <TabsTrigger value="inst"      className="font-mono text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">INST ACCUM</TabsTrigger>
+          <TabsTrigger value="mean"      className="font-mono text-xs data-[state=active]:bg-muted-foreground data-[state=active]:text-background">MEAN REVERSION</TabsTrigger>
         </TabsList>
-        
+
         <div className="flex-1 overflow-auto mt-4">
-          <TabsContent value="longs" className="m-0 h-full"><ScannerTable data={longs} isLoading={lLoading} /></TabsContent>
-          <TabsContent value="shorts" className="m-0 h-full"><ScannerTable data={shorts} isLoading={sLoading} /></TabsContent>
-          <TabsContent value="breakouts" className="m-0 h-full"><ScannerTable data={breakouts} isLoading={bLoading} /></TabsContent>
-          <TabsContent value="breakdowns" className="m-0 h-full"><ScannerTable data={breakdowns} isLoading={bdLoading} /></TabsContent>
-          <TabsContent value="gap-up" className="m-0 h-full"><ScannerTable data={gapUp} isLoading={guLoading} showGap /></TabsContent>
-          <TabsContent value="gap-down" className="m-0 h-full"><ScannerTable data={gapDown} isLoading={gdLoading} showGap /></TabsContent>
-          <TabsContent value="gamma" className="m-0 h-full"><ScannerTable data={gamma} isLoading={gLoading} /></TabsContent>
-          <TabsContent value="ss" className="m-0 h-full"><ScannerTable data={ss} isLoading={ssLoading} /></TabsContent>
-          <TabsContent value="inst" className="m-0 h-full"><ScannerTable data={inst} isLoading={instLoading} /></TabsContent>
-          <TabsContent value="mean" className="m-0 h-full"><ScannerTable data={mean} isLoading={meanLoading} /></TabsContent>
+          <TabsContent value="longs"      className="m-0 h-full"><ScannerTable data={longs}      isLoading={lLoading}    /></TabsContent>
+          <TabsContent value="shorts"     className="m-0 h-full"><ScannerTable data={shorts}     isLoading={sLoading}    /></TabsContent>
+          <TabsContent value="breakouts"  className="m-0 h-full"><ScannerTable data={breakouts}  isLoading={bLoading}    /></TabsContent>
+          <TabsContent value="breakdowns" className="m-0 h-full"><ScannerTable data={breakdowns} isLoading={bdLoading}   /></TabsContent>
+          <TabsContent value="gap-up"     className="m-0 h-full"><ScannerTable data={gapUp}      isLoading={guLoading}   showGap /></TabsContent>
+          <TabsContent value="gap-down"   className="m-0 h-full"><ScannerTable data={gapDown}    isLoading={gdLoading}   showGap /></TabsContent>
+          <TabsContent value="gamma"      className="m-0 h-full"><ScannerTable data={gamma}      isLoading={gLoading}    /></TabsContent>
+          <TabsContent value="ss"         className="m-0 h-full"><ScannerTable data={ss}         isLoading={ssLoading}   /></TabsContent>
+          <TabsContent value="inst"       className="m-0 h-full"><ScannerTable data={inst}       isLoading={instLoading} /></TabsContent>
+          <TabsContent value="mean"       className="m-0 h-full"><ScannerTable data={mean}       isLoading={meanLoading} /></TabsContent>
         </div>
       </Tabs>
     </div>
