@@ -12,7 +12,7 @@ import ScoreGauge from "@/components/charts/ScoreGauge";
 import MiniGauge from "@/components/charts/MiniGauge";
 import RsiMiniChart from "@/components/charts/RsiMiniChart";
 import { formatCurrency, formatPercent, formatNumber, getColorForScore, getColorForDirection } from "@/lib/formatters";
-import { Search, Info, TrendingUp, TrendingDown, Minus, Clock, X, ChevronDown, ChevronRight, FlaskConical } from "lucide-react";
+import { Search, Info, TrendingUp, TrendingDown, Minus, Clock, X, ChevronDown, ChevronRight, FlaskConical, RotateCcw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -102,6 +102,158 @@ function ScatterPlot({ data, width = 240, height = 110 }: { data: BacktestPoint[
 
 function icColor(rating: string): string {
   return rating === "strong" ? "text-success" : rating === "moderate" ? "text-warning" : "text-muted-foreground";
+}
+
+// ── Quick Backtest Strip (shown inline in the chart section) ─────────────────
+
+function ChartBacktestStrip({ ticker, currentScore }: { ticker: string; currentScore?: number }) {
+  const [, navigate] = useLocation();
+  const [result, setResult] = useState<BacktestResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Clear results when ticker changes so stale data isn't shown
+  useEffect(() => { setResult(null); }, [ticker]);
+
+  const run = useCallback(async () => {
+    if (abortRef.current) abortRef.current.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    setLoading(true);
+    try {
+      const r = await fetch(`/api/backtest/ic?ticker=${encodeURIComponent(ticker)}&horizon=10`, { signal: ctrl.signal });
+      if (!r.ok) throw new Error("failed");
+      setResult(await r.json());
+    } catch (e: unknown) {
+      if (e instanceof Error && e.name !== "AbortError") { /* silent — strip stays in idle */ }
+    } finally {
+      setLoading(false);
+    }
+  }, [ticker]);
+
+  const calibratedProb = (result && currentScore !== undefined)
+    ? Math.round((1 / (1 + Math.exp(-(result.calibratedSlope * currentScore + result.calibratedIntercept)))) * 100)
+    : null;
+
+  const contrarian  = result && result.rankIC < 0;
+  const signalValid = result && Math.abs(result.icTStat) >= 1.65;
+
+  return (
+    <div className="px-3 py-1.5 border-b border-border bg-zinc-950/60 flex items-center gap-3 text-xs font-mono min-h-[30px]">
+      {!result && !loading && (
+        <button
+          onClick={run}
+          className="flex items-center gap-1.5 text-primary/80 hover:text-primary border border-primary/25 rounded px-2 py-0.5 hover:bg-primary/10 transition-colors"
+        >
+          <FlaskConical className="w-3 h-3" /> RUN BACKTEST (10D)
+        </button>
+      )}
+
+      {loading && (
+        <span className="text-muted-foreground animate-pulse">
+          COMPUTING 10D BACKTEST… ~15–20s
+        </span>
+      )}
+
+      {result && !loading && (
+        <>
+          {/* Rank IC */}
+          <div className="flex items-center gap-1">
+            <span className="text-muted-foreground/55">RANK IC</span>
+            <span className={cn("font-bold", icColor(result.rankICRating))}>
+              {result.rankIC >= 0 ? "+" : ""}{result.rankIC.toFixed(3)}
+            </span>
+            <span className="text-muted-foreground/40 text-[10px]">{result.rankICRating}</span>
+          </div>
+
+          <span className="text-border/60">|</span>
+
+          {/* t-statistic */}
+          <div className="flex items-center gap-1">
+            <span className="text-muted-foreground/55">t</span>
+            <span className={cn("font-bold",
+              Math.abs(result.icTStat) >= 2    ? "text-success" :
+              Math.abs(result.icTStat) >= 1.65 ? "text-warning"  : "text-muted-foreground"
+            )}>
+              {result.icTStat.toFixed(2)}
+            </span>
+          </div>
+
+          <span className="text-border/60">|</span>
+
+          {/* Observations */}
+          <div className="flex items-center gap-1">
+            <span className="text-muted-foreground/55">OBS</span>
+            <span className="text-foreground/80">{result.totalObservations}</span>
+          </div>
+
+          <span className="text-border/60">|</span>
+
+          {/* Signal mode badge */}
+          <span className={cn(
+            "px-1.5 py-px rounded text-[10px] font-bold tracking-wider border",
+            contrarian  ? "bg-amber-500/12 text-amber-400 border-amber-500/25" :
+            signalValid ? "bg-emerald-500/12 text-emerald-400 border-emerald-500/25" :
+                          "bg-zinc-700/30 text-muted-foreground border-border"
+          )}>
+            {contrarian ? "CONTRARIAN" : signalValid ? "MOMENTUM" : "NOISE"}
+          </span>
+
+          {/* Calibrated probability for current score */}
+          {calibratedProb !== null && (
+            <>
+              <span className="text-border/60">|</span>
+              <div className="flex items-center gap-1">
+                <span className="text-muted-foreground/55">P(+)</span>
+                <span className={cn("font-bold",
+                  calibratedProb >= 60 ? "text-success" :
+                  calibratedProb >= 45 ? "text-muted-foreground" : "text-destructive"
+                )}>
+                  {calibratedProb}%
+                </span>
+              </div>
+            </>
+          )}
+
+          {/* Bull hit rate */}
+          {result.bull.hitRate !== null && (
+            <>
+              <span className="text-border/60">|</span>
+              <div className="flex items-center gap-1">
+                <span className="text-muted-foreground/55">BULL HIT</span>
+                <span className={cn("font-bold",
+                  result.bull.hitRate >= 65 ? "text-success" :
+                  result.bull.hitRate >= 55 ? "text-warning"  : "text-muted-foreground"
+                )}>
+                  {result.bull.hitRate}%
+                </span>
+                <span className="text-muted-foreground/40">avg {result.bull.avgReturn !== null ? (result.bull.avgReturn >= 0 ? "+" : "") + result.bull.avgReturn.toFixed(1) + "%" : "—"}</span>
+              </div>
+            </>
+          )}
+
+          <div className="flex-1" />
+
+          {/* Re-run */}
+          <button
+            onClick={run}
+            title="Re-run backtest"
+            className="text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+          >
+            <RotateCcw className="w-3 h-3" />
+          </button>
+
+          {/* Full lab link */}
+          <button
+            onClick={() => navigate(`/backtest?ticker=${ticker}`)}
+            className="text-primary/65 hover:text-primary transition-colors border border-primary/20 rounded px-2 py-0.5 hover:bg-primary/10"
+          >
+            FULL LAB ↗
+          </button>
+        </>
+      )}
+    </div>
+  );
 }
 
 function BacktestPanel({ ticker, currentScore }: { ticker: string; currentScore?: number }) {
@@ -543,7 +695,7 @@ export default function Dashboard() {
 
         <div className="flex-1 p-4 flex flex-col gap-6">
           {/* Chart Section */}
-          <div className="h-[420px] bg-card border border-border rounded-md overflow-hidden flex flex-col">
+          <div className="h-[455px] bg-card border border-border rounded-md overflow-hidden flex flex-col">
             <div className="px-3 py-2 border-b border-border flex items-center justify-between gap-2">
               <span className="text-xs font-bold text-muted-foreground tracking-wider shrink-0">
                 {ticker} · {timeframe.label} · {timeframe.interval.toUpperCase()}
@@ -565,13 +717,11 @@ export default function Dashboard() {
                 ))}
               </div>
               <span className="text-xs text-muted-foreground font-mono shrink-0">{ohlcv?.length || 0} BARS</span>
-              <button
-                onClick={() => navigate(`/backtest?ticker=${ticker}`)}
-                className="text-xs font-mono text-primary hover:text-primary/70 transition-colors shrink-0 border border-primary/30 rounded px-2 py-0.5 hover:bg-primary/10"
-              >
-                BACKTEST LAB ↗
-              </button>
             </div>
+            <ChartBacktestStrip
+              ticker={ticker}
+              currentScore={displayAnalysis?.atlasScore.overall}
+            />
             <div className="flex-1">
               {ohlcvLoading ? (
                 <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">LOADING CHART...</div>
