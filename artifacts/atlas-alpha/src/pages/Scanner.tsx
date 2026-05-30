@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback, useRef, useMemo } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   useGetScannerTopLongs,             getGetScannerTopLongsQueryKey,
@@ -20,9 +20,12 @@ import {
 import { formatCurrency, formatPercent, getBgColorForScore } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 import { Link } from "wouter";
-import { ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
+import { ChevronUp, ChevronDown, ChevronsUpDown, FlaskConical, RotateCcw } from "lucide-react";
 
-type SortCol = "ticker" | "name" | "price" | "changePercent" | "gapPercent" | "atlasScore" | "rsi" | "relativeVolume" | "gapSetupScore" | "keyLevelDist";
+type SortCol =
+  | "ticker" | "name" | "price" | "changePercent" | "gapPercent"
+  | "atlasScore" | "rsi" | "relativeVolume" | "gapSetupScore" | "keyLevelDist"
+  | "rankIC";
 type SortDir = "asc" | "desc";
 
 /** Polling interval while scan is in progress */
@@ -78,6 +81,14 @@ function ScanProgress({ done, total }: { done: number; total: number }) {
   );
 }
 
+// ── IC entry type ─────────────────────────────────────────────────────────────
+
+interface IcEntry { rankIC: number; rankICRating: string; icTStat: number; }
+
+function icColor(rating: string): string {
+  return rating === "strong" ? "text-success" : rating === "moderate" ? "text-warning" : "text-muted-foreground";
+}
+
 // ── Scanner table ─────────────────────────────────────────────────────────────
 
 function ScannerTable({
@@ -96,6 +107,13 @@ function ScannerTable({
   const [sortCol, setSortCol] = useState<SortCol | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
+  // ── Backtest state ──────────────────────────────────────────────────────────
+  const [icMap, setIcMap]     = useState<Map<string, IcEntry>>(new Map());
+  const [btLoading, setBtLoading] = useState(false);
+  const [btDone, setBtDone]   = useState(0);
+  const [btTotal, setBtTotal] = useState(0);
+  const abortRef = useRef<AbortController | null>(null);
+
   function handleSort(col: SortCol) {
     if (sortCol === col) {
       setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -109,7 +127,77 @@ function ScannerTable({
   const complete = response?.complete ?? false;
   const progress = response?.progress;
 
-  // Show full spinner only on the very first load (no data yet and still loading)
+  const tickers = useMemo(() => data.map(r => r.ticker), [data]);
+
+  const runBacktest = useCallback(async () => {
+    if (abortRef.current) abortRef.current.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
+    setBtLoading(true);
+    setBtDone(0);
+    setBtTotal(tickers.length);
+    setIcMap(new Map());
+
+    const BATCH = 4;
+    const newMap = new Map<string, IcEntry>();
+
+    for (let i = 0; i < tickers.length; i += BATCH) {
+      if (ctrl.signal.aborted) break;
+      const batch = tickers.slice(i, i + BATCH);
+
+      await Promise.all(batch.map(async (ticker) => {
+        try {
+          const r = await fetch(
+            `/api/backtest/ic?ticker=${encodeURIComponent(ticker)}&horizon=10`,
+            { signal: ctrl.signal }
+          );
+          if (r.ok) {
+            const d = await r.json();
+            newMap.set(ticker, {
+              rankIC: d.rankIC,
+              rankICRating: d.rankICRating,
+              icTStat: d.icTStat,
+            });
+          }
+        } catch (e: unknown) {
+          if (e instanceof Error && e.name === "AbortError") return;
+        }
+        setBtDone(prev => prev + 1);
+      }));
+
+      // Update map progressively so values fill in as computed
+      setIcMap(new Map(newMap));
+    }
+
+    setBtLoading(false);
+  }, [tickers]);
+
+  // ── Sort ────────────────────────────────────────────────────────────────────
+
+  const sorted = useMemo(() => {
+    if (!sortCol) return data;
+    return [...data].sort((a, b) => {
+      let av: string | number;
+      let bv: string | number;
+      if (sortCol === "rankIC") {
+        av = icMap.get(a.ticker)?.rankIC ?? -Infinity;
+        bv = icMap.get(b.ticker)?.rankIC ?? -Infinity;
+      } else {
+        av = a[sortCol] ?? "";
+        bv = b[sortCol] ?? "";
+      }
+      const cmp = typeof av === "number" && typeof bv === "number"
+        ? av - bv
+        : String(av).localeCompare(String(bv));
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [data, sortCol, sortDir, icMap]);
+
+  const thProps = { sortCol, sortDir, onSort: handleSort };
+
+  // ── Full spinner on first load ───────────────────────────────────────────────
+
   if (isLoading && !response) {
     return (
       <div className="border border-border rounded-md bg-card">
@@ -121,24 +209,67 @@ function ScannerTable({
     );
   }
 
-  const sorted = sortCol
-    ? [...data].sort((a, b) => {
-        const av = a[sortCol] ?? "";
-        const bv = b[sortCol] ?? "";
-        const cmp = typeof av === "number" && typeof bv === "number"
-          ? av - bv
-          : String(av).localeCompare(String(bv));
-        return sortDir === "asc" ? cmp : -cmp;
-      })
-    : data;
+  // ── Backtest summary counts ─────────────────────────────────────────────────
 
-  const thProps = { sortCol, sortDir, onSort: handleSort };
+  const btStrong   = [...icMap.values()].filter(v => v.rankICRating === "strong").length;
+  const btModerate = [...icMap.values()].filter(v => v.rankICRating === "moderate").length;
+  const btNoise    = [...icMap.values()].filter(v => v.rankICRating === "noise").length;
 
   return (
     <div className="overflow-auto border border-border rounded-md bg-card flex flex-col">
       {/* Live progress bar while scanning */}
       {!complete && progress && progress.total > 0 && (
         <ScanProgress done={progress.done} total={progress.total} />
+      )}
+
+      {/* ── Backtest action bar ────────────────────────────────────────────── */}
+      {data.length > 0 && (
+        <div className="px-3 py-1.5 border-b border-border bg-zinc-950/60 flex items-center gap-3 text-xs font-mono shrink-0">
+          {!btLoading && btDone === 0 && (
+            <button
+              onClick={runBacktest}
+              className="flex items-center gap-1.5 text-primary/80 hover:text-primary border border-primary/25 rounded px-2 py-0.5 hover:bg-primary/10 transition-colors"
+            >
+              <FlaskConical className="w-3 h-3" />
+              RUN BACKTEST (10D) · {tickers.length} tickers
+            </button>
+          )}
+
+          {btLoading && (
+            <>
+              <span className="text-muted-foreground animate-pulse shrink-0">
+                COMPUTING BACKTESTS…
+              </span>
+              <div className="w-40 h-1 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary transition-all duration-300 rounded-full"
+                  style={{ width: `${btTotal > 0 ? (btDone / btTotal) * 100 : 0}%` }}
+                />
+              </div>
+              <span className="text-muted-foreground shrink-0">{btDone} / {btTotal}</span>
+            </>
+          )}
+
+          {!btLoading && btDone > 0 && (
+            <>
+              <span className="text-muted-foreground/50">{btDone}/{btTotal} computed</span>
+              <span className="text-border/60">·</span>
+              <span className="text-success">{btStrong} strong</span>
+              <span className="text-border/60">·</span>
+              <span className="text-warning">{btModerate} moderate</span>
+              <span className="text-border/60">·</span>
+              <span className="text-muted-foreground">{btNoise} noise</span>
+              <div className="flex-1" />
+              <button
+                onClick={runBacktest}
+                title="Re-run backtest"
+                className="text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+              >
+                <RotateCcw className="w-3 h-3" />
+              </button>
+            </>
+          )}
+        </div>
       )}
 
       {data.length === 0 && complete ? (
@@ -149,94 +280,115 @@ function ScannerTable({
         <table className="w-full text-sm font-mono text-left">
           <thead className="bg-muted/50 text-muted-foreground border-b border-border sticky top-0 z-10">
             <tr>
-              <SortableTh col="ticker"         label="TICKER" className="w-20"           {...thProps} />
-              <SortableTh col="name"           label="NAME"                              {...thProps} />
-              <SortableTh col="price"          label="PRICE"  className="text-right w-20" {...thProps} />
-              <SortableTh col="changePercent"  label="CHG%"   className="text-right w-20" {...thProps} />
+              <SortableTh col="ticker"         label="TICKER" className="w-20"             {...thProps} />
+              <SortableTh col="name"           label="NAME"                                {...thProps} />
+              <SortableTh col="price"          label="PRICE"  className="text-right w-20"  {...thProps} />
+              <SortableTh col="changePercent"  label="CHG%"   className="text-right w-20"  {...thProps} />
               {showGap && <SortableTh col="gapPercent" label="GAP%" className="text-right w-20" {...thProps} />}
-              <SortableTh col="atlasScore"     label="SCORE"  className="text-right w-20" {...thProps} />
+              <SortableTh col="atlasScore"     label="SCORE"  className="text-right w-20"  {...thProps} />
               {showGapScore && <SortableTh col="gapSetupScore" label="GAP PROB" className="text-right w-24" {...thProps} />}
               {showKeyLevel && <SortableTh col="keyLevelDist" label="DIST%" className="text-right w-20" {...thProps} />}
-              <SortableTh col="rsi"            label="RSI"    className="text-right w-16" {...thProps} />
-              <SortableTh col="relativeVolume" label="RVOL"   className="text-right w-16" {...thProps} />
+              <SortableTh col="rsi"            label="RSI"    className="text-right w-16"  {...thProps} />
+              <SortableTh col="relativeVolume" label="RVOL"   className="text-right w-16"  {...thProps} />
+              <SortableTh col="rankIC"         label="IC 10D" className="text-right w-20"  {...thProps} />
               <th className="px-3 py-2 w-36">LEVELS</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {sorted.map(row => (
-              <tr key={row.ticker} className="hover:bg-muted/30 transition-colors cursor-pointer">
-                <td className="px-3 py-2">
-                  <Link href={`/?ticker=${row.ticker}`} className="text-primary font-bold hover:underline">
-                    {row.ticker}
-                  </Link>
-                </td>
-                <td className="px-3 py-2 text-muted-foreground truncate max-w-[180px]">{row.name}</td>
-                <td className="px-3 py-2 text-right">{formatCurrency(row.price)}</td>
-                <td className={cn("px-3 py-2 text-right", row.changePercent >= 0 ? "text-success" : "text-destructive")}>
-                  {formatPercent(row.changePercent)}
-                </td>
-                {showGap && (
-                  <td className={cn("px-3 py-2 text-right font-bold", row.gapPercent >= 0 ? "text-success" : "text-destructive")}>
-                    {row.gapPercent > 0 ? "+" : ""}{row.gapPercent.toFixed(2)}%
+            {sorted.map(row => {
+              const ic = icMap.get(row.ticker);
+              return (
+                <tr key={row.ticker} className="hover:bg-muted/30 transition-colors cursor-pointer">
+                  <td className="px-3 py-2">
+                    <Link href={`/?ticker=${row.ticker}`} className="text-primary font-bold hover:underline">
+                      {row.ticker}
+                    </Link>
                   </td>
-                )}
-                <td className="px-3 py-2 text-right">
-                  <span className={cn("px-1.5 py-0.5 rounded text-xs font-bold", getBgColorForScore(row.atlasScore))}>
-                    {row.atlasScore}
-                  </span>
-                </td>
-                {showGapScore && (
+                  <td className="px-3 py-2 text-muted-foreground truncate max-w-[180px]">{row.name}</td>
+                  <td className="px-3 py-2 text-right">{formatCurrency(row.price)}</td>
+                  <td className={cn("px-3 py-2 text-right", row.changePercent >= 0 ? "text-success" : "text-destructive")}>
+                    {formatPercent(row.changePercent)}
+                  </td>
+                  {showGap && (
+                    <td className={cn("px-3 py-2 text-right font-bold", row.gapPercent >= 0 ? "text-success" : "text-destructive")}>
+                      {row.gapPercent > 0 ? "+" : ""}{row.gapPercent.toFixed(2)}%
+                    </td>
+                  )}
                   <td className="px-3 py-2 text-right">
-                    {row.gapSetupScore != null ? (
-                      <span className={cn(
-                        "px-1.5 py-0.5 rounded text-xs font-bold font-mono tabular-nums",
-                        row.gapSetupScore >= 70 ? "bg-warning/20 text-warning" :
-                        row.gapSetupScore >= 40 ? "bg-primary/20 text-primary" :
-                        "bg-muted text-muted-foreground"
-                      )}>
-                        {row.gapSetupScore}
-                      </span>
-                    ) : <span className="text-muted-foreground">—</span>}
+                    <span className={cn("px-1.5 py-0.5 rounded text-xs font-bold", getBgColorForScore(row.atlasScore))}>
+                      {row.atlasScore}
+                    </span>
                   </td>
-                )}
-                {showKeyLevel && (
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">
-                    {row.keyLevelDist != null ? (
-                      <span className={cn(
-                        "px-1.5 py-0.5 rounded text-xs font-bold",
-                        row.keyLevelDist <= 0.5 ? "bg-warning/20 text-warning" :
-                        row.keyLevelDist <= 1.0 ? "bg-primary/20 text-primary" :
-                        "text-muted-foreground"
-                      )}>
-                        {row.keyLevelDist.toFixed(2)}%
-                      </span>
-                    ) : <span className="text-muted-foreground">—</span>}
+                  {showGapScore && (
+                    <td className="px-3 py-2 text-right">
+                      {row.gapSetupScore != null ? (
+                        <span className={cn(
+                          "px-1.5 py-0.5 rounded text-xs font-bold font-mono tabular-nums",
+                          row.gapSetupScore >= 70 ? "bg-warning/20 text-warning" :
+                          row.gapSetupScore >= 40 ? "bg-primary/20 text-primary" :
+                          "bg-muted text-muted-foreground"
+                        )}>
+                          {row.gapSetupScore}
+                        </span>
+                      ) : <span className="text-muted-foreground">—</span>}
+                    </td>
+                  )}
+                  {showKeyLevel && (
+                    <td className="px-3 py-2 text-right font-mono tabular-nums">
+                      {row.keyLevelDist != null ? (
+                        <span className={cn(
+                          "px-1.5 py-0.5 rounded text-xs font-bold",
+                          row.keyLevelDist <= 0.5 ? "bg-warning/20 text-warning" :
+                          row.keyLevelDist <= 1.0 ? "bg-primary/20 text-primary" :
+                          "text-muted-foreground"
+                        )}>
+                          {row.keyLevelDist.toFixed(2)}%
+                        </span>
+                      ) : <span className="text-muted-foreground">—</span>}
+                    </td>
+                  )}
+                  <td className={cn("px-3 py-2 text-right",
+                    row.rsi > 70 ? "text-destructive" : row.rsi < 30 ? "text-success" : "text-foreground")}>
+                    {row.rsi.toFixed(1)}
                   </td>
-                )}
-                <td className={cn("px-3 py-2 text-right",
-                  row.rsi > 70 ? "text-destructive" : row.rsi < 30 ? "text-success" : "text-foreground")}>
-                  {row.rsi.toFixed(1)}
-                </td>
-                <td className={cn("px-3 py-2 text-right", row.relativeVolume > 2 ? "text-warning" : "text-foreground")}>
-                  {row.relativeVolume.toFixed(1)}x
-                </td>
-                <td className="px-3 py-2">
-                  <div className="flex flex-wrap gap-1">
-                    {row.catalysts.slice(0, showGapScore ? 4 : 2).map((c, i) => {
-                      const isEarn = c.startsWith("EARN");
-                      return (
-                        <span key={i} className={cn(
-                          "text-xs px-1 rounded font-mono",
-                          isEarn
-                            ? "bg-warning/20 text-warning font-semibold"
-                            : "text-muted-foreground bg-muted"
-                        )}>{c}</span>
-                      );
-                    })}
-                  </div>
-                </td>
-              </tr>
-            ))}
+                  <td className={cn("px-3 py-2 text-right", row.relativeVolume > 2 ? "text-warning" : "text-foreground")}>
+                    {row.relativeVolume.toFixed(1)}x
+                  </td>
+
+                  {/* ── IC 10D column ───────────────────────────────────────── */}
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {ic ? (
+                      <span className={cn("font-bold text-xs", icColor(ic.rankICRating))}>
+                        {ic.rankIC >= 0 ? "+" : ""}{ic.rankIC.toFixed(3)}
+                        <span className="text-muted-foreground/40 font-normal ml-0.5 text-[10px]">
+                          t{ic.icTStat >= 0 ? "+" : ""}{ic.icTStat.toFixed(1)}
+                        </span>
+                      </span>
+                    ) : (
+                      btLoading
+                        ? <span className="text-muted-foreground/30 animate-pulse">…</span>
+                        : <span className="text-muted-foreground/30">—</span>
+                    )}
+                  </td>
+
+                  <td className="px-3 py-2">
+                    <div className="flex flex-wrap gap-1">
+                      {row.catalysts.slice(0, showGapScore ? 4 : 2).map((c, i) => {
+                        const isEarn = c.startsWith("EARN");
+                        return (
+                          <span key={i} className={cn(
+                            "text-xs px-1 rounded font-mono",
+                            isEarn
+                              ? "bg-warning/20 text-warning font-semibold"
+                              : "text-muted-foreground bg-muted"
+                          )}>{c}</span>
+                        );
+                      })}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}
