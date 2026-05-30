@@ -1,7 +1,7 @@
 import { fetchOHLCV, fetchQuote } from "./marketData.js";
 import {
   calcTrend, calcMomentum, calcVolume, calcVolatility, calcOptions,
-  calcRelativeStrength, calcRegimeIndicators,
+  calcRelativeStrength, calcRegimeIndicators, calcExhaustion,
 } from "./indicators.js";
 import { calcAtlasScore } from "./scoring.js";
 import { calibrationStore } from "./calibrationStore.js";
@@ -164,7 +164,8 @@ export async function runBacktest(ticker: string, horizon: number): Promise<Back
     const rs         = calcRelativeStrength(sym, slice, spySlice, qqqSlice, iwmSlice, null);
     const spyTrend   = calcTrend(spySlice, spySlice[spySlice.length - 1]?.close ?? 500);
     const regime     = calcRegimeIndicators(spySlice, spyTrend);
-    const atlas      = calcAtlasScore(trend, momentum, volume, options, rs, regime.regimeScore, volatility.expectedMovePercent);
+    const exhaustion = calcExhaustion(slice, momentum, volume, trend);
+    const atlas      = calcAtlasScore(trend, momentum, volume, options, rs, regime.regimeScore, volatility.expectedMovePercent, exhaustion);
 
     const entry    = bars[i].close;
     const exit     = bars[i + horizon]?.close ?? entry;

@@ -555,6 +555,7 @@ export default function Dashboard() {
                 <MiniGauge title="Vol Squeeze" score={displayAnalysis.atlasScore.optionsScore} />
                 <MiniGauge title="Rel Str" score={displayAnalysis.atlasScore.relativeStrengthScore} />
                 <MiniGauge title="Regime" score={displayAnalysis.atlasScore.marketRegimeScore} />
+                <MiniGauge title="Exhaustion" score={displayAnalysis.atlasScore.exhaustionScore} />
                 <MiniGauge title="Confidence" score={displayAnalysis.atlasScore.confidenceScore} />
                 <MiniGauge title="Risk" score={displayAnalysis.atlasScore.riskScore} />
               </div>

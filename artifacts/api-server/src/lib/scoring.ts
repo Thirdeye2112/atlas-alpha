@@ -1,4 +1,4 @@
-import type { TrendResult, MomentumResult, VolumeResult, OptionsResult, RelativeStrengthResult } from "./indicators.js";
+import type { TrendResult, MomentumResult, VolumeResult, OptionsResult, RelativeStrengthResult, ExhaustionResult } from "./indicators.js";
 
 export type AtlasLabel = "extreme_bearish" | "bearish" | "neutral" | "bullish" | "extreme_bullish";
 export type Direction = "bullish" | "bearish" | "neutral";
@@ -13,6 +13,7 @@ export interface AtlasAlphaScore {
   optionsScore: number;
   relativeStrengthScore: number;
   marketRegimeScore: number;
+  exhaustionScore: number;
   bullishProbability: number;
   bearishProbability: number;
   confidenceScore: number;
@@ -49,7 +50,8 @@ export function calcAtlasScore(
   options: OptionsResult,
   rs: RelativeStrengthResult,
   marketRegimeScore: number,
-  expectedMovePercent: number
+  expectedMovePercent: number,
+  exhaustion: ExhaustionResult
 ): AtlasAlphaScore {
   // Regime gate: in choppy/fearful markets (low regime), dampen trend+momentum
   // because price-based signals produce more false positives without a clear trend.
@@ -58,28 +60,34 @@ export function calcAtlasScore(
     : marketRegimeScore < 50 ? 0.85
     : 1.0;
 
-  // Weighted composite: Trend 30% + Momentum 20% + Volume 15% + VolSqueeze 10% + RS 15% + Regime 10%
+  // Weighted composite:
+  //   Trend 27% + Momentum 18% + Volume 13% + VolSqueeze 9% + RS 13% + Regime 8% + Exhaustion 12%
+  // Exhaustion is a counter-trend signal: it captures capitulation, reversal bars, and
+  // extended-decline snap-back setups that pure trend-following always misses.
   // Trend and Momentum are gated by regime to avoid false signals in choppy markets.
   const overall = clamp(
-    trend.trendAlignmentScore * 0.30 * regimeGate +
-    momentum.momentumScore    * 0.20 * regimeGate +
-    volume.volumeScore        * 0.15 +
-    options.optionsScore      * 0.10 +
-    rs.rsScore                * 0.15 +
-    marketRegimeScore         * 0.10
+    trend.trendAlignmentScore       * 0.27 * regimeGate +
+    momentum.momentumScore          * 0.18 * regimeGate +
+    volume.volumeScore              * 0.13 +
+    options.optionsScore            * 0.09 +
+    rs.rsScore                      * 0.13 +
+    marketRegimeScore               * 0.08 +
+    exhaustion.exhaustionScore      * 0.12
   );
 
   const label = labelFromScore(overall);
 
-  // ── Category-level confidence (5 independent buckets) ─────────────────────
+  // ── Category-level confidence (6 independent buckets) ─────────────────────
   // Each bucket is an orthogonal data dimension. Asking "does each category
   // agree?" avoids the correlated-indicator inflation of raw signal counts.
+  // Exhaustion counts as a bullish category when it's signalling a reversal.
   const bullCats = [
     trend.trendAlignmentScore > 60,
     momentum.momentumScore > 60,
     volume.volumeScore > 60,
     rs.rsScore > 60,
     marketRegimeScore > 60,
+    exhaustion.exhaustionScore > 70,
   ].filter(Boolean).length;
 
   const bearCats = [
@@ -88,9 +96,10 @@ export function calcAtlasScore(
     volume.volumeScore < 40,
     rs.rsScore < 40,
     marketRegimeScore < 40,
+    exhaustion.exhaustionScore < 30,
   ].filter(Boolean).length;
 
-  const totalIndicators = 5;
+  const totalIndicators = 6;
   const indicatorsAgreeing = overall >= 50 ? bullCats : bearCats;
   const confidenceScore = clamp(Math.max(bullCats, bearCats) / totalIndicators * 100);
 
@@ -107,7 +116,7 @@ export function calcAtlasScore(
   const riskScore = clamp(100 - confidenceScore + (expectedMovePercent > 5 ? 20 : 0));
 
   const signalNarrative = buildNarrative(
-    trend, momentum, volume, options, rs,
+    trend, momentum, volume, options, rs, exhaustion,
     direction, overall, confidenceScore,
     bullCats, bearCats, totalIndicators, regimeGate
   );
@@ -121,6 +130,7 @@ export function calcAtlasScore(
     optionsScore: Math.round(options.optionsScore),
     relativeStrengthScore: Math.round(rs.rsScore),
     marketRegimeScore: Math.round(marketRegimeScore),
+    exhaustionScore: Math.round(exhaustion.exhaustionScore),
     bullishProbability,
     bearishProbability,
     confidenceScore: Math.round(confidenceScore),
@@ -140,6 +150,7 @@ function buildNarrative(
   volume: VolumeResult,
   options: OptionsResult,
   rs: RelativeStrengthResult,
+  exhaustion: ExhaustionResult,
   direction: Direction,
   overall: number,
   confidence: number,
@@ -151,6 +162,26 @@ function buildNarrative(
   const parts: string[] = [];
   const strength = overall >= 75 ? "Strong" : overall >= 60 ? "Moderate" : overall <= 25 ? "Strong bearish" : overall <= 40 ? "Moderate bearish" : "Mixed";
   const agreeing = overall >= 50 ? bullCats : bearCats;
+
+  // ── Exhaustion override: lead with the reversal signal if it's strong ──────
+  if (exhaustion.exhaustionSignal === "capitulation") {
+    parts.push(
+      `⚡ CAPITULATION DETECTED: Extreme volume surge (${volume.relativeVolume.toFixed(1)}x avg) at deeply oversold levels (RSI ${momentum.rsi.toFixed(1)}) signals potential seller exhaustion.` +
+      (exhaustion.gapPct < -10 ? ` Gap-down of ${exhaustion.gapPct.toFixed(1)}% on this volume is characteristic of a terminal flush.` : "") +
+      ` Watch for a reversal confirmation candle (wick ratio > 0.60, close near session high) in the next 1–3 sessions before acting.`
+    );
+  } else if (exhaustion.exhaustionSignal === "reversal_bar") {
+    parts.push(
+      `🔄 REVERSAL BAR: Buyers absorbed selling pressure — close in the top ${Math.round(exhaustion.wickRatio * 100)}% of the day's range on ${volume.relativeVolume.toFixed(1)}x volume.` +
+      (exhaustion.consecutiveDownDays >= 5 ? ` After ${exhaustion.consecutiveDownDays} consecutive down sessions, this bar shifts risk/reward to the upside.` : "") +
+      ` RSI at ${momentum.rsi.toFixed(1)} — oversold momentum provides additional tailwind for a mean-reversion bounce.`
+    );
+  } else if (exhaustion.exhaustionSignal === "extended_decline") {
+    parts.push(
+      `📉 EXTENDED DECLINE: ${exhaustion.consecutiveDownDays} consecutive down sessions with price ${Math.abs(trend.priceVsSma200).toFixed(1)}% below SMA200.` +
+      ` Statistical mean-reversion pressure is elevated — wait for a volume-confirmed reversal bar before entering.`
+    );
+  }
 
   parts.push(`${strength} ${direction} setup detected. ${agreeing}/${totalCats} independent categories in agreement (confidence: ${Math.round(confidence)}%).`);
 

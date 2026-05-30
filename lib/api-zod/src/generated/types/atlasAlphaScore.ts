@@ -18,6 +18,8 @@ export interface AtlasAlphaScore {
   optionsScore: number;
   relativeStrengthScore: number;
   marketRegimeScore: number;
+  /** 0-100 counter-trend score: high values flag capitulation, reversal bars, or extended-decline snap-back setups that trend-following misses */
+  exhaustionScore: number;
   bullishProbability: number;
   bearishProbability: number;
   confidenceScore: number;

@@ -748,6 +748,9 @@ components:
           type: number
         marketRegimeScore:
           type: number
+        exhaustionScore:
+          type: number
+          description: "0-100 counter-trend score: high values flag capitulation, reversal bars, or extended-decline snap-back setups that trend-following misses"
         bullishProbability:
           type: number
         bearishProbability:
@@ -779,6 +782,7 @@ components:
         - optionsScore
         - relativeStrengthScore
         - marketRegimeScore
+        - exhaustionScore
         - bullishProbability
         - bearishProbability
         - confidenceScore

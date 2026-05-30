@@ -99,6 +99,15 @@ export interface RelativeStrengthResult {
   sectorName: string | null;
 }
 
+export interface ExhaustionResult {
+  gapPct: number;               // open vs prior close %
+  wickRatio: number;            // (close - low) / (high - low); 1.0 = closed at high
+  consecutiveDownDays: number;  // unbroken run of down closes
+  capitulationVolume: boolean;  // relVol > 5x at RSI < 25
+  exhaustionScore: number;      // 0-100; high = potential bottom exhaustion
+  exhaustionSignal: "capitulation" | "reversal_bar" | "extended_decline" | "none";
+}
+
 function last<T>(arr: T[]): T {
   return arr[arr.length - 1];
 }
@@ -613,6 +622,120 @@ export function calcRegimeIndicators(bars: OHLCVBar[], spyTrend: TrendResult): R
     realizedVol20: Math.round(realizedVol20 * 10) / 10,
     realizedVolPct: Math.round(realizedVolPct),
     regimeScore: Math.round(regimeScore),
+  };
+}
+
+/**
+ * Exhaustion detector — identifies seller/buyer exhaustion at price extremes.
+ *
+ * The trend/momentum sub-scores are designed to follow established trends. At
+ * capitulation events (e.g. extreme gap-down on 9-10x volume) they correctly
+ * signal "bearish" but miss the reversal setup hidden inside the data. This
+ * function reads the signals that pure trend-following ignores:
+ *   - wick ratio   → where close sits in the day's range (buyers vs sellers)
+ *   - relVol × RSI → volume surge at extreme oversold = seller exhaustion
+ *   - consecutive down days → extended declines are mean-reversion candidates
+ *   - gap events    → large gap-downs on huge vol often mark exhaustion gaps
+ *   - price vs SMA200 → deep extension increases snap-back probability
+ */
+export function calcExhaustion(
+  bars: OHLCVBar[],
+  momentum: MomentumResult,
+  volume: VolumeResult,
+  trend: TrendResult
+): ExhaustionResult {
+  if (bars.length < 5) {
+    return {
+      gapPct: 0, wickRatio: 0.5, consecutiveDownDays: 0,
+      capitulationVolume: false, exhaustionScore: 50, exhaustionSignal: "none",
+    };
+  }
+
+  const lastBar = bars[bars.length - 1];
+  const prevBar = bars[bars.length - 2];
+
+  // Gap: today's open vs yesterday's close
+  const gapPct = prevBar ? ((lastBar.open - prevBar.close) / prevBar.close) * 100 : 0;
+
+  // Wick ratio: (close − low) / (high − low)
+  // 1.0 = closed at the high (buyers totally dominated)
+  // 0.0 = closed at the low  (sellers totally dominated)
+  const dayRange = lastBar.high - lastBar.low;
+  const wickRatio = dayRange > 0.0001 ? (lastBar.close - lastBar.low) / dayRange : 0.5;
+
+  // Consecutive down closes (close < open = red candle)
+  let consecutiveDownDays = 0;
+  for (let i = bars.length - 1; i >= 0 && i >= bars.length - 20; i--) {
+    if (bars[i].close < bars[i].open) consecutiveDownDays++;
+    else break;
+  }
+
+  const capitulationVolume = volume.relativeVolume > 5 && momentum.rsi < 25;
+
+  let score = 50;
+
+  // ── RSI extremes (lower = deeper oversold = stronger exhaustion signal) ──
+  if      (momentum.rsi < 15) score += 20;
+  else if (momentum.rsi < 20) score += 12;
+  else if (momentum.rsi < 25) score +=  6;
+  // Mild negative for overbought (top exhaustion is the mirror case, less used here)
+  if (momentum.rsi > 80) score -= 10;
+
+  // ── Extended decline (consecutive red candles) ──
+  if      (consecutiveDownDays >= 10) score += 15;
+  else if (consecutiveDownDays >=  7) score += 10;
+  else if (consecutiveDownDays >=  5) score +=  6;
+  else if (consecutiveDownDays >=  3) score +=  3;
+
+  // ── Wick quality: where did buyers/sellers finish the day? ──
+  // High wick ratio after a gap-down or extended slide = buyers absorbed selling
+  if      (wickRatio > 0.70) score += 20;   // reversal bar — buyers dominated
+  else if (wickRatio > 0.50) score += 12;
+  else if (wickRatio > 0.30) score +=  5;
+  else if (wickRatio < 0.20) score -= 15;   // sellers still in full control
+
+  // ── Volume surge at extreme oversold = capitulation ──
+  if      (volume.relativeVolume > 7 && momentum.rsi < 25) score += 15;
+  else if (volume.relativeVolume > 5 && momentum.rsi < 30) score += 10;
+  else if (volume.relativeVolume > 3 && momentum.rsi < 35) score +=  5;
+
+  // ── Price stretched far below long-term average (mean-reversion pull) ──
+  if      (trend.priceVsSma200 < -30) score += 12;
+  else if (trend.priceVsSma200 < -20) score +=  8;
+  else if (trend.priceVsSma200 < -10) score +=  4;
+
+  // ── Gap-down exhaustion (large gaps on huge vol often mark the terminal move) ──
+  if      (gapPct < -20) score += 10;
+  else if (gapPct < -10) score +=  6;
+  else if (gapPct <  -5) score +=  3;
+
+  // ── Stochastic at absolute floor ──
+  if      (momentum.stochK < 10 && momentum.stochD < 10) score += 10;
+  else if (momentum.stochK < 20)                          score +=  5;
+
+  // ── Early divergence already detected by momentum engine ──
+  if (momentum.rsiDivergence === "bullish") score += 8;
+
+  score = clamp(score);
+
+  // Classify the primary signal type
+  let exhaustionSignal: ExhaustionResult["exhaustionSignal"] = "none";
+  if (score >= 70) {
+    if (capitulationVolume)
+      exhaustionSignal = "capitulation";
+    else if (wickRatio > 0.60 && volume.relativeVolume > 2)
+      exhaustionSignal = "reversal_bar";
+    else if (consecutiveDownDays >= 7)
+      exhaustionSignal = "extended_decline";
+  }
+
+  return {
+    gapPct:               Math.round(gapPct   * 10) / 10,
+    wickRatio:            Math.round(wickRatio * 100) / 100,
+    consecutiveDownDays,
+    capitulationVolume,
+    exhaustionScore:      score,
+    exhaustionSignal,
   };
 }
 

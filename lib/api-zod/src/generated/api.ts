@@ -87,6 +87,7 @@ export const GetStockAnalysisResponse = zod.object({
   "optionsScore": zod.number(),
   "relativeStrengthScore": zod.number(),
   "marketRegimeScore": zod.number(),
+  "exhaustionScore": zod.number().describe('0-100 counter-trend score: high values flag capitulation, reversal bars, or extended-decline snap-back setups that trend-following misses'),
   "bullishProbability": zod.number(),
   "bearishProbability": zod.number(),
   "confidenceScore": zod.number(),
