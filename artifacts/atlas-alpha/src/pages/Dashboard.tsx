@@ -36,6 +36,14 @@ interface BacktestResult {
   scatter: BacktestPoint[];
 }
 
+function calcGapProbScore(atrPct: number, bbWidth: number, relVol: number): number {
+  const c = (v: number) => Math.max(0, Math.min(100, v));
+  const atrS  = c((atrPct  - 3.2)  / (4.8  - 3.2)  * 100);
+  const bbS   = c((bbWidth - 15)   / (23.7 - 15)   * 100);
+  const rvolS = c((relVol  - 1.2)  / (1.45 - 1.2)  * 100);
+  return Math.round(0.40 * atrS + 0.35 * bbS + 0.25 * rvolS);
+}
+
 function ScatterPlot({ data, width = 240, height = 110 }: { data: BacktestPoint[]; width?: number; height?: number }) {
   if (!data.length) return null;
   const pad = { t: 8, r: 8, b: 24, l: 28 };
@@ -554,6 +562,11 @@ export default function Dashboard() {
                 <MiniGauge title="Volume" score={displayAnalysis.atlasScore.volumeScore} />
                 <MiniGauge title="Vol Squeeze" score={displayAnalysis.atlasScore.optionsScore} />
                 <MiniGauge title="Rel Str" score={displayAnalysis.atlasScore.relativeStrengthScore} />
+                <MiniGauge title="Gap Prob" score={calcGapProbScore(
+                  displayAnalysis.volatility.atrPercent,
+                  displayAnalysis.volatility.bollingerWidth,
+                  displayAnalysis.volume.relativeVolume,
+                )} />
                 <MiniGauge title="Regime" score={displayAnalysis.atlasScore.marketRegimeScore} />
                 <MiniGauge title="Exhaustion" score={displayAnalysis.atlasScore.exhaustionScore} />
                 <MiniGauge title="Confidence" score={displayAnalysis.atlasScore.confidenceScore} />
