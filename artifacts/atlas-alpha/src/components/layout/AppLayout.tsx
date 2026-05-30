@@ -4,7 +4,7 @@ import {
   useGetMarketOverview, 
   getGetMarketOverviewQueryKey 
 } from "@workspace/api-client-react";
-import { Activity, LayoutDashboard, Radar, ListTree } from "lucide-react";
+import { Activity, LayoutDashboard, Radar, ListTree, FlaskConical } from "lucide-react";
 import { formatCurrency, formatPercent } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 
@@ -80,6 +80,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     { href: "/", label: "Dashboard", icon: LayoutDashboard },
     { href: "/scanner", label: "Scanner", icon: Radar },
     { href: "/watchlist", label: "Watchlist", icon: ListTree },
+    { href: "/research", label: "Research", icon: FlaskConical },
   ];
 
   return (

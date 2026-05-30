@@ -6,6 +6,7 @@ import watchlistRouter from "./watchlist";
 import marketRouter from "./market";
 import backtestRouter from "./backtest";
 import cacheRouter from "./cache";
+import researchRouter from "./research";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(watchlistRouter);
 router.use(marketRouter);
 router.use(backtestRouter);
 router.use(cacheRouter);
+router.use(researchRouter);
 
 export default router;

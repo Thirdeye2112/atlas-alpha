@@ -18,6 +18,8 @@ tags:
     description: Watchlist management
   - name: market
     description: Market overview
+  - name: research
+    description: Research and quantitative analysis tools
 
 paths:
   /healthz:
@@ -383,6 +385,32 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MarketOverview"
+
+  /research/gap-analysis:
+    get:
+      operationId: getGapAnalysis
+      tags: [research]
+      summary: Historical gap analysis — factor correlation study
+      description: >
+        Scans the full scanner universe (1-year daily OHLCV), detects all significant gap events
+        above the threshold, extracts 14 technical features at T-1 (day before each gap), and
+        computes effect sizes to rank which factors most strongly precede gap-ups vs gap-downs.
+        Results are cached server-side for 6 hours.
+      parameters:
+        - name: threshold
+          in: query
+          required: false
+          description: Minimum absolute gap % to classify as a gap event (1–20, default 5)
+          schema:
+            type: number
+            default: 5
+      responses:
+        "200":
+          description: Gap analysis result with factor rankings and recent events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GapAnalysisResult"
 
 components:
   schemas:
@@ -1090,3 +1118,151 @@ components:
         - pctAboveSma200
         - breadthUniverse
         - timestamp
+
+    GapPreGapFeatures:
+      type: object
+      required:
+        - rsi
+        - rsiTrend
+        - macdHistPct
+        - bbPosition
+        - bbWidthPct
+        - atrPct
+        - relVol5
+        - relVol1
+        - consecutiveDays
+        - priceVsSma20
+        - priceVsSma50
+        - priceVsSma200
+        - prevWick
+        - prevDayChangePct
+      properties:
+        rsi:              { type: number }
+        rsiTrend:         { type: number }
+        macdHistPct:      { type: number }
+        bbPosition:       { type: number }
+        bbWidthPct:       { type: number }
+        atrPct:           { type: number }
+        relVol5:          { type: number }
+        relVol1:          { type: number }
+        consecutiveDays:  { type: number }
+        priceVsSma20:     { type: number }
+        priceVsSma50:     { type: number }
+        priceVsSma200:    { type: number }
+        prevWick:         { type: number }
+        prevDayChangePct: { type: number }
+
+    GapEventItem:
+      type: object
+      required:
+        - ticker
+        - date
+        - gapPct
+        - direction
+        - priorClose
+        - openPrice
+        - closePrice
+        - volumeX
+        - features
+        - ft1Pct
+      properties:
+        ticker:     { type: string }
+        date:       { type: string }
+        gapPct:     { type: number }
+        direction:
+          type: string
+          enum: [up, down]
+        priorClose: { type: number }
+        openPrice:  { type: number }
+        closePrice: { type: number }
+        volumeX:    { type: number }
+        features:
+          $ref: "#/components/schemas/GapPreGapFeatures"
+        ft1Pct:  { type: number }
+        ft5Pct:  { type: ["number", "null"] }
+
+    GapFactorStat:
+      type: object
+      required:
+        - factor
+        - label
+        - description
+        - unit
+        - baselineMean
+        - baselineStd
+        - gapUpMean
+        - gapDownMean
+        - gapUpEffect
+        - gapDownEffect
+        - gapUpN
+        - gapDownN
+        - baselineN
+      properties:
+        factor:        { type: string }
+        label:         { type: string }
+        description:   { type: string }
+        unit:          { type: string }
+        baselineMean:  { type: number }
+        baselineStd:   { type: number }
+        gapUpMean:     { type: number }
+        gapDownMean:   { type: number }
+        gapUpEffect:   { type: number }
+        gapDownEffect: { type: number }
+        gapUpN:        { type: integer }
+        gapDownN:      { type: integer }
+        baselineN:     { type: integer }
+
+    GapFollowThroughStats:
+      type: object
+      required:
+        - n
+        - sameDayMean
+        - gapFillRate5d
+      properties:
+        n:              { type: integer }
+        sameDayMean:    { type: number }
+        day5Mean:       { type: ["number", "null"] }
+        gapFillRate5d:  { type: number }
+
+    GapAnalysisResult:
+      type: object
+      required:
+        - metadata
+        - factorRanking
+        - followThrough
+        - recentGaps
+      properties:
+        metadata:
+          type: object
+          required:
+            - tickers
+            - totalGaps
+            - gapUpCount
+            - gapDownCount
+            - threshold
+            - period
+            - analyzedAt
+          properties:
+            tickers:      { type: integer }
+            totalGaps:    { type: integer }
+            gapUpCount:   { type: integer }
+            gapDownCount: { type: integer }
+            threshold:    { type: number }
+            period:       { type: string }
+            analyzedAt:   { type: string }
+        factorRanking:
+          type: array
+          items:
+            $ref: "#/components/schemas/GapFactorStat"
+        followThrough:
+          type: object
+          required: [gapUp, gapDown]
+          properties:
+            gapUp:
+              $ref: "#/components/schemas/GapFollowThroughStats"
+            gapDown:
+              $ref: "#/components/schemas/GapFollowThroughStats"
+        recentGaps:
+          type: array
+          items:
+            $ref: "#/components/schemas/GapEventItem"

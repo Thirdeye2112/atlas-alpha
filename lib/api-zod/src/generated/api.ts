@@ -676,3 +676,84 @@ export const GetMarketOverviewResponse = zod.object({
 })
 
 
+/**
+ * Scans the full scanner universe (1-year daily OHLCV), detects all significant gap events above the threshold, extracts 14 technical features at T-1 (day before each gap), and computes effect sizes to rank which factors most strongly precede gap-ups vs gap-downs. Results are cached server-side for 6 hours.
+
+ * @summary Historical gap analysis — factor correlation study
+ */
+export const getGapAnalysisQueryThresholdDefault = 5;
+
+export const GetGapAnalysisQueryParams = zod.object({
+  "threshold": zod.coerce.number().default(getGapAnalysisQueryThresholdDefault).describe('Minimum absolute gap % to classify as a gap event (1–20, default 5)')
+})
+
+export const GetGapAnalysisResponse = zod.object({
+  "metadata": zod.object({
+  "tickers": zod.number(),
+  "totalGaps": zod.number(),
+  "gapUpCount": zod.number(),
+  "gapDownCount": zod.number(),
+  "threshold": zod.number(),
+  "period": zod.string(),
+  "analyzedAt": zod.string()
+}),
+  "factorRanking": zod.array(zod.object({
+  "factor": zod.string(),
+  "label": zod.string(),
+  "description": zod.string(),
+  "unit": zod.string(),
+  "baselineMean": zod.number(),
+  "baselineStd": zod.number(),
+  "gapUpMean": zod.number(),
+  "gapDownMean": zod.number(),
+  "gapUpEffect": zod.number(),
+  "gapDownEffect": zod.number(),
+  "gapUpN": zod.number(),
+  "gapDownN": zod.number(),
+  "baselineN": zod.number()
+})),
+  "followThrough": zod.object({
+  "gapUp": zod.object({
+  "n": zod.number(),
+  "sameDayMean": zod.number(),
+  "day5Mean": zod.number().nullish(),
+  "gapFillRate5d": zod.number()
+}),
+  "gapDown": zod.object({
+  "n": zod.number(),
+  "sameDayMean": zod.number(),
+  "day5Mean": zod.number().nullish(),
+  "gapFillRate5d": zod.number()
+})
+}),
+  "recentGaps": zod.array(zod.object({
+  "ticker": zod.string(),
+  "date": zod.string(),
+  "gapPct": zod.number(),
+  "direction": zod.enum(['up', 'down']),
+  "priorClose": zod.number(),
+  "openPrice": zod.number(),
+  "closePrice": zod.number(),
+  "volumeX": zod.number(),
+  "features": zod.object({
+  "rsi": zod.number(),
+  "rsiTrend": zod.number(),
+  "macdHistPct": zod.number(),
+  "bbPosition": zod.number(),
+  "bbWidthPct": zod.number(),
+  "atrPct": zod.number(),
+  "relVol5": zod.number(),
+  "relVol1": zod.number(),
+  "consecutiveDays": zod.number(),
+  "priceVsSma20": zod.number(),
+  "priceVsSma50": zod.number(),
+  "priceVsSma200": zod.number(),
+  "prevWick": zod.number(),
+  "prevDayChangePct": zod.number()
+}),
+  "ft1Pct": zod.number(),
+  "ft5Pct": zod.number().nullish()
+}))
+})
+
+

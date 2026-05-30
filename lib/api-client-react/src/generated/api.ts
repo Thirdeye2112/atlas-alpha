@@ -21,6 +21,8 @@ import type {
 
 import type {
   ApiError,
+  GapAnalysisResult,
+  GetGapAnalysisParams,
   GetScannerBreakdownsParams,
   GetScannerBreakoutsParams,
   GetScannerGammaSqueezeParams,
@@ -1487,6 +1489,92 @@ export function useGetMarketOverview<TData = Awaited<ReturnType<typeof getMarket
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetMarketOverviewQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetGapAnalysisUrl = (params?: GetGapAnalysisParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/research/gap-analysis?${stringifiedParams}` : `/api/research/gap-analysis`
+}
+
+/**
+ * Scans the full scanner universe (1-year daily OHLCV), detects all significant gap events above the threshold, extracts 14 technical features at T-1 (day before each gap), and computes effect sizes to rank which factors most strongly precede gap-ups vs gap-downs. Results are cached server-side for 6 hours.
+
+ * @summary Historical gap analysis — factor correlation study
+ */
+export const getGapAnalysis = async (params?: GetGapAnalysisParams, options?: RequestInit): Promise<GapAnalysisResult> => {
+
+  return customFetch<GapAnalysisResult>(getGetGapAnalysisUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetGapAnalysisQueryKey = (params?: GetGapAnalysisParams,) => {
+    return [
+    `/api/research/gap-analysis`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetGapAnalysisQueryOptions = <TData = Awaited<ReturnType<typeof getGapAnalysis>>, TError = ErrorType<unknown>>(params?: GetGapAnalysisParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGapAnalysis>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetGapAnalysisQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getGapAnalysis>>> = ({ signal }) => getGapAnalysis(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getGapAnalysis>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetGapAnalysisQueryResult = NonNullable<Awaited<ReturnType<typeof getGapAnalysis>>>
+export type GetGapAnalysisQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Historical gap analysis — factor correlation study
+ */
+
+export function useGetGapAnalysis<TData = Awaited<ReturnType<typeof getGapAnalysis>>, TError = ErrorType<unknown>>(
+ params?: GetGapAnalysisParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGapAnalysis>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetGapAnalysisQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

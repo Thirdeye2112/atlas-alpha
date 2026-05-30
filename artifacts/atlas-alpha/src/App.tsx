@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import Dashboard from "@/pages/Dashboard";
 import Scanner from "@/pages/Scanner";
 import Watchlist from "@/pages/Watchlist";
+import Research from "@/pages/Research";
 import AppLayout from "@/components/layout/AppLayout";
 import NotFound from "@/pages/not-found";
 import { useEffect } from "react";
@@ -33,6 +34,7 @@ function App() {
               <Route path="/" component={Dashboard} />
               <Route path="/scanner" component={Scanner} />
               <Route path="/watchlist" component={Watchlist} />
+              <Route path="/research" component={Research} />
               <Route component={NotFound} />
             </Switch>
           </AppLayout>

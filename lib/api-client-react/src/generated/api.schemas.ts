@@ -455,6 +455,92 @@ export interface MarketOverview {
   timestamp: string;
 }
 
+export interface GapPreGapFeatures {
+  rsi: number;
+  rsiTrend: number;
+  macdHistPct: number;
+  bbPosition: number;
+  bbWidthPct: number;
+  atrPct: number;
+  relVol5: number;
+  relVol1: number;
+  consecutiveDays: number;
+  priceVsSma20: number;
+  priceVsSma50: number;
+  priceVsSma200: number;
+  prevWick: number;
+  prevDayChangePct: number;
+}
+
+export type GapEventItemDirection = typeof GapEventItemDirection[keyof typeof GapEventItemDirection];
+
+
+export const GapEventItemDirection = {
+  up: 'up',
+  down: 'down',
+} as const;
+
+export interface GapEventItem {
+  ticker: string;
+  date: string;
+  gapPct: number;
+  direction: GapEventItemDirection;
+  priorClose: number;
+  openPrice: number;
+  closePrice: number;
+  volumeX: number;
+  features: GapPreGapFeatures;
+  ft1Pct: number;
+  /** @nullable */
+  ft5Pct?: number | null;
+}
+
+export interface GapFactorStat {
+  factor: string;
+  label: string;
+  description: string;
+  unit: string;
+  baselineMean: number;
+  baselineStd: number;
+  gapUpMean: number;
+  gapDownMean: number;
+  gapUpEffect: number;
+  gapDownEffect: number;
+  gapUpN: number;
+  gapDownN: number;
+  baselineN: number;
+}
+
+export interface GapFollowThroughStats {
+  n: number;
+  sameDayMean: number;
+  /** @nullable */
+  day5Mean?: number | null;
+  gapFillRate5d: number;
+}
+
+export type GapAnalysisResultMetadata = {
+  tickers: number;
+  totalGaps: number;
+  gapUpCount: number;
+  gapDownCount: number;
+  threshold: number;
+  period: string;
+  analyzedAt: string;
+};
+
+export type GapAnalysisResultFollowThrough = {
+  gapUp: GapFollowThroughStats;
+  gapDown: GapFollowThroughStats;
+};
+
+export interface GapAnalysisResult {
+  metadata: GapAnalysisResultMetadata;
+  factorRanking: GapFactorStat[];
+  followThrough: GapAnalysisResultFollowThrough;
+  recentGaps: GapEventItem[];
+}
+
 export type GetScannerTopLongsParams = {
 limit?: number;
 };
@@ -493,5 +579,12 @@ limit?: number;
 
 export type GetScannerGapDownParams = {
 limit?: number;
+};
+
+export type GetGapAnalysisParams = {
+/**
+ * Minimum absolute gap % to classify as a gap event (1–20, default 5)
+ */
+threshold?: number;
 };
 
