@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { runWarmup, startScheduler } from "./lib/warmup";
 
 const rawPort = process.env["PORT"];
 
@@ -22,4 +23,15 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+
+  // Pre-warm all 373 tickers in the background — non-blocking.
+  // Subsequent requests are served instantly from cache instead of hitting Yahoo Finance cold.
+  setImmediate(() => {
+    runWarmup("startup").catch(err =>
+      logger.error({ err }, "Startup warmup failed")
+    );
+  });
+
+  // Schedule twice-daily refreshes: market open (09:30 ET) and market close (16:30 ET)
+  startScheduler();
 });
