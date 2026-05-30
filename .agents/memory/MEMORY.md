@@ -1,0 +1,3 @@
+- [Yahoo Finance concurrency](yahoo-concurrency.md) — must cap concurrent Yahoo Finance calls with a semaphore; warmup + scanner together cause 502s without it
+- [Dashboard URL reactivity](dashboard-url-reactivity.md) — use wouter useSearch() + useEffect to sync ticker; window.location.search only reads once at mount
+- [Scanner Playwright timeout](scanner-e2e-timeout.md) — cold scanner scan takes 30-45s; Playwright notebook times out; verify scanner via curl instead

@@ -1,4 +1,5 @@
-import React, { useState, useCallback, useEffect, useRef } from "react";
+import React, { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { useSearch } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { 
   useGetStockAnalysis, 
@@ -379,11 +380,20 @@ function formatDateLabel(date: string): string {
 }
 
 export default function Dashboard() {
-  const searchParams = new URLSearchParams(window.location.search);
-  const initialTicker = searchParams.get("ticker") || "AAPL";
+  const search = useSearch();
+  const urlTicker = useMemo(
+    () => new URLSearchParams(search).get("ticker") || "AAPL",
+    [search]
+  );
 
-  const [ticker, setTicker] = useState(initialTicker);
-  const [searchInput, setSearchInput] = useState(initialTicker);
+  const [ticker, setTicker] = useState(urlTicker);
+  const [searchInput, setSearchInput] = useState(urlTicker);
+
+  // Sync ticker state whenever the URL param changes (e.g. watchlist item click)
+  useEffect(() => {
+    setTicker(urlTicker);
+    setSearchInput(urlTicker);
+  }, [urlTicker]);
   const [timeframe, setTimeframe] = useState<Timeframe>(DEFAULT_TF);
   const [selectedBar, setSelectedBar] = useState<{ date: string; close: number } | null>(null);
 

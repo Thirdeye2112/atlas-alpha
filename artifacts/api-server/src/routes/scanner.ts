@@ -28,7 +28,7 @@ async function runScanner(
 
   const universe = SCANNER_UNIVERSE;
   const analyses: AnalysisResult[] = [];
-  const batchSize = 20;
+  const batchSize = 10; // keep concurrent Yahoo Finance calls within rate-limit budget
 
   for (let i = 0; i < universe.length; i += batchSize) {
     const batch = universe.slice(i, i + batchSize);

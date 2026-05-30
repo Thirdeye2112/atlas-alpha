@@ -4,6 +4,34 @@ import { logger } from "./logger.js";
 
 const yahooFinance = new YahooFinanceClass({ suppressNotices: ["yahooSurvey"] });
 
+// ── Global concurrency limiter ────────────────────────────────────────────────
+// Caps total concurrent Yahoo Finance calls across warmup + scanner + individual
+// requests so we never saturate the external API or the proxy connection pool.
+class Semaphore {
+  private slots: number;
+  private queue: Array<() => void> = [];
+  constructor(slots: number) { this.slots = slots; }
+  acquire(): Promise<void> {
+    if (this.slots > 0) { this.slots--; return Promise.resolve(); }
+    return new Promise(resolve => this.queue.push(resolve));
+  }
+  release(): void {
+    const next = this.queue.shift();
+    if (next) { next(); } else { this.slots++; }
+  }
+}
+const yahooSem = new Semaphore(8); // max 8 concurrent Yahoo Finance calls
+
+/** Rate-limited, retrying wrapper for all Yahoo Finance calls. */
+async function yahooCall<T>(fn: () => Promise<T>): Promise<T> {
+  await yahooSem.acquire();
+  try {
+    return await withRetry(fn);
+  } finally {
+    yahooSem.release();
+  }
+}
+
 async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
@@ -58,8 +86,8 @@ export async function fetchQuote(ticker: string): Promise<YahooQuote> {
 
   // Fire quote + sector lookup in parallel — saves ~500ms vs sequential
   const [qResult, summaryResult] = await Promise.allSettled([
-    withRetry(() => yahooFinance.quote(ticker)),
-    withRetry(() => yahooFinance.quoteSummary(ticker, { modules: ["assetProfile"] })),
+    yahooCall(() => yahooFinance.quote(ticker)),
+    yahooCall(() => yahooFinance.quoteSummary(ticker, { modules: ["assetProfile"] })),
   ]);
 
   if (qResult.status === "rejected") throw qResult.reason;
@@ -152,7 +180,7 @@ export async function fetchOHLCV(ticker: string, period = "3mo", interval = "1d"
   type ValidInterval = typeof validIntervals[number];
   const mappedInterval: ValidInterval = (validIntervals.includes(interval as ValidInterval) ? interval : "1d") as ValidInterval;
 
-  const historical = await withRetry(() => yahooFinance.chart(ticker, {
+  const historical = await yahooCall(() => yahooFinance.chart(ticker, {
     period1: start,
     period2: end,
     interval: mappedInterval,
