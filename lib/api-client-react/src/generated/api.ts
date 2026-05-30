@@ -31,6 +31,7 @@ import type {
   GetScannerGapSetupShortParams,
   GetScannerGapUpParams,
   GetScannerInstitutionalAccumulationParams,
+  GetScannerKeyLevelsParams,
   GetScannerMeanReversionParams,
   GetScannerShortSqueezeParams,
   GetScannerTopLongsParams,
@@ -1196,6 +1197,90 @@ export function useGetScannerGapSetupShort<TData = Awaited<ReturnType<typeof get
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetScannerGapSetupShortQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetScannerKeyLevelsUrl = (params?: GetScannerKeyLevelsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/scanner/key-levels?${stringifiedParams}` : `/api/scanner/key-levels`
+}
+
+/**
+ * @summary Stocks at major support or resistance (SMA50, SMA200, BB bands, swing S/R — within 2%)
+ */
+export const getScannerKeyLevels = async (params?: GetScannerKeyLevelsParams, options?: RequestInit): Promise<ScannerResponse> => {
+
+  return customFetch<ScannerResponse>(getGetScannerKeyLevelsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetScannerKeyLevelsQueryKey = (params?: GetScannerKeyLevelsParams,) => {
+    return [
+    `/api/scanner/key-levels`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetScannerKeyLevelsQueryOptions = <TData = Awaited<ReturnType<typeof getScannerKeyLevels>>, TError = ErrorType<unknown>>(params?: GetScannerKeyLevelsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getScannerKeyLevels>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetScannerKeyLevelsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getScannerKeyLevels>>> = ({ signal }) => getScannerKeyLevels(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getScannerKeyLevels>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetScannerKeyLevelsQueryResult = NonNullable<Awaited<ReturnType<typeof getScannerKeyLevels>>>
+export type GetScannerKeyLevelsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Stocks at major support or resistance (SMA50, SMA200, BB bands, swing S/R — within 2%)
+ */
+
+export function useGetScannerKeyLevels<TData = Awaited<ReturnType<typeof getScannerKeyLevels>>, TError = ErrorType<unknown>>(
+ params?: GetScannerKeyLevelsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getScannerKeyLevels>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetScannerKeyLevelsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

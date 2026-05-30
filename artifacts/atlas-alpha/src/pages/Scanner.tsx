@@ -13,6 +13,7 @@ import {
   useGetScannerGapSetupShort,        getGetScannerGapSetupShortQueryKey,
   useGetScannerGapUp,                getGetScannerGapUpQueryKey,
   useGetScannerGapDown,              getGetScannerGapDownQueryKey,
+  useGetScannerKeyLevels,            getGetScannerKeyLevelsQueryKey,
   type ScannerResponse,
   type ScannerResult,
 } from "@workspace/api-client-react";
@@ -21,7 +22,7 @@ import { cn } from "@/lib/utils";
 import { Link } from "wouter";
 import { ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 
-type SortCol = "ticker" | "name" | "price" | "changePercent" | "gapPercent" | "atlasScore" | "rsi" | "relativeVolume" | "gapSetupScore";
+type SortCol = "ticker" | "name" | "price" | "changePercent" | "gapPercent" | "atlasScore" | "rsi" | "relativeVolume" | "gapSetupScore" | "keyLevelDist";
 type SortDir = "asc" | "desc";
 
 /** Polling interval while scan is in progress */
@@ -84,11 +85,13 @@ function ScannerTable({
   isLoading,
   showGap,
   showGapScore,
+  showKeyLevel,
 }: {
   response?: ScannerResponse;
   isLoading: boolean;
   showGap?: boolean;
   showGapScore?: boolean;
+  showKeyLevel?: boolean;
 }) {
   const [sortCol, setSortCol] = useState<SortCol | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -153,9 +156,10 @@ function ScannerTable({
               {showGap && <SortableTh col="gapPercent" label="GAP%" className="text-right w-20" {...thProps} />}
               <SortableTh col="atlasScore"     label="SCORE"  className="text-right w-20" {...thProps} />
               {showGapScore && <SortableTh col="gapSetupScore" label="GAP PROB" className="text-right w-24" {...thProps} />}
+              {showKeyLevel && <SortableTh col="keyLevelDist" label="DIST%" className="text-right w-20" {...thProps} />}
               <SortableTh col="rsi"            label="RSI"    className="text-right w-16" {...thProps} />
               <SortableTh col="relativeVolume" label="RVOL"   className="text-right w-16" {...thProps} />
-              <th className="px-3 py-2 w-36">CONDITIONS</th>
+              <th className="px-3 py-2 w-36">LEVELS</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -191,6 +195,20 @@ function ScannerTable({
                         "bg-muted text-muted-foreground"
                       )}>
                         {row.gapSetupScore}
+                      </span>
+                    ) : <span className="text-muted-foreground">—</span>}
+                  </td>
+                )}
+                {showKeyLevel && (
+                  <td className="px-3 py-2 text-right font-mono tabular-nums">
+                    {row.keyLevelDist != null ? (
+                      <span className={cn(
+                        "px-1.5 py-0.5 rounded text-xs font-bold",
+                        row.keyLevelDist <= 0.5 ? "bg-warning/20 text-warning" :
+                        row.keyLevelDist <= 1.0 ? "bg-primary/20 text-primary" :
+                        "text-muted-foreground"
+                      )}>
+                        {row.keyLevelDist.toFixed(2)}%
                       </span>
                     ) : <span className="text-muted-foreground">—</span>}
                   </td>
@@ -247,9 +265,10 @@ export default function Scanner() {
   const { data: gapSetupShort,isLoading: gssLoading  } = useGetScannerGapSetupShort({ limit },{ query: qOpts(getGetScannerGapSetupShortQueryKey({ limit })) });
   const { data: gapUp,        isLoading: guLoading   } = useGetScannerGapUp({ limit },       { query: qOpts(getGetScannerGapUpQueryKey({ limit }))       });
   const { data: gapDown,      isLoading: gdLoading   } = useGetScannerGapDown({ limit },     { query: qOpts(getGetScannerGapDownQueryKey({ limit }))     });
+  const { data: keyLevels,    isLoading: klLoading   } = useGetScannerKeyLevels({ limit },   { query: qOpts(getGetScannerKeyLevelsQueryKey({ limit }))   });
 
   // Derive overall scan progress from the active-tab response (all tabs share the same job)
-  const anyResponse = longs ?? shorts ?? breakouts ?? breakdowns ?? gapSetupLong ?? gapSetupShort ?? gapUp ?? gapDown ?? gamma ?? ss ?? inst ?? mean;
+  const anyResponse = longs ?? shorts ?? breakouts ?? breakdowns ?? gapSetupLong ?? gapSetupShort ?? gapUp ?? gapDown ?? gamma ?? ss ?? inst ?? mean ?? keyLevels;
   const scanComplete = anyResponse?.complete ?? false;
 
   return (
@@ -287,6 +306,7 @@ export default function Scanner() {
           <TabsTrigger value="ss"         className="font-mono text-xs data-[state=active]:bg-warning data-[state=active]:text-warning-foreground">SHORT SQUEEZE</TabsTrigger>
           <TabsTrigger value="inst"       className="font-mono text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">INST ACCUM</TabsTrigger>
           <TabsTrigger value="mean"       className="font-mono text-xs data-[state=active]:bg-muted-foreground data-[state=active]:text-background">MEAN REVERSION</TabsTrigger>
+          <TabsTrigger value="key-levels" className="font-mono text-xs data-[state=active]:bg-cyan-700 data-[state=active]:text-white">KEY LEVELS</TabsTrigger>
         </TabsList>
 
         <div className="flex-1 overflow-auto mt-4">
@@ -318,6 +338,15 @@ export default function Scanner() {
           <TabsContent value="ss"         className="m-0 h-full"><ScannerTable response={ss}         isLoading={ssLoading}   /></TabsContent>
           <TabsContent value="inst"       className="m-0 h-full"><ScannerTable response={inst}       isLoading={instLoading} /></TabsContent>
           <TabsContent value="mean"       className="m-0 h-full"><ScannerTable response={mean}       isLoading={meanLoading} /></TabsContent>
+          <TabsContent value="key-levels" className="m-0 h-full flex flex-col gap-3">
+            <div className="border border-cyan-700/30 rounded-md bg-cyan-700/5 px-4 py-2.5 text-xs font-mono text-muted-foreground leading-relaxed shrink-0">
+              <span className="text-cyan-400 font-bold mr-2">KEY S/R LEVELS</span>
+              Stocks within <span className="text-foreground">2%</span> of a major support or resistance level — sorted closest first.
+              Levels checked: <span className="text-foreground">SMA50</span> · <span className="text-foreground">SMA200</span> · <span className="text-foreground">BB+ (upper band)</span> · <span className="text-foreground">BB− (lower band)</span> · <span className="text-foreground">20-day swing high/low</span>.
+              DIST% column shows distance to the nearest level — <span className="text-warning">amber ≤ 0.5%</span>, <span className="text-primary">blue ≤ 1%</span>.
+            </div>
+            <ScannerTable response={keyLevels} isLoading={klLoading} showKeyLevel />
+          </TabsContent>
         </div>
       </Tabs>
     </div>

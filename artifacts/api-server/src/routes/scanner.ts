@@ -309,6 +309,72 @@ router.get("/scanner/gap-setup-short", (req, res): void => {
   }
 });
 
+// ── Key Levels helpers ────────────────────────────────────────────────────────
+const KEY_LEVEL_PROX = 2.0; // % distance threshold
+
+function pctDist(price: number, level: number): number {
+  return Math.abs((price - level) / level) * 100;
+}
+
+interface NearbyLevel { label: string; level: number; dist: number; type: "support" | "resistance" }
+
+function getNearbyLevels(a: AnalysisResult): NearbyLevel[] {
+  const price = a.quote.price as number;
+  const { sma50, sma200 } = a.trend;
+  const { bollingerUpper, bollingerLower } = a.volatility;
+  const { supportLevel, resistanceLevel } = a.patterns;
+
+  const candidates: { label: string; level: number; type: "support" | "resistance" }[] = [
+    { label: "SMA50",  level: sma50,          type: price < sma50  ? "resistance" : "support" },
+    { label: "SMA200", level: sma200,          type: price < sma200 ? "resistance" : "support" },
+    { label: "BB+",    level: bollingerUpper,  type: "resistance" },
+    { label: "BB-",    level: bollingerLower,  type: "support"    },
+  ];
+  if (supportLevel    && supportLevel    > 0) candidates.push({ label: "SUP", level: supportLevel,    type: "support"    });
+  if (resistanceLevel && resistanceLevel > 0) candidates.push({ label: "RES", level: resistanceLevel, type: "resistance" });
+
+  return candidates
+    .filter(c => c.level > 0)
+    .map(c => ({ ...c, dist: pctDist(price, c.level) }))
+    .filter(c => c.dist <= KEY_LEVEL_PROX)
+    .sort((x, y) => x.dist - y.dist);
+}
+
+function toKeyLevelRow(a: AnalysisResult): object {
+  const base = toRow(a) as Record<string, unknown>;
+  const levels = getNearbyLevels(a);
+  const keyLevelDist = levels.length > 0 ? Math.round(levels[0].dist * 100) / 100 : null;
+  const catalysts = levels.map(l => `${l.label} ${l.dist.toFixed(1)}%`);
+  return { ...base, catalysts, keyLevelDist };
+}
+
+router.get("/scanner/key-levels", (req, res): void => {
+  const limit = Math.min(Number(req.query.limit) || 25, 50);
+  try {
+    const job = getOrStartScanJob();
+    const rows = job.analyses
+      .filter(a => getNearbyLevels(a).length > 0)
+      .sort((a, b) => {
+        const aLevels = getNearbyLevels(a);
+        const bLevels = getNearbyLevels(b);
+        const aDist = aLevels.length ? aLevels[0].dist : 99;
+        const bDist = bLevels.length ? bLevels[0].dist : 99;
+        return aDist - bDist;
+      })
+      .slice(0, limit)
+      .map(toKeyLevelRow);
+
+    res.json({
+      results: rows,
+      progress: { done: job.done, total: job.total },
+      complete: job.complete,
+    });
+  } catch (err) {
+    logger.error({ err }, "Scanner key-levels failed");
+    res.json({ results: [], progress: { done: 0, total: 0 }, complete: true });
+  }
+});
+
 router.get("/scanner/gap-up", (req, res): void => {
   const limit = Math.min(Number(req.query.limit) || 25, 50);
   try {

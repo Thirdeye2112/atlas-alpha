@@ -258,7 +258,8 @@ export const GetScannerTopLongsResponse = zod.object({
   "rsi": zod.number(),
   "catalysts": zod.array(zod.string()),
   "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
-  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away')
+  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
+  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -298,7 +299,8 @@ export const GetScannerTopShortsResponse = zod.object({
   "rsi": zod.number(),
   "catalysts": zod.array(zod.string()),
   "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
-  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away')
+  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
+  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -338,7 +340,8 @@ export const GetScannerBreakoutsResponse = zod.object({
   "rsi": zod.number(),
   "catalysts": zod.array(zod.string()),
   "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
-  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away')
+  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
+  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -378,7 +381,8 @@ export const GetScannerBreakdownsResponse = zod.object({
   "rsi": zod.number(),
   "catalysts": zod.array(zod.string()),
   "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
-  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away')
+  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
+  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -418,7 +422,8 @@ export const GetScannerGammaSqueezeResponse = zod.object({
   "rsi": zod.number(),
   "catalysts": zod.array(zod.string()),
   "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
-  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away')
+  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
+  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -458,7 +463,8 @@ export const GetScannerShortSqueezeResponse = zod.object({
   "rsi": zod.number(),
   "catalysts": zod.array(zod.string()),
   "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
-  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away')
+  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
+  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -498,7 +504,8 @@ export const GetScannerInstitutionalAccumulationResponse = zod.object({
   "rsi": zod.number(),
   "catalysts": zod.array(zod.string()),
   "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
-  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away')
+  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
+  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -538,7 +545,8 @@ export const GetScannerMeanReversionResponse = zod.object({
   "rsi": zod.number(),
   "catalysts": zod.array(zod.string()),
   "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
-  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away')
+  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
+  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -578,7 +586,8 @@ export const GetScannerGapSetupLongResponse = zod.object({
   "rsi": zod.number(),
   "catalysts": zod.array(zod.string()),
   "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
-  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away')
+  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
+  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -618,7 +627,49 @@ export const GetScannerGapSetupShortResponse = zod.object({
   "rsi": zod.number(),
   "catalysts": zod.array(zod.string()),
   "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
-  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away')
+  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
+  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)')
+})),
+  "progress": zod.object({
+  "done": zod.number(),
+  "total": zod.number()
+}),
+  "complete": zod.boolean()
+})
+
+
+/**
+ * @summary Stocks at major support or resistance (SMA50, SMA200, BB bands, swing S/R — within 2%)
+ */
+export const getScannerKeyLevelsQueryLimitDefault = 25;
+
+export const GetScannerKeyLevelsQueryParams = zod.object({
+  "limit": zod.coerce.number().default(getScannerKeyLevelsQueryLimitDefault)
+})
+
+export const GetScannerKeyLevelsResponse = zod.object({
+  "results": zod.array(zod.object({
+  "ticker": zod.string(),
+  "name": zod.string(),
+  "price": zod.number(),
+  "change": zod.number(),
+  "changePercent": zod.number(),
+  "gapPercent": zod.number(),
+  "atlasScore": zod.number(),
+  "atlasLabel": zod.string(),
+  "bullishProbability": zod.number(),
+  "bearishProbability": zod.number(),
+  "confidenceScore": zod.number(),
+  "direction": zod.string(),
+  "signalStrength": zod.enum(['strong', 'moderate', 'weak']),
+  "sector": zod.string().nullable(),
+  "volume": zod.number(),
+  "relativeVolume": zod.number(),
+  "rsi": zod.number(),
+  "catalysts": zod.array(zod.string()),
+  "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
+  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
+  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -658,7 +709,8 @@ export const GetScannerGapUpResponse = zod.object({
   "rsi": zod.number(),
   "catalysts": zod.array(zod.string()),
   "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
-  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away')
+  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
+  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -698,7 +750,8 @@ export const GetScannerGapDownResponse = zod.object({
   "rsi": zod.number(),
   "catalysts": zod.array(zod.string()),
   "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
-  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away')
+  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
+  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)')
 })),
   "progress": zod.object({
   "done": zod.number(),

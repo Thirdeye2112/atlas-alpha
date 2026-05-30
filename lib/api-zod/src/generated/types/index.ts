@@ -33,6 +33,7 @@ export * from './getScannerGapSetupLongParams';
 export * from './getScannerGapSetupShortParams';
 export * from './getScannerGapUpParams';
 export * from './getScannerInstitutionalAccumulationParams';
+export * from './getScannerKeyLevelsParams';
 export * from './getScannerMeanReversionParams';
 export * from './getScannerShortSqueezeParams';
 export * from './getScannerTopLongsParams';

@@ -314,6 +314,26 @@ paths:
               schema:
                 $ref: "#/components/schemas/ScannerResponse"
 
+  /scanner/key-levels:
+    get:
+      operationId: getScannerKeyLevels
+      tags: [scanner]
+      summary: Stocks at major support or resistance (SMA50, SMA200, BB bands, swing S/R — within 2%)
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 25
+      responses:
+        "200":
+          description: Stocks near key support or resistance levels
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScannerResponse"
+
   /scanner/gap-up:
     get:
       operationId: getScannerGapUp
@@ -1031,6 +1051,10 @@ components:
           type: integer
           nullable: true
           description: "Days until next earnings; null if not available or >14 days away"
+        keyLevelDist:
+          type: number
+          nullable: true
+          description: "% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S/R)"
       required:
         - ticker
         - name

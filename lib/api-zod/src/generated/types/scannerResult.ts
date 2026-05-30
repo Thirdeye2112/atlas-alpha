@@ -31,4 +31,6 @@ export interface ScannerResult {
   gapSetupScore?: number | null;
   /** Days until next earnings; null if not available or >14 days away */
   earningsDaysAway?: number | null;
+  /** % distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S/R) */
+  keyLevelDist?: number | null;
 }
