@@ -56,7 +56,15 @@ export async function fetchQuote(ticker: string): Promise<YahooQuote> {
   const cached = quoteCache.get<YahooQuote>(ticker);
   if (cached) return cached;
 
-  const q = await withRetry(() => yahooFinance.quote(ticker));
+  // Fire quote + sector lookup in parallel — saves ~500ms vs sequential
+  const [qResult, summaryResult] = await Promise.allSettled([
+    withRetry(() => yahooFinance.quote(ticker)),
+    withRetry(() => yahooFinance.quoteSummary(ticker, { modules: ["assetProfile"] })),
+  ]);
+
+  if (qResult.status === "rejected") throw qResult.reason;
+  const q = qResult.value;
+  const summary = summaryResult.status === "fulfilled" ? summaryResult.value : null;
 
   const result: YahooQuote = {
     ticker: q.symbol ?? ticker,
@@ -76,21 +84,41 @@ export async function fetchQuote(ticker: string): Promise<YahooQuote> {
     beta: q.beta ?? null,
     pe: q.trailingPE ?? null,
     eps: q.epsTrailingTwelveMonths ?? null,
-    sector: null,
-    industry: null,
+    sector: summary?.assetProfile?.sector ?? null,
+    industry: summary?.assetProfile?.industry ?? null,
     timestamp: new Date().toISOString(),
   };
 
-  try {
-    const summary = await yahooFinance.quoteSummary(ticker, { modules: ["assetProfile"] });
-    result.sector = summary.assetProfile?.sector ?? null;
-    result.industry = summary.assetProfile?.industry ?? null;
-  } catch {
-    // sector/industry optional
-  }
-
   quoteCache.set(ticker, result);
   return result;
+}
+
+// Approximate number of trading days for each period (used for cache seeding)
+const PERIOD_TRADING_DAYS: Record<string, number> = {
+  "1d": 1, "5d": 5, "1mo": 21, "3mo": 63,
+  "6mo": 126, "1y": 252, "2y": 504, "5y": 1260,
+};
+
+/**
+ * After fetching OHLCV for a longer period, populate shorter-period cache keys
+ * by slicing the tail of the data. This means `runFullAnalysis` (which fetches 1y)
+ * automatically pre-warms the 3mo/6mo keys that the chart later requests — so
+ * the chart hits cache instead of firing a second Yahoo Finance call.
+ */
+function seedShorterPeriods(ticker: string, period: string, interval: string, bars: OHLCVBar[]): void {
+  if (interval !== "1d") return; // only seed daily data
+  const fetchedDays = PERIOD_TRADING_DAYS[period];
+  if (!fetchedDays) return;
+
+  for (const [seedPeriod, seedDays] of Object.entries(PERIOD_TRADING_DAYS)) {
+    if (seedDays >= fetchedDays) continue; // only seed shorter periods
+    const seedKey = `${ticker}:${seedPeriod}:1d`;
+    if (ohlcvCache.has(seedKey)) continue; // don't overwrite existing cache
+    const slice = bars.slice(-seedDays);
+    if (slice.length > 0) {
+      ohlcvCache.set(seedKey, slice);
+    }
+  }
 }
 
 export async function fetchOHLCV(ticker: string, period = "3mo", interval = "1d"): Promise<OHLCVBar[]> {
@@ -148,13 +176,18 @@ export async function fetchOHLCV(ticker: string, period = "3mo", interval = "1d"
     });
 
   ohlcvCache.set(key, bars);
+
+  // Pre-warm shorter-period cache keys so the chart doesn't need a second fetch
+  seedShorterPeriods(ticker, period, interval, bars);
+
+  logger.debug({ ticker, period, interval, bars: bars.length }, "OHLCV fetched");
   return bars;
 }
 
 export async function fetchMultipleQuotes(tickers: string[]): Promise<Map<string, YahooQuote>> {
   const results = new Map<string, YahooQuote>();
   const toFetch = tickers.filter(t => !quoteCache.get<YahooQuote>(t));
-  const cached = tickers.filter(t => quoteCache.get<YahooQuote>(t));
+  const cached  = tickers.filter(t =>  quoteCache.get<YahooQuote>(t));
 
   for (const t of cached) {
     const c = quoteCache.get<YahooQuote>(t);

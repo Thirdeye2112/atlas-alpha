@@ -387,12 +387,18 @@ export default function Dashboard() {
   const [timeframe, setTimeframe] = useState<Timeframe>(DEFAULT_TF);
   const [selectedBar, setSelectedBar] = useState<{ date: string; close: number } | null>(null);
 
-  // Live analysis
+  // Live analysis — staleTime matches server cache TTL (5 min) to avoid re-fetching fresh data
   const { data: analysis, isLoading: analysisLoading } = useGetStockAnalysis(ticker, {
-    query: { enabled: !!ticker, queryKey: getGetStockAnalysisQueryKey(ticker) }
+    query: {
+      enabled: !!ticker,
+      queryKey: getGetStockAnalysisQueryKey(ticker),
+      staleTime: 5 * 60 * 1000,
+    }
   });
 
   // OHLCV — custom fetch to support period/interval params
+  // staleTime=15min: server seeds shorter-period keys from the analysis 1y fetch,
+  // so the first chart load is instant from cache; subsequent timeframe switches also cache.
   const { data: ohlcv, isLoading: ohlcvLoading } = useQuery<OHLCVBar[]>({
     queryKey: ["ohlcv", ticker, timeframe.period, timeframe.interval],
     queryFn: async ({ signal }) => {
@@ -402,9 +408,11 @@ export default function Dashboard() {
       return res.json();
     },
     enabled: !!ticker,
+    staleTime: 15 * 60 * 1000,
   });
 
   // Historical (point-in-time) analysis — only when a candle is clicked
+  // staleTime=Infinity: point-in-time data never changes
   const { data: historicalAnalysis, isLoading: historicalLoading } = useQuery({
     queryKey: ["historical-analysis", ticker, selectedBar?.date],
     queryFn: async ({ signal }) => {
@@ -414,6 +422,7 @@ export default function Dashboard() {
       return res.json();
     },
     enabled: !!selectedBar,
+    staleTime: Infinity,
   });
 
   const handleSearch = (e: React.FormEvent) => {
