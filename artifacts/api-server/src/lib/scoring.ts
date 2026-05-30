@@ -163,8 +163,15 @@ function buildNarrative(
   const strength = overall >= 75 ? "Strong" : overall >= 60 ? "Moderate" : overall <= 25 ? "Strong bearish" : overall <= 40 ? "Moderate bearish" : "Mixed";
   const agreeing = overall >= 50 ? bullCats : bearCats;
 
-  // ── Exhaustion override: lead with the reversal signal if it's strong ──────
-  if (exhaustion.exhaustionSignal === "capitulation") {
+  // ── Exhaustion override: lead with the reversal/distribution signal if strong ─
+  if (exhaustion.exhaustionSignal === "distribution_top") {
+    parts.push(
+      `⚠️ DISTRIBUTION TOP: Multiple overbought extremes converging — Stochastic ${momentum.stochK.toFixed(0)}/${momentum.stochD.toFixed(0)} (both in overbought zone)` +
+      (trend.priceVsSma20 > 10 ? `, price +${trend.priceVsSma20.toFixed(1)}% above SMA20` : "") +
+      (volume.relativeVolume < 0.85 ? `, volume only ${volume.relativeVolume.toFixed(2)}x avg at price highs (distribution)` : "") +
+      `. Mean-reversion risk is elevated — momentum is stretched, not building.`
+    );
+  } else if (exhaustion.exhaustionSignal === "capitulation") {
     parts.push(
       `⚡ CAPITULATION DETECTED: Extreme volume surge (${volume.relativeVolume.toFixed(1)}x avg) at deeply oversold levels (RSI ${momentum.rsi.toFixed(1)}) signals potential seller exhaustion.` +
       (exhaustion.gapPct < -10 ? ` Gap-down of ${exhaustion.gapPct.toFixed(1)}% on this volume is characteristic of a terminal flush.` : "") +
@@ -262,7 +269,8 @@ export function calcScannerResult(
   trend: TrendResult,
   sector: string | null,
   volTotal: number,
-  gapPercent = 0
+  gapPercent = 0,
+  exhaustion?: ExhaustionResult
 ): object {
   const catalysts: string[] = [];
   if (trend.goldenCross) catalysts.push("Golden Cross");
@@ -273,6 +281,7 @@ export function calcScannerResult(
   if (momentum.rsiSignal === "oversold") catalysts.push("RSI Oversold");
   if (momentum.rsiSignal === "overbought") catalysts.push("RSI Overbought");
   if (momentum.rsiDivergence) catalysts.push(`RSI ${momentum.rsiDivergence} divergence`);
+  if (exhaustion?.exhaustionSignal === "distribution_top") catalysts.push("Distribution Top");
 
   const signalStrength = atlasScore.confidenceScore >= 80 ? "strong"
     : atlasScore.confidenceScore >= 60 ? "moderate"

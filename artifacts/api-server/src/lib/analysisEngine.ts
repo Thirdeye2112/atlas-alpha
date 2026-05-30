@@ -51,7 +51,7 @@ function buildResult(
   const rs             = calcRelativeStrength(sym, bars, spyBars, qqqBars, iwmBars, (quoteOverride.sector as string | null) ?? null);
   const spyTrend       = calcTrend(spyBars, spyBars[spyBars.length - 1]?.close ?? 500);
   const regimeIndicators = calcRegimeIndicators(spyBars, spyTrend);
-  const exhaustion     = calcExhaustion(bars, momentum, volume, trend);
+  const exhaustion     = calcExhaustion(bars, momentum, volume, trend, volatility);
   const atlasScore     = calcAtlasScore(trend, momentum, volume, options, rs, regimeIndicators.regimeScore, volatility.expectedMovePercent, exhaustion);
   const chartSignals   = calcChartSignals(bars);
 

@@ -103,9 +103,10 @@ export interface ExhaustionResult {
   gapPct: number;               // open vs prior close %
   wickRatio: number;            // (close - low) / (high - low); 1.0 = closed at high
   consecutiveDownDays: number;  // unbroken run of down closes
+  distributionTop: boolean;     // overbought exhaustion signals active
   capitulationVolume: boolean;  // relVol > 5x at RSI < 25
   exhaustionScore: number;      // 0-100; high = potential bottom exhaustion
-  exhaustionSignal: "capitulation" | "reversal_bar" | "breakout" | "extended_decline" | "none";
+  exhaustionSignal: "capitulation" | "reversal_bar" | "breakout" | "extended_decline" | "distribution_top" | "none";
 }
 
 function last<T>(arr: T[]): T {
@@ -234,8 +235,31 @@ export function calcMomentum(bars: OHLCVBar[]): MomentumResult {
   let score = 50;
   score += (rsi - 50) * 0.5;
   score += macd > macdSignal ? 8 : -8;
-  score += stochK > stochD ? 5 : -5;
-  score += cci > 0 ? clamp(cci / 10, 0, 10) : -clamp(-cci / 10, 0, 10);
+
+  // Stochastic: extreme readings are EXHAUSTION signals, not trend confirmations.
+  // At K/D > 90 or < 10, mean-reversion risk outweighs the directional signal.
+  // Bearish cross from overbought or bullish cross from oversold are the best entries.
+  if (stochK > 90 && stochD > 90) {
+    score -= 8;  // extreme overbought peak — reversal risk dominates
+  } else if (stochK < 10 && stochD < 10) {
+    score += 8;  // extreme oversold floor — bounce risk dominates
+  } else if (stochK > 80 && stochD > 80 && stochK < stochD) {
+    score -= 5;  // bearish crossover from overbought region
+  } else if (stochK < 20 && stochD < 20 && stochK > stochD) {
+    score += 5;  // bullish crossover from oversold region
+  } else {
+    score += stochK > stochD ? 4 : -4;  // normal range: directional signal
+  }
+
+  // CCI: above 150 / below -150, the extreme reading is an exhaustion counter-signal
+  if (cci > 150) {
+    score += 10 - Math.min((cci - 150) / 10, 10);  // ramps from +10 at 150 down to 0 at 250
+  } else if (cci < -150) {
+    score -= 10 - Math.min((-cci - 150) / 10, 10);
+  } else {
+    score += cci > 0 ? clamp(cci / 10, 0, 10) : -clamp(-cci / 10, 0, 10);
+  }
+
   score += roc > 0 ? Math.min(roc, 10) : Math.max(roc, -10);
   if (macdCrossover === "bullish") score += 5;
   if (macdCrossover === "bearish") score -= 5;
@@ -642,12 +666,13 @@ export function calcExhaustion(
   bars: OHLCVBar[],
   momentum: MomentumResult,
   volume: VolumeResult,
-  trend: TrendResult
+  trend: TrendResult,
+  volatility?: VolatilityResult
 ): ExhaustionResult {
   if (bars.length < 5) {
     return {
       gapPct: 0, wickRatio: 0.5, consecutiveDownDays: 0,
-      capitulationVolume: false, exhaustionScore: 50, exhaustionSignal: "none",
+      capitulationVolume: false, distributionTop: false, exhaustionScore: 50, exhaustionSignal: "none",
     };
   }
 
@@ -674,12 +699,13 @@ export function calcExhaustion(
 
   let score = 50;
 
-  // ── RSI extremes (lower = deeper oversold = stronger exhaustion signal) ──
+  // ── RSI extremes (lower = deeper oversold = stronger exhaustion/bounce signal) ──
   if      (momentum.rsi < 15) score += 20;
   else if (momentum.rsi < 20) score += 12;
   else if (momentum.rsi < 25) score +=  6;
-  // Mild negative for overbought (top exhaustion is the mirror case, less used here)
-  if (momentum.rsi > 80) score -= 10;
+  // Overbought RSI depresses exhaustion score (top exhaustion = mean reversion risk)
+  if      (momentum.rsi > 80) score -= 15;
+  else if (momentum.rsi > 70) score -=  8;
 
   // ── Extended decline (consecutive red candles) ──
   if      (consecutiveDownDays >= 10) score += 15;
@@ -709,18 +735,51 @@ export function calcExhaustion(
   else if (gapPct < -10) score +=  6;
   else if (gapPct <  -5) score +=  3;
 
-  // ── Stochastic at absolute floor ──
+  // ── Stochastic at absolute floor (bullish exhaustion) ──
   if      (momentum.stochK < 10 && momentum.stochD < 10) score += 10;
   else if (momentum.stochK < 20)                          score +=  5;
 
+  // ── Stochastic at absolute ceiling (overbought exhaustion — mirror of above) ──
+  if      (momentum.stochK > 90 && momentum.stochD > 90) score -= 15;
+  else if (momentum.stochK > 80 && momentum.stochD > 80 && momentum.stochK < momentum.stochD) score -= 10; // bearish cross from OB zone
+
+  // ── Price above Bollinger upper band — mean reversion pressure at top ──
+  if (volatility) {
+    const lastClose = bars[bars.length - 1].close;
+    const bbDeviation = volatility.bollingerUpper > 0
+      ? (lastClose - volatility.bollingerUpper) / volatility.bollingerUpper * 100
+      : 0;
+    if      (bbDeviation > 3)  score -= 15;  // well above BB+ — extreme overextension
+    else if (bbDeviation > 1)  score -= 10;  // clearly above BB+
+    else if (bbDeviation > 0)  score -=  5;  // just piercing BB+
+  }
+
+  // ── Price stretched far above SMA20 — mean reversion pull from the top ──
+  if      (trend.priceVsSma20 > 20) score -= 12;  // extreme extension (>20% above SMA20)
+  else if (trend.priceVsSma20 > 15) score -=  8;
+  else if (trend.priceVsSma20 > 10) score -=  4;
+
+  // ── Low volume at elevated prices = distribution (smart money is not chasing) ──
+  if (volume.relativeVolume < 0.8 && trend.priceVsSma20 > 10) score -= 6;
+
+  // ── CCI extremes signal top exhaustion ──
+  if      (momentum.cci > 200) score -= 8;
+  else if (momentum.cci > 150) score -= 4;
+
   // ── Early divergence already detected by momentum engine ──
   if (momentum.rsiDivergence === "bullish") score += 8;
+  if (momentum.rsiDivergence === "bearish") score -= 6;
 
   score = clamp(score);
 
   // Classify the primary signal type
   // Key distinction: gap-UP with high wick = breakout (earnings/catalyst); 
   // gap-DOWN or flat open with high wick after oversold = reversal bar.
+  // Whether overbought distribution signals are active (used in narrative)
+  const distributionTop =
+    momentum.stochK > 80 && momentum.stochD > 80 &&
+    (trend.priceVsSma20 > 10 || (volatility ? bars[bars.length - 1].close > volatility.bollingerUpper : false));
+
   let exhaustionSignal: ExhaustionResult["exhaustionSignal"] = "none";
   if (score >= 70) {
     if (capitulationVolume) {
@@ -735,6 +794,8 @@ export function calcExhaustion(
     } else if (consecutiveDownDays >= 7) {
       exhaustionSignal = "extended_decline";
     }
+  } else if (score <= 30 && distributionTop) {
+    exhaustionSignal = "distribution_top";
   }
 
   return {
@@ -742,6 +803,7 @@ export function calcExhaustion(
     wickRatio:            Math.round(wickRatio * 100) / 100,
     consecutiveDownDays,
     capitulationVolume,
+    distributionTop,
     exhaustionScore:      score,
     exhaustionSignal,
   };
