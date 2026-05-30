@@ -1,5 +1,6 @@
-import { useState, useCallback, useRef, useMemo } from "react";
-import { FlaskConical, ChevronUp, ChevronDown, ChevronsUpDown, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, XCircle, ArrowUpDown } from "lucide-react";
+import { useState, useCallback, useRef, useMemo, useEffect } from "react";
+import { useSearch } from "wouter";
+import { FlaskConical, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, CheckCircle2, XCircle, ArrowUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -408,10 +409,126 @@ function TimelineTable({ data, horizon, rankIC }: {
   );
 }
 
+// ── Score + Return Timeline Chart ────────────────────────────────────────────
+
+function ScoreTimelineChart({ data, horizon, rankIC }: {
+  data: BacktestResult["timeline"];
+  horizon: number;
+  rankIC: number;
+}) {
+  if (data.length < 2) return null;
+
+  // Layout constants
+  const VW = 900;
+  const scoreH = 130; const retH = 70; const gapY = 14;
+  const totalH = scoreH + gapY + retH;
+  const pL = 38; const pR = 10; const pT = 8; const pB = 20;
+  const cW = VW - pL - pR;
+
+  const n = data.length;
+  const xOf = (i: number) => pL + (i / (n - 1)) * cW;
+
+  // Score pane Y mapping (0–100)
+  const sY = (v: number) => pT + (scoreH - pT - pB) * (1 - v / 100);
+
+  // Return pane
+  const retVals = data.map(d => d.fwdReturn);
+  const retMax = Math.max(...retVals.map(Math.abs), 0.5);
+  const retMidY = scoreH + gapY + pT + (retH - pT - pB) / 2;
+  const rY = (v: number) => retMidY - (v / retMax) * ((retH - pT - pB) / 2);
+
+  // Score line path
+  const scorePath = data.map((d, i) => `${i === 0 ? "M" : "L"}${xOf(i).toFixed(1)},${sY(d.score).toFixed(1)}`).join(" ");
+
+  // Date axis labels (6 evenly spaced)
+  const labelCount = 6;
+  const labelIdxs = Array.from({ length: labelCount }, (_, k) => Math.round((k / (labelCount - 1)) * (n - 1)));
+
+  const barW = Math.max(1, cW / n - 0.5);
+
+  return (
+    <svg viewBox={`0 0 ${VW} ${totalH}`} width="100%" preserveAspectRatio="xMidYMid meet" className="overflow-visible">
+      {/* ─ Score pane ─ */}
+      {/* Zone fills */}
+      <rect x={pL} y={sY(100)} width={cW} height={sY(60) - sY(100)} fill="rgba(52,211,153,0.06)" />
+      <rect x={pL} y={sY(40)}  width={cW} height={sY(0)  - sY(40)}  fill="rgba(248,113,113,0.06)" />
+      {/* Zone lines */}
+      {[40, 50, 60].map(v => (
+        <line key={v} x1={pL} x2={pL + cW} y1={sY(v)} y2={sY(v)}
+          stroke={v === 50 ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.08)"}
+          strokeDasharray={v === 50 ? "4,3" : "3,4"} />
+      ))}
+      {/* Y-axis labels */}
+      {[0, 40, 60, 100].map(v => (
+        <text key={v} x={pL - 4} y={sY(v) + 3.5} textAnchor="end" fontSize={8}
+          fill="rgba(255,255,255,0.3)" fontFamily="monospace">{v}</text>
+      ))}
+      {/* Score line */}
+      <path d={scorePath} fill="none"
+        stroke={rankIC >= 0 ? "rgba(96,165,250,0.85)" : "rgba(251,146,60,0.85)"}
+        strokeWidth={1.5} strokeLinejoin="round" />
+      {/* Dots colored by correctness */}
+      {data.filter((_, i) => n <= 100 || i % Math.floor(n / 80) === 0).map((d, idx) => {
+        const i = n <= 100 ? idx : idx * Math.floor(n / 80);
+        return (
+          <circle key={i} cx={xOf(Math.min(i, n - 1))} cy={sY(d.score)} r={2.2}
+            fill={d.correct
+              ? d.direction === "bull" ? "rgba(52,211,153,0.9)"
+                : d.direction === "bear" ? "rgba(248,113,113,0.9)"
+                : "rgba(156,163,175,0.6)"
+              : "rgba(239,68,68,0.35)"
+            }
+          />
+        );
+      })}
+      {/* Pane label */}
+      <text x={pL + 4} y={pT + 10} fontSize={8} fill="rgba(255,255,255,0.35)" fontFamily="monospace">
+        ATLAS SCORE (0–100)
+      </text>
+
+      {/* ─ Return pane ─ */}
+      {/* Zero line */}
+      <line x1={pL} x2={pL + cW} y1={retMidY} y2={retMidY} stroke="rgba(255,255,255,0.18)" />
+      {/* Return bars */}
+      {data.map((d, i) => {
+        const x = xOf(i); const y0 = retMidY; const y1 = rY(d.fwdReturn);
+        const isPos = d.fwdReturn >= 0;
+        return (
+          <rect key={i}
+            x={x - barW / 2} y={Math.min(y0, y1)}
+            width={barW} height={Math.abs(y1 - y0)}
+            fill={isPos ? "rgba(52,211,153,0.55)" : "rgba(248,113,113,0.55)"}
+          />
+        );
+      })}
+      {/* Return pane label */}
+      <text x={pL + 4} y={scoreH + gapY + pT + 10} fontSize={8} fill="rgba(255,255,255,0.35)" fontFamily="monospace">
+        {horizon}D FWD RETURN
+      </text>
+      {/* Y-axis return extremes */}
+      <text x={pL - 4} y={scoreH + gapY + pT + 5} textAnchor="end" fontSize={7}
+        fill="rgba(255,255,255,0.25)" fontFamily="monospace">+{retMax.toFixed(1)}%</text>
+      <text x={pL - 4} y={scoreH + gapY + retH - pB + 8} textAnchor="end" fontSize={7}
+        fill="rgba(255,255,255,0.25)" fontFamily="monospace">-{retMax.toFixed(1)}%</text>
+
+      {/* ─ Shared X-axis date labels ─ */}
+      {labelIdxs.map(i => (
+        <text key={i} x={xOf(i)} y={totalH} textAnchor="middle" fontSize={8}
+          fill="rgba(255,255,255,0.28)" fontFamily="monospace">
+          {data[i]?.date.slice(2, 7)}
+        </text>
+      ))}
+    </svg>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function BacktestLab() {
-  const [tickerInput, setTickerInput] = useState("HOOD");
+  const search = useSearch();
+  const urlTicker = useMemo(() => new URLSearchParams(search).get("ticker") ?? "", [search]);
+
+  const [tickerInput, setTickerInput] = useState(urlTicker || "HOOD");
   const [horizon, setHorizon] = useState<(typeof HORIZONS)[number]>(10);
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [multiData, setMultiData] = useState<MultiHorizon[] | null>(null);
@@ -447,6 +564,14 @@ export default function BacktestLab() {
     const t = tickerInput.trim().toUpperCase();
     if (t) run(t, horizon);
   };
+
+  // Auto-run when navigated from Dashboard with ?ticker= param
+  useEffect(() => {
+    if (urlTicker) {
+      setTickerInput(urlTicker);
+      run(urlTicker, horizon);
+    }
+  }, [urlTicker]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const contrarian = result && result.rankIC < 0;
   const signalValid = result && Math.abs(result.icTStat) >= 1.65;
@@ -567,6 +692,21 @@ export default function BacktestLab() {
               </span>
             </div>
           )}
+
+          {/* ── Score + Return Timeline Chart ── */}
+          <div className="p-4 bg-card/30 border border-border rounded space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-mono font-bold text-muted-foreground tracking-wider">
+                SCORE HISTORY vs {result.horizon}D FORWARD RETURN — 2 years
+              </div>
+              <div className="flex items-center gap-3 text-xs font-mono text-muted-foreground">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" /> bull correct</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400 inline-block" /> bear correct</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400/35 inline-block" /> wrong call</span>
+              </div>
+            </div>
+            <ScoreTimelineChart data={result.timeline} horizon={result.horizon} rankIC={result.rankIC} />
+          </div>
 
           {/* ── Horizon Progression + Score Buckets ── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

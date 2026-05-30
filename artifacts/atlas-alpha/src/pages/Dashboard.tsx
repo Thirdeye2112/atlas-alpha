@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { useSearch } from "wouter";
+import { useSearch, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { 
   useGetStockAnalysis, 
@@ -392,6 +392,7 @@ function formatDateLabel(date: string): string {
 
 export default function Dashboard() {
   const search = useSearch();
+  const [, navigate] = useLocation();
   const urlTicker = useMemo(
     () => new URLSearchParams(search).get("ticker") || "AAPL",
     [search]
@@ -564,6 +565,12 @@ export default function Dashboard() {
                 ))}
               </div>
               <span className="text-xs text-muted-foreground font-mono shrink-0">{ohlcv?.length || 0} BARS</span>
+              <button
+                onClick={() => navigate(`/backtest?ticker=${ticker}`)}
+                className="text-xs font-mono text-primary hover:text-primary/70 transition-colors shrink-0 border border-primary/30 rounded px-2 py-0.5 hover:bg-primary/10"
+              >
+                BACKTEST LAB ↗
+              </button>
             </div>
             <div className="flex-1">
               {ohlcvLoading ? (
