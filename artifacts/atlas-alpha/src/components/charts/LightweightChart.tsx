@@ -113,6 +113,11 @@ export default function LightweightChart({
       timeScale: {
         timeVisible: true,
         secondsVisible: false,
+        rightOffset: 10,
+      },
+      rightPriceScale: {
+        minimumWidth: 60,
+        borderVisible: false,
       },
       crosshair: {
         mode: 1,
@@ -185,7 +190,7 @@ export default function LightweightChart({
         lineWidth: 1,
         lineStyle: LineStyle.Solid,
         priceLineVisible: false,
-        lastValueVisible: true,
+        lastValueVisible: false,
         crosshairMarkerVisible: false,
         title,
       });
@@ -203,7 +208,7 @@ export default function LightweightChart({
           lineWidth: 1,
           lineStyle: LS_MAP[pl.lineStyle] ?? LineStyle.Dashed,
           priceLineVisible: false,
-          lastValueVisible: true,
+          lastValueVisible: false,
           crosshairMarkerVisible: false,
           title: pl.label,
         });
@@ -240,7 +245,7 @@ export default function LightweightChart({
           wickUpColor:    baseColor,
           wickDownColor:  baseColor,
           borderVisible:  true,
-          lastValueVisible: true,
+          lastValueVisible: false,
           priceLineVisible: false,
           title: isPost ? "AH" : "PM",
         });
