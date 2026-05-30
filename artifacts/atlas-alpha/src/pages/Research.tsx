@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import { FlaskConical, TrendingUp, TrendingDown, RefreshCw, AlertCircle, ChevronUp, ChevronDown } from "lucide-react";
+import { FlaskConical, TrendingUp, TrendingDown, RefreshCw, AlertCircle, ChevronUp, ChevronDown, Target } from "lucide-react";
 
 // ─── Types matching the server response ───────────────────────────────────────
 
@@ -59,6 +59,19 @@ interface FollowThroughStats {
   gapFillRate5d: number;
 }
 
+interface SetupBacktest {
+  setupDays: number;
+  gapWithin1d: number;
+  gapWithin2d: number;
+  gapWithin3d: number;
+  hitRate1d: number;
+  hitRate2d: number;
+  hitRate3d: number;
+  avgGapMagnitude: number;
+  randomBaseline1d: number;
+  liftRatio3d: number;
+}
+
 interface GapAnalysisResult {
   metadata: {
     tickers: number;
@@ -75,6 +88,7 @@ interface GapAnalysisResult {
     gapDown: FollowThroughStats;
   };
   recentGaps: GapEventItem[];
+  setupBacktest?: SetupBacktest;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -341,6 +355,87 @@ function RecentGapsTable({ gaps }: { gaps: GapEventItem[] }) {
   );
 }
 
+// ─── Setup Backtest Card ───────────────────────────────────────────────────────
+
+function SetupBacktestCard({ bt }: { bt: SetupBacktest }) {
+  const lift = bt.liftRatio3d;
+  const liftColor = lift >= 2.5 ? "text-success" : lift >= 1.5 ? "text-warning" : "text-muted-foreground";
+
+  function HitBar({ rate, baseline, label }: { rate: number; baseline: number; label: string }) {
+    const pct = rate * 100;
+    const basePct = baseline * 100;
+    return (
+      <div className="space-y-0.5">
+        <div className="flex justify-between text-[10px] text-muted-foreground">
+          <span>{label}</span>
+          <span className="font-mono font-semibold text-foreground">{pct.toFixed(1)}%</span>
+        </div>
+        <div className="relative h-2 bg-border/50 rounded-full overflow-hidden">
+          <div className="absolute top-0 left-0 h-full bg-primary/50 rounded-full" style={{ width: `${Math.min(pct, 100)}%` }} />
+          <div className="absolute top-0 h-full w-0.5 bg-warning/80" style={{ left: `${Math.min(basePct, 100)}%` }} />
+        </div>
+        <div className="text-[9px] text-muted-foreground/60">vs {basePct.toFixed(1)}% base rate</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-border bg-card">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
+        <Target className="w-4 h-4 text-warning" />
+        <span className="text-sm font-semibold font-display">SETUP FILTER BACKTEST</span>
+        <span className="text-xs text-muted-foreground ml-2">ATR≥3.2% + BB≥15% + RVOL≥1.2× filter · 1-year historical</span>
+        <span className="ml-auto text-xs text-muted-foreground">{bt.setupDays} setup days identified</span>
+      </div>
+      <div className="p-4 grid grid-cols-2 gap-6">
+        {/* Left: hit rate bars */}
+        <div className="space-y-4">
+          <HitBar rate={bt.hitRate1d} baseline={bt.randomBaseline1d} label="Gap within 1 trading day" />
+          <HitBar rate={bt.hitRate2d} baseline={bt.randomBaseline1d} label="Gap within 2 trading days" />
+          <HitBar rate={bt.hitRate3d} baseline={bt.randomBaseline1d} label="Gap within 3 trading days" />
+          <div className="flex items-center gap-2 text-[9px] text-muted-foreground/60 pt-1">
+            <div className="w-3 h-1.5 bg-primary/50 rounded-full" />
+            <span>setup filter hit rate</span>
+            <div className="w-0.5 h-3 bg-warning/80 ml-2" />
+            <span>base rate (no filter)</span>
+          </div>
+        </div>
+        {/* Right: summary stats */}
+        <div className="grid grid-cols-2 gap-3 content-start">
+          <div className="rounded border border-border/60 bg-muted/30 p-3 text-center">
+            <div className={cn("text-2xl font-mono font-bold tabular-nums", liftColor)}>
+              {lift.toFixed(1)}×
+            </div>
+            <div className="text-[10px] text-muted-foreground mt-0.5">Lift Ratio (3d)</div>
+            <div className="text-[9px] text-muted-foreground/50 mt-0.5">vs random baseline</div>
+          </div>
+          <div className="rounded border border-border/60 bg-muted/30 p-3 text-center">
+            <div className="text-2xl font-mono font-bold tabular-nums text-primary">
+              {(bt.avgGapMagnitude).toFixed(1)}%
+            </div>
+            <div className="text-[10px] text-muted-foreground mt-0.5">Avg Gap Magnitude</div>
+            <div className="text-[9px] text-muted-foreground/50 mt-0.5">after setup day</div>
+          </div>
+          <div className="rounded border border-border/60 bg-muted/30 p-3 text-center">
+            <div className="text-2xl font-mono font-bold tabular-nums text-foreground">
+              {bt.gapWithin3d}
+            </div>
+            <div className="text-[10px] text-muted-foreground mt-0.5">Gaps within 3d</div>
+            <div className="text-[9px] text-muted-foreground/50 mt-0.5">of {bt.setupDays} setup days</div>
+          </div>
+          <div className="rounded border border-border/60 bg-muted/30 p-3 text-center">
+            <div className="text-2xl font-mono font-bold tabular-nums text-foreground">
+              {(bt.randomBaseline1d * 100).toFixed(1)}%
+            </div>
+            <div className="text-[10px] text-muted-foreground mt-0.5">Base Gap Rate</div>
+            <div className="text-[9px] text-muted-foreground/50 mt-0.5">any day, no filter</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Legend ────────────────────────────────────────────────────────────────────
 
 function EffectLegend() {
@@ -519,6 +614,11 @@ export default function Research() {
                 direction="down"
               />
             </div>
+
+            {/* Setup filter backtest */}
+            {data.setupBacktest && (
+              <SetupBacktestCard bt={data.setupBacktest} />
+            )}
 
             {/* Recent gaps */}
             <RecentGapsTable gaps={data.recentGaps} />

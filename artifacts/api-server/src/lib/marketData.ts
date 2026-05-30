@@ -70,6 +70,7 @@ export interface YahooQuote {
   sector: string | null;
   industry: string | null;
   timestamp: string;
+  earningsTimestamp: number | null;  // Unix seconds; null if not available
 }
 
 export interface OHLCVBar {
@@ -116,6 +117,7 @@ export async function fetchQuote(ticker: string): Promise<YahooQuote> {
     sector: summary?.assetProfile?.sector ?? null,
     industry: summary?.assetProfile?.industry ?? null,
     timestamp: new Date().toISOString(),
+    earningsTimestamp: (q as unknown as { earningsTimestamp?: number }).earningsTimestamp ?? null,
   };
 
   quoteCache.set(ticker, result);

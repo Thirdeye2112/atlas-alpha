@@ -27,4 +27,8 @@ export interface ScannerResult {
   relativeVolume: number;
   rsi: number;
   catalysts: string[];
+  /** 0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines) */
+  gapSetupScore?: number | null;
+  /** Days until next earnings; null if not available or >14 days away */
+  earningsDaysAway?: number | null;
 }

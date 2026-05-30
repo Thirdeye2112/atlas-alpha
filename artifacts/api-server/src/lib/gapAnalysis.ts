@@ -61,6 +61,19 @@ export interface FollowThroughStats {
   gapFillRate5d: number; // % where price returned to prior close within 5 days
 }
 
+export interface SetupBacktest {
+  setupDays: number;        // days where ATR≥3.2%, BB≥15%, RVOL≥1.2x all met
+  gapWithin1d: number;      // of those, how many had a gap the very next day
+  gapWithin2d: number;      // gap within 2 trading days
+  gapWithin3d: number;      // gap within 3 trading days (first occurrence only)
+  hitRate1d: number;        // gapWithin1d / setupDays * 100
+  hitRate2d: number;
+  hitRate3d: number;
+  avgGapMagnitude: number;  // avg |gapPct| of the first gap after a setup day
+  randomBaseline1d: number; // % of ALL days (no filter) that had a gap next day — baseline
+  liftRatio3d: number;      // hitRate3d / randomBaseline1d — how much the filter lifts probability
+}
+
 export interface GapAnalysisResult {
   metadata: {
     tickers: number;
@@ -77,6 +90,7 @@ export interface GapAnalysisResult {
     gapDown: FollowThroughStats;
   };
   recentGaps: GapEvent[];
+  setupBacktest: SetupBacktest;
 }
 
 // ─── Indicator helpers ────────────────────────────────────────────────────────
@@ -143,6 +157,17 @@ function r2(n: number): number { return Math.round(n * 100) / 100; }
 
 // ─── Per-ticker analysis ──────────────────────────────────────────────────────
 
+interface SetupBacktestCounters {
+  setupDays: number;
+  gapWithin1d: number;
+  gapWithin2d: number;
+  gapWithin3d: number;
+  totalMagnitude: number;
+  magnitudeCount: number;
+  totalDays: number;
+  totalGapDays: number;
+}
+
 type Cohorts = Record<keyof PreGapFeatures, { baseline: number[]; gapUp: number[]; gapDown: number[] }>;
 
 const FACTOR_KEYS: Array<keyof PreGapFeatures> = [
@@ -162,7 +187,8 @@ async function analyzeTickerGaps(
   ticker: string,
   threshold: number,
   cohorts: Cohorts,
-  allGaps: GapEvent[]
+  allGaps: GapEvent[],
+  setupBt: SetupBacktestCounters
 ): Promise<void> {
   let bars: OHLCVBar[];
   try {
@@ -270,6 +296,30 @@ async function analyzeTickerGaps(
         cohorts[key][dir === "up" ? "gapUp" : "gapDown"].push(val);
       } else {
         cohorts[key].baseline.push(val);
+      }
+    }
+
+    // ── Setup backtest: conditions at j → did a gap follow within 3 days? ───
+    // Thresholds from research (ATR +1.40σ, BB +1.14σ, RVOL +0.72σ effect sizes)
+    setupBt.totalDays++;
+    if (isGap) setupBt.totalGapDays++;
+    if (atrPct >= 3.2 && bbWidthPct >= 15 && relVol1 >= 1.2) {
+      setupBt.setupDays++;
+      // Check if a gap ≥ threshold occurs in the next 1, 2, or 3 trading days
+      let found = false;
+      for (let ahead = 0; ahead <= 2 && !found; ahead++) {
+        const nextI = i + ahead;
+        if (nextI >= n) break;
+        const prevClose = ahead === 0 ? closes[j] : closes[nextI - 1];
+        const nextGapPct = ((opens[nextI] - prevClose) / prevClose) * 100;
+        if (Math.abs(nextGapPct) >= threshold) {
+          if (ahead === 0) setupBt.gapWithin1d++;
+          if (ahead <= 1) setupBt.gapWithin2d++;
+          setupBt.gapWithin3d++;
+          setupBt.totalMagnitude += Math.abs(nextGapPct);
+          setupBt.magnitudeCount++;
+          found = true;
+        }
       }
     }
 
@@ -388,13 +438,17 @@ export async function runGapAnalysis(threshold = 5): Promise<GapAnalysisResult> 
   const cohorts = makeCohorts();
   const allGaps: GapEvent[] = [];
   const tickers = SCANNER_UNIVERSE;
+  const setupBt: SetupBacktestCounters = {
+    setupDays: 0, gapWithin1d: 0, gapWithin2d: 0, gapWithin3d: 0,
+    totalMagnitude: 0, magnitudeCount: 0, totalDays: 0, totalGapDays: 0,
+  };
 
   // Process in batches of 8 — fetchOHLCV is mostly cache reads at this point
   for (let i = 0; i < tickers.length; i += 8) {
     const batch = tickers.slice(i, i + 8);
     await Promise.all(
       batch.map(t =>
-        analyzeTickerGaps(t, threshold, cohorts, allGaps).catch(err => {
+        analyzeTickerGaps(t, threshold, cohorts, allGaps, setupBt).catch(err => {
           logger.warn({ ticker: t, err: err.message }, "Gap analysis: skipping ticker");
         })
       )
@@ -416,6 +470,25 @@ export async function runGapAnalysis(threshold = 5): Promise<GapAnalysisResult> 
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 60);
 
+  // Build setup backtest result
+  const randomBaseline1d = setupBt.totalDays > 0
+    ? r2(setupBt.totalGapDays / setupBt.totalDays * 100)
+    : 0;
+  const hitRate3d = setupBt.setupDays > 0
+    ? r2(setupBt.gapWithin3d / setupBt.setupDays * 100) : 0;
+  const setupBacktest: SetupBacktest = {
+    setupDays:       setupBt.setupDays,
+    gapWithin1d:     setupBt.gapWithin1d,
+    gapWithin2d:     setupBt.gapWithin2d,
+    gapWithin3d:     setupBt.gapWithin3d,
+    hitRate1d:       setupBt.setupDays > 0 ? r2(setupBt.gapWithin1d / setupBt.setupDays * 100) : 0,
+    hitRate2d:       setupBt.setupDays > 0 ? r2(setupBt.gapWithin2d / setupBt.setupDays * 100) : 0,
+    hitRate3d,
+    avgGapMagnitude: setupBt.magnitudeCount > 0 ? r2(setupBt.totalMagnitude / setupBt.magnitudeCount) : 0,
+    randomBaseline1d,
+    liftRatio3d:     randomBaseline1d > 0 ? r2(hitRate3d / randomBaseline1d) : 0,
+  };
+
   const result: GapAnalysisResult = {
     metadata: {
       tickers: tickers.length,
@@ -432,6 +505,7 @@ export async function runGapAnalysis(threshold = 5): Promise<GapAnalysisResult> 
       gapDown: buildFollowThrough(gapDowns, threshold),
     },
     recentGaps,
+    setupBacktest,
   };
 
   resultCache.set(cacheKey, { result, expiresAt: Date.now() + CACHE_TTL_MS });

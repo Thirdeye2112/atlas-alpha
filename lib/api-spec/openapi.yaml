@@ -1012,6 +1012,14 @@ components:
           type: array
           items:
             type: string
+        gapSetupScore:
+          type: number
+          nullable: true
+          description: "0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)"
+        earningsDaysAway:
+          type: integer
+          nullable: true
+          description: "Days until next earnings; null if not available or >14 days away"
       required:
         - ticker
         - name
@@ -1192,6 +1200,31 @@ components:
         prevWick:         { type: number }
         prevDayChangePct: { type: number }
 
+    SetupBacktest:
+      type: object
+      required:
+        - setupDays
+        - gapWithin1d
+        - gapWithin2d
+        - gapWithin3d
+        - hitRate1d
+        - hitRate2d
+        - hitRate3d
+        - avgGapMagnitude
+        - randomBaseline1d
+        - liftRatio3d
+      properties:
+        setupDays:        { type: integer, description: "Days with ATR≥3.2% + BBWidth≥15% + RVOL≥1.2x" }
+        gapWithin1d:      { type: integer, description: "Setup days that had a gap the very next day" }
+        gapWithin2d:      { type: integer }
+        gapWithin3d:      { type: integer, description: "Setup days that had a gap within 3 trading days" }
+        hitRate1d:        { type: number, description: "% of setup days that gapped within 1 day" }
+        hitRate2d:        { type: number }
+        hitRate3d:        { type: number, description: "% of setup days that gapped within 3 days" }
+        avgGapMagnitude:  { type: number, description: "Avg |gap %| of first gap after a setup day" }
+        randomBaseline1d: { type: number, description: "% of all days that had a gap (no filter) — base rate" }
+        liftRatio3d:      { type: number, description: "hitRate3d / randomBaseline1d — how much the filter helps" }
+
     GapEventItem:
       type: object
       required:
@@ -1306,3 +1339,5 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/GapEventItem"
+        setupBacktest:
+          $ref: "#/components/schemas/SetupBacktest"

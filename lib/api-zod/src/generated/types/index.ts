@@ -54,6 +54,7 @@ export * from './scannerResponse';
 export * from './scannerResponseProgress';
 export * from './scannerResult';
 export * from './scannerResultSignalStrength';
+export * from './setupBacktest';
 export * from './stockAnalysis';
 export * from './stockQuote';
 export * from './trendIndicators';

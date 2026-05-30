@@ -6,6 +6,68 @@ import type { AnalysisResult } from "../lib/analysisEngine.js";
 
 const router: IRouter = Router();
 
+// ── Gap Probability Score ─────────────────────────────────────────────────────
+// Weights mirror research effect sizes: ATR +1.40σ (40%), BB +1.14σ (35%), RVOL +0.72σ (25%)
+// Score = 0 at filter threshold, 100 at the mean value observed on historical gap days
+function clamp01(v: number): number { return Math.max(0, Math.min(100, v)); }
+function calcGapProbScore(atrPct: number, bbWidth: number, relVol: number): number {
+  const atrScore  = clamp01((atrPct - 3.2)  / (4.8  - 3.2)  * 100); // 0 at 3.2%, 100 at 4.8%
+  const bbScore   = clamp01((bbWidth - 15)   / (23.7 - 15)   * 100); // 0 at 15%, 100 at 23.7%
+  const rvolScore = clamp01((relVol - 1.2)   / (1.45 - 1.2)  * 100); // 0 at 1.2x, 100 at 1.45x
+  return Math.round(0.40 * atrScore + 0.35 * bbScore + 0.25 * rvolScore);
+}
+
+// ── Gap setup row builder ─────────────────────────────────────────────────────
+// Replaces the generic catalysts with specific condition strings + injects
+// gapSetupScore and earningsDaysAway into the row object.
+function toGapSetupRow(a: AnalysisResult, direction: "long" | "short"): object {
+  const base = toRow(a) as Record<string, unknown>;
+  const atrPct  = a.volatility.atrPercent;
+  const bbWidth = a.volatility.bollingerWidth;
+  const relVol  = a.volume.relativeVolume;
+  const vs200   = a.trend.priceVsSma200;
+  const gapSetupScore = calcGapProbScore(atrPct, bbWidth, relVol);
+
+  const conditions: string[] = [];
+
+  // Earnings first (highest priority catalyst)
+  const earningsTs = (a.quote as Record<string, unknown>).earningsTimestamp as number | null | undefined;
+  let earningsDaysAway: number | null = null;
+  if (earningsTs && earningsTs > 0) {
+    const daysAway = Math.round((earningsTs * 1000 - Date.now()) / 86400000);
+    if (daysAway >= 0 && daysAway <= 14) {
+      earningsDaysAway = daysAway;
+      conditions.push(`EARN ${daysAway}d`);
+    }
+  }
+
+  conditions.push(`ATR ${atrPct.toFixed(1)}%`, `BB ${bbWidth.toFixed(0)}%`, `VOL ${relVol.toFixed(1)}x`);
+  if (direction === "short" && vs200 > 5) conditions.push(`+${vs200.toFixed(0)}% SMA200`);
+
+  return { ...base, catalysts: conditions, gapSetupScore, earningsDaysAway };
+}
+
+// ── Scan response with custom row builder ─────────────────────────────────────
+function gapSetupScanResponse(
+  filter: Filter,
+  sort: Sorter,
+  limit: number,
+  direction: "long" | "short"
+) {
+  const job = getOrStartScanJob();
+  const rows = job.analyses
+    .filter(filter)
+    .sort(sort)
+    .slice(0, limit)
+    .map(a => toGapSetupRow(a, direction));
+
+  return {
+    results: rows,
+    progress: { done: job.done, total: job.total },
+    complete: job.complete,
+  };
+}
+
 function getGapPercent(a: AnalysisResult): number {
   const open = a.quote.open as number;
   const prevClose = a.quote.previousClose as number;
@@ -182,7 +244,7 @@ router.get("/scanner/mean-reversion", (req, res): void => {
 router.get("/scanner/gap-setup-long", (req, res): void => {
   const limit = Math.min(Number(req.query.limit) || 25, 50);
   try {
-    res.json(scanResponse(
+    res.json(gapSetupScanResponse(
       a => {
         const atrPct  = a.volatility.atrPercent;          // % of price, baseline 2.7%, gaps 4.8%
         const bbWidth = a.volatility.bollingerWidth;       // (upper-lower)/mid, baseline 12.6%, gaps 23.7%
@@ -204,7 +266,8 @@ router.get("/scanner/gap-setup-long", (req, res): void => {
       // Sort: composite of ATR% × relative volume — most "primed" stocks first
       (a, b) => (b.volatility.atrPercent * b.volume.relativeVolume) -
                 (a.volatility.atrPercent * a.volume.relativeVolume),
-      limit
+      limit,
+      "long"
     ));
   } catch (err) {
     logger.error({ err }, "Scanner gap-setup-long failed");
@@ -215,7 +278,7 @@ router.get("/scanner/gap-setup-long", (req, res): void => {
 router.get("/scanner/gap-setup-short", (req, res): void => {
   const limit = Math.min(Number(req.query.limit) || 25, 50);
   try {
-    res.json(scanResponse(
+    res.json(gapSetupScanResponse(
       a => {
         const atrPct  = a.volatility.atrPercent;
         const bbWidth = a.volatility.bollingerWidth;
@@ -237,7 +300,8 @@ router.get("/scanner/gap-setup-short", (req, res): void => {
       // Sort: most extended above SMA200 with highest ATR (most vulnerable to down-gap)
       (a, b) => (b.trend.priceVsSma200 * b.volatility.atrPercent) -
                 (a.trend.priceVsSma200 * a.volatility.atrPercent),
-      limit
+      limit,
+      "short"
     ));
   } catch (err) {
     logger.error({ err }, "Scanner gap-setup-short failed");

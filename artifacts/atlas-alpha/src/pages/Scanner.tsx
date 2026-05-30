@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 import { Link } from "wouter";
 import { ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 
-type SortCol = "ticker" | "name" | "price" | "changePercent" | "gapPercent" | "atlasScore" | "rsi" | "relativeVolume";
+type SortCol = "ticker" | "name" | "price" | "changePercent" | "gapPercent" | "atlasScore" | "rsi" | "relativeVolume" | "gapSetupScore";
 type SortDir = "asc" | "desc";
 
 /** Polling interval while scan is in progress */
@@ -83,10 +83,12 @@ function ScannerTable({
   response,
   isLoading,
   showGap,
+  showGapScore,
 }: {
   response?: ScannerResponse;
   isLoading: boolean;
   showGap?: boolean;
+  showGapScore?: boolean;
 }) {
   const [sortCol, setSortCol] = useState<SortCol | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -150,9 +152,10 @@ function ScannerTable({
               <SortableTh col="changePercent"  label="CHG%"   className="text-right w-20" {...thProps} />
               {showGap && <SortableTh col="gapPercent" label="GAP%" className="text-right w-20" {...thProps} />}
               <SortableTh col="atlasScore"     label="SCORE"  className="text-right w-20" {...thProps} />
+              {showGapScore && <SortableTh col="gapSetupScore" label="GAP PROB" className="text-right w-24" {...thProps} />}
               <SortableTh col="rsi"            label="RSI"    className="text-right w-16" {...thProps} />
               <SortableTh col="relativeVolume" label="RVOL"   className="text-right w-16" {...thProps} />
-              <th className="px-3 py-2 w-32">CATALYSTS</th>
+              <th className="px-3 py-2 w-36">CONDITIONS</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -178,6 +181,20 @@ function ScannerTable({
                     {row.atlasScore}
                   </span>
                 </td>
+                {showGapScore && (
+                  <td className="px-3 py-2 text-right">
+                    {row.gapSetupScore != null ? (
+                      <span className={cn(
+                        "px-1.5 py-0.5 rounded text-xs font-bold font-mono tabular-nums",
+                        row.gapSetupScore >= 70 ? "bg-warning/20 text-warning" :
+                        row.gapSetupScore >= 40 ? "bg-primary/20 text-primary" :
+                        "bg-muted text-muted-foreground"
+                      )}>
+                        {row.gapSetupScore}
+                      </span>
+                    ) : <span className="text-muted-foreground">—</span>}
+                  </td>
+                )}
                 <td className={cn("px-3 py-2 text-right",
                   row.rsi > 70 ? "text-destructive" : row.rsi < 30 ? "text-success" : "text-foreground")}>
                   {row.rsi.toFixed(1)}
@@ -187,9 +204,17 @@ function ScannerTable({
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap gap-1">
-                    {row.catalysts.slice(0, 2).map((c, i) => (
-                      <span key={i} className="text-xs text-muted-foreground bg-muted px-1 rounded">{c}</span>
-                    ))}
+                    {row.catalysts.slice(0, showGapScore ? 4 : 2).map((c, i) => {
+                      const isEarn = c.startsWith("EARN");
+                      return (
+                        <span key={i} className={cn(
+                          "text-xs px-1 rounded font-mono",
+                          isEarn
+                            ? "bg-warning/20 text-warning font-semibold"
+                            : "text-muted-foreground bg-muted"
+                        )}>{c}</span>
+                      );
+                    })}
                   </div>
                 </td>
               </tr>
@@ -276,7 +301,7 @@ export default function Scanner() {
               Filter: <span className="text-foreground">ATR ≥ 3.2%</span> · <span className="text-foreground">BB Width ≥ 15%</span> · <span className="text-foreground">RVOL ≥ 1.2×</span> · RSI &lt; 70 · not already gapping · direction not bearish.
               Sorted by <span className="text-foreground">ATR% × RVOL</span> (most volatility-primed first). Check RVOL column — elevated volume is the second-strongest predictor.
             </div>
-            <ScannerTable response={gapSetupLong} isLoading={gslLoading} />
+            <ScannerTable response={gapSetupLong} isLoading={gslLoading} showGapScore />
           </TabsContent>
           <TabsContent value="gap-setup-short" className="m-0 h-full flex flex-col gap-3">
             <div className="border border-warning/30 rounded-md bg-warning/5 px-4 py-2.5 text-xs font-mono text-muted-foreground leading-relaxed shrink-0">
@@ -285,7 +310,7 @@ export default function Scanner() {
               Filter: <span className="text-foreground">ATR ≥ 3.2%</span> · <span className="text-foreground">BB Width ≥ 15%</span> · <span className="text-foreground">RVOL ≥ 1.2×</span> · <span className="text-foreground">SMA200 extended &gt; 5%</span> · not already gapping · direction not bullish.
               Extended-above-SMA200 is the <span className="text-foreground">strongest directional predictor</span> (+0.64σ) for gap-downs. Sorted by SMA200 extension × ATR.
             </div>
-            <ScannerTable response={gapSetupShort} isLoading={gssLoading} />
+            <ScannerTable response={gapSetupShort} isLoading={gssLoading} showGapScore />
           </TabsContent>
           <TabsContent value="gap-up"     className="m-0 h-full"><ScannerTable response={gapUp}      isLoading={guLoading}   showGap /></TabsContent>
           <TabsContent value="gap-down"   className="m-0 h-full"><ScannerTable response={gapDown}    isLoading={gdLoading}   showGap /></TabsContent>

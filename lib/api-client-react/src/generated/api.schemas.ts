@@ -368,6 +368,10 @@ export interface ScannerResult {
   relativeVolume: number;
   rsi: number;
   catalysts: string[];
+  /** 0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines) */
+  gapSetupScore?: number | null;
+  /** Days until next earnings; null if not available or >14 days away */
+  earningsDaysAway?: number | null;
 }
 
 export interface ScannerResponse {
@@ -472,6 +476,27 @@ export interface GapPreGapFeatures {
   prevDayChangePct: number;
 }
 
+export interface SetupBacktest {
+  /** Days with ATR≥3.2% + BBWidth≥15% + RVOL≥1.2x */
+  setupDays: number;
+  /** Setup days that had a gap the very next day */
+  gapWithin1d: number;
+  gapWithin2d: number;
+  /** Setup days that had a gap within 3 trading days */
+  gapWithin3d: number;
+  /** % of setup days that gapped within 1 day */
+  hitRate1d: number;
+  hitRate2d: number;
+  /** % of setup days that gapped within 3 days */
+  hitRate3d: number;
+  /** Avg |gap %| of first gap after a setup day */
+  avgGapMagnitude: number;
+  /** % of all days that had a gap (no filter) — base rate */
+  randomBaseline1d: number;
+  /** hitRate3d / randomBaseline1d — how much the filter helps */
+  liftRatio3d: number;
+}
+
 export type GapEventItemDirection = typeof GapEventItemDirection[keyof typeof GapEventItemDirection];
 
 
@@ -539,6 +564,7 @@ export interface GapAnalysisResult {
   factorRanking: GapFactorStat[];
   followThrough: GapAnalysisResultFollowThrough;
   recentGaps: GapEventItem[];
+  setupBacktest?: SetupBacktest;
 }
 
 export type GetScannerTopLongsParams = {

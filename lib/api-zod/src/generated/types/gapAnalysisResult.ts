@@ -9,10 +9,12 @@ import type { GapAnalysisResultFollowThrough } from './gapAnalysisResultFollowTh
 import type { GapAnalysisResultMetadata } from './gapAnalysisResultMetadata';
 import type { GapEventItem } from './gapEventItem';
 import type { GapFactorStat } from './gapFactorStat';
+import type { SetupBacktest } from './setupBacktest';
 
 export interface GapAnalysisResult {
   metadata: GapAnalysisResultMetadata;
   factorRanking: GapFactorStat[];
   followThrough: GapAnalysisResultFollowThrough;
   recentGaps: GapEventItem[];
+  setupBacktest?: SetupBacktest;
 }

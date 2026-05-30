@@ -246,7 +246,9 @@ export const GetScannerTopLongsResponse = zod.object({
   "volume": zod.number(),
   "relativeVolume": zod.number(),
   "rsi": zod.number(),
-  "catalysts": zod.array(zod.string())
+  "catalysts": zod.array(zod.string()),
+  "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
+  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -284,7 +286,9 @@ export const GetScannerTopShortsResponse = zod.object({
   "volume": zod.number(),
   "relativeVolume": zod.number(),
   "rsi": zod.number(),
-  "catalysts": zod.array(zod.string())
+  "catalysts": zod.array(zod.string()),
+  "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
+  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -322,7 +326,9 @@ export const GetScannerBreakoutsResponse = zod.object({
   "volume": zod.number(),
   "relativeVolume": zod.number(),
   "rsi": zod.number(),
-  "catalysts": zod.array(zod.string())
+  "catalysts": zod.array(zod.string()),
+  "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
+  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -360,7 +366,9 @@ export const GetScannerBreakdownsResponse = zod.object({
   "volume": zod.number(),
   "relativeVolume": zod.number(),
   "rsi": zod.number(),
-  "catalysts": zod.array(zod.string())
+  "catalysts": zod.array(zod.string()),
+  "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
+  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -398,7 +406,9 @@ export const GetScannerGammaSqueezeResponse = zod.object({
   "volume": zod.number(),
   "relativeVolume": zod.number(),
   "rsi": zod.number(),
-  "catalysts": zod.array(zod.string())
+  "catalysts": zod.array(zod.string()),
+  "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
+  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -436,7 +446,9 @@ export const GetScannerShortSqueezeResponse = zod.object({
   "volume": zod.number(),
   "relativeVolume": zod.number(),
   "rsi": zod.number(),
-  "catalysts": zod.array(zod.string())
+  "catalysts": zod.array(zod.string()),
+  "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
+  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -474,7 +486,9 @@ export const GetScannerInstitutionalAccumulationResponse = zod.object({
   "volume": zod.number(),
   "relativeVolume": zod.number(),
   "rsi": zod.number(),
-  "catalysts": zod.array(zod.string())
+  "catalysts": zod.array(zod.string()),
+  "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
+  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -512,7 +526,9 @@ export const GetScannerMeanReversionResponse = zod.object({
   "volume": zod.number(),
   "relativeVolume": zod.number(),
   "rsi": zod.number(),
-  "catalysts": zod.array(zod.string())
+  "catalysts": zod.array(zod.string()),
+  "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
+  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -550,7 +566,9 @@ export const GetScannerGapSetupLongResponse = zod.object({
   "volume": zod.number(),
   "relativeVolume": zod.number(),
   "rsi": zod.number(),
-  "catalysts": zod.array(zod.string())
+  "catalysts": zod.array(zod.string()),
+  "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
+  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -588,7 +606,9 @@ export const GetScannerGapSetupShortResponse = zod.object({
   "volume": zod.number(),
   "relativeVolume": zod.number(),
   "rsi": zod.number(),
-  "catalysts": zod.array(zod.string())
+  "catalysts": zod.array(zod.string()),
+  "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
+  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -626,7 +646,9 @@ export const GetScannerGapUpResponse = zod.object({
   "volume": zod.number(),
   "relativeVolume": zod.number(),
   "rsi": zod.number(),
-  "catalysts": zod.array(zod.string())
+  "catalysts": zod.array(zod.string()),
+  "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
+  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -664,7 +686,9 @@ export const GetScannerGapDownResponse = zod.object({
   "volume": zod.number(),
   "relativeVolume": zod.number(),
   "rsi": zod.number(),
-  "catalysts": zod.array(zod.string())
+  "catalysts": zod.array(zod.string()),
+  "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
+  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -829,7 +853,19 @@ export const GetGapAnalysisResponse = zod.object({
 }),
   "ft1Pct": zod.number(),
   "ft5Pct": zod.number().nullish()
-}))
+})),
+  "setupBacktest": zod.object({
+  "setupDays": zod.number().describe('Days with ATR≥3.2% + BBWidth≥15% + RVOL≥1.2x'),
+  "gapWithin1d": zod.number().describe('Setup days that had a gap the very next day'),
+  "gapWithin2d": zod.number(),
+  "gapWithin3d": zod.number().describe('Setup days that had a gap within 3 trading days'),
+  "hitRate1d": zod.number().describe('% of setup days that gapped within 1 day'),
+  "hitRate2d": zod.number(),
+  "hitRate3d": zod.number().describe('% of setup days that gapped within 3 days'),
+  "avgGapMagnitude": zod.number().describe('Avg |gap %| of first gap after a setup day'),
+  "randomBaseline1d": zod.number().describe('% of all days that had a gap (no filter) — base rate'),
+  "liftRatio3d": zod.number().describe('hitRate3d \/ randomBaseline1d — how much the filter helps')
+}).optional()
 })
 
 
