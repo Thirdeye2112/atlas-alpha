@@ -411,14 +411,28 @@ function TimelineTable({ data, horizon, rankIC }: {
 
 // ── Score + Return Timeline Chart ────────────────────────────────────────────
 
-/** Map a forward return to a dot color — answers "was the outcome good or bad?" */
-function dotFill(ret: number): string {
-  if (ret >=  8) return "rgba(52,211,153,1.00)";
-  if (ret >=  3) return "rgba(52,211,153,0.70)";
-  if (ret >=  0) return "rgba(52,211,153,0.35)";
-  if (ret >= -3) return "rgba(248,113,113,0.35)";
-  if (ret >= -8) return "rgba(248,113,113,0.70)";
-  return                 "rgba(248,113,113,1.00)";
+/**
+ * Dot color: calibrated to the ticker's own return distribution.
+ * smallThresh = p40 of |returns|, largeThresh = p80 of |returns|.
+ * This spreads the color scale across the ticker's actual volatility range
+ * instead of using fixed ±3%/±8% cutoffs.
+ */
+function dotFill(ret: number, small: number, large: number): string {
+  const abs = Math.abs(ret);
+  if (ret >= 0) {
+    if (abs >= large) return "rgba(52,211,153,0.96)";
+    if (abs >= small) return "rgba(52,211,153,0.62)";
+    return                   "rgba(52,211,153,0.28)";
+  } else {
+    if (abs >= large) return "rgba(248,113,113,0.96)";
+    if (abs >= small) return "rgba(248,113,113,0.62)";
+    return                   "rgba(248,113,113,0.28)";
+  }
+}
+
+/** Dot radius scales linearly with magnitude: 2px (tiny return) → 5px (full cap). */
+function dotRadius(ret: number, cap: number): number {
+  return 2.0 + (Math.min(Math.abs(ret), cap) / cap) * 3.0;
 }
 
 function ScoreTimelineChart({ data, horizon, rankIC }: {
@@ -453,6 +467,11 @@ function ScoreTimelineChart({ data, horizon, rankIC }: {
   const absRets = [...data.map(d => Math.abs(d.fwdReturn))].sort((a, b) => a - b);
   const p95 = absRets[Math.floor(absRets.length * 0.95)] ?? 1;
   const retCap = Math.max(p95, 1);          // y-axis cap
+
+  // ── Dot color thresholds — calibrated to THIS ticker's return distribution
+  // p40 = "moderate" move for this stock, p80 = "large" move
+  const smallThresh = Math.max(absRets[Math.floor(absRets.length * 0.40)] ?? 1, 0.5);
+  const largeThresh = Math.max(absRets[Math.floor(absRets.length * 0.80)] ?? 2, smallThresh + 0.5);
   const rInner = retH - pT - pB;
   const rBaseY = scoreH + gapY + pT + rInner / 2;
   const rY = (v: number) => rBaseY - (Math.max(-retCap, Math.min(retCap, v)) / retCap) * (rInner / 2);
@@ -506,11 +525,14 @@ function ScoreTimelineChart({ data, horizon, rankIC }: {
         stroke={rankIC >= 0 ? "rgba(96,165,250,0.90)" : "rgba(251,146,60,0.90)"}
         strokeWidth={1.8} strokeLinejoin="round" clipPath="url(#score-clip)" />
 
-      {/* Dots — ALL points, colored by actual forward return */}
+      {/* Dots — ALL points, sized by magnitude, colored by this ticker's return distribution */}
       {data.map((d, i) => (
-        <circle key={i} cx={xOf(i)} cy={sY(d.score)} r={2.8}
-          fill={dotFill(d.fwdReturn)}
-          opacity={0.88}
+        <circle key={i}
+          cx={xOf(i)} cy={sY(d.score)}
+          r={dotRadius(d.fwdReturn, retCap)}
+          fill={dotFill(d.fwdReturn, smallThresh, largeThresh)}
+          stroke="rgba(0,0,0,0.30)"
+          strokeWidth={0.6}
         />
       ))}
 
@@ -763,13 +785,20 @@ export default function BacktestLab() {
                 SCORE HISTORY vs {result.horizon}D FORWARD RETURN — 2 years
               </div>
               <div className="flex items-center gap-3 text-xs font-mono text-muted-foreground">
-                <span className="text-muted-foreground/60 mr-1">dots = actual {result?.horizon}D return →</span>
-                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{background:"rgba(52,211,153,1)"}} /> +8%+</span>
-                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{background:"rgba(52,211,153,0.70)"}} /> +3–8%</span>
-                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{background:"rgba(52,211,153,0.35)"}} /> 0–3%</span>
-                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{background:"rgba(248,113,113,0.35)"}} /> 0–−3%</span>
-                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{background:"rgba(248,113,113,0.70)"}} /> −3–−8%</span>
-                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{background:"rgba(248,113,113,1)"}} /> −8%+</span>
+                <span className="text-muted-foreground/50 mr-1">dot size = magnitude · color = outcome</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="rounded-full inline-block border border-black/30" style={{width:10,height:10,background:"rgba(52,211,153,0.96)"}} />
+                  <span className="rounded-full inline-block border border-black/30" style={{width:7,height:7,background:"rgba(52,211,153,0.62)"}} />
+                  <span className="rounded-full inline-block border border-black/30" style={{width:4,height:4,background:"rgba(52,211,153,0.28)"}} />
+                  gain
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="rounded-full inline-block border border-black/30" style={{width:4,height:4,background:"rgba(248,113,113,0.28)"}} />
+                  <span className="rounded-full inline-block border border-black/30" style={{width:7,height:7,background:"rgba(248,113,113,0.62)"}} />
+                  <span className="rounded-full inline-block border border-black/30" style={{width:10,height:10,background:"rgba(248,113,113,0.96)"}} />
+                  loss
+                </span>
+                <span className="text-muted-foreground/40">thresholds auto-calibrated to ticker volatility</span>
               </div>
             </div>
             <ScoreTimelineChart data={result.timeline} horizon={result.horizon} rankIC={result.rankIC} />
