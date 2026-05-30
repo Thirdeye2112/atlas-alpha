@@ -731,6 +731,11 @@ export default function Dashboard() {
                   : displayAnalysis.atlasScore.bearishProbability;
                 return (
                   <>
+                    {selectedBar && (
+                      <div className="text-[10px] font-mono tracking-widest text-warning/70 -mb-1">
+                        CANDLE · {selectedBar.date}
+                      </div>
+                    )}
                     <div className="flex justify-between items-center gap-2">
                       <span className="text-muted-foreground flex items-center gap-1.5">
                         SIGNAL STR
