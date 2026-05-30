@@ -6,6 +6,7 @@ import Dashboard from "@/pages/Dashboard";
 import Scanner from "@/pages/Scanner";
 import Watchlist from "@/pages/Watchlist";
 import Research from "@/pages/Research";
+import BacktestLab from "@/pages/BacktestLab";
 import AppLayout from "@/components/layout/AppLayout";
 import NotFound from "@/pages/not-found";
 import { useEffect } from "react";
@@ -35,6 +36,7 @@ function App() {
               <Route path="/scanner" component={Scanner} />
               <Route path="/watchlist" component={Watchlist} />
               <Route path="/research" component={Research} />
+              <Route path="/backtest" component={BacktestLab} />
               <Route component={NotFound} />
             </Switch>
           </AppLayout>

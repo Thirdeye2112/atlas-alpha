@@ -1,4 +1,3 @@
-- [Yahoo Finance concurrency](yahoo-concurrency.md) — must cap concurrent Yahoo Finance calls with a semaphore; warmup + scanner together cause 502s without it
-- [Dashboard URL reactivity](dashboard-url-reactivity.md) — use wouter useSearch() + useEffect to sync ticker; window.location.search only reads once at mount
-- [Scanner Playwright timeout](scanner-e2e-timeout.md) — cold scanner scan takes 30-45s; Playwright notebook times out; verify scanner via curl instead
-- [Scanner streaming architecture](scanner-streaming.md) — shared scan job singleton; all 10 tabs share one background job; frontend polls every 2s via refetchInterval; DB cache persists across restarts
+- [Backtest IC findings](backtest-ic-findings.md) — IC is positive for small/mid-cap stocks but negative (contrarian) for mega-caps/indices; RS is most underpaid factor
+- [Distribution top signal](distribution-top-signal.md) — overbought exhaustion mirror: stoch K/D >90, price above BB+, SMA20 deviation, low RVOL at highs
+- [Scoring weights rationale](scoring-weights.md) — weights updated via IC²-analysis; RS 13→20%, Regime 8→4%, Trend 27→24%

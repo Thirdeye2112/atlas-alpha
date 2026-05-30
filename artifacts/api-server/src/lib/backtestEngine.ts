@@ -126,6 +126,7 @@ export interface BacktestOutput {
   bear:    { count: number; hitRate: number | null; avgReturn: number | null };
   deciles: Array<{ bucket: string; count: number; hitRate: number | null; avgReturn: number | null }>;
   scatter: Array<{ x: number; y: number; date: string }>;
+  timeline: Array<{ date: string; score: number; fwdReturn: number; direction: "bull" | "neutral" | "bear"; correct: boolean }>;
   cachedAt: string;
 }
 
@@ -164,7 +165,7 @@ export async function runBacktest(ticker: string, horizon: number): Promise<Back
     const rs         = calcRelativeStrength(sym, slice, spySlice, qqqSlice, iwmSlice, null);
     const spyTrend   = calcTrend(spySlice, spySlice[spySlice.length - 1]?.close ?? 500);
     const regime     = calcRegimeIndicators(spySlice, spyTrend);
-    const exhaustion = calcExhaustion(slice, momentum, volume, trend);
+    const exhaustion = calcExhaustion(slice, momentum, volume, trend, volatility);
     const atlas      = calcAtlasScore(trend, momentum, volume, options, rs, regime.regimeScore, volatility.expectedMovePercent, exhaustion);
 
     const entry    = bars[i].close;
@@ -256,6 +257,16 @@ export async function runBacktest(ticker: string, horizon: number): Promise<Back
     .filter((_, i) => i % 3 === 0)
     .map(d => ({ x: d.score, y: r2(d.fwdReturn), date: d.date }));
 
+  // Full timeline: every observation with direction + correctness flag
+  const timeline = dataPoints.map(d => {
+    const dir: "bull" | "neutral" | "bear" = d.score >= 60 ? "bull" : d.score <= 40 ? "bear" : "neutral";
+    const correct =
+      dir === "bull"    ? d.fwdReturn > 0 :
+      dir === "bear"    ? d.fwdReturn < 0 :
+      Math.abs(d.fwdReturn) < 2;            // neutral = low volatility is "correct"
+    return { date: d.date, score: d.score, fwdReturn: r2(d.fwdReturn), direction: dir, correct };
+  });
+
   const marketCap       = quote?.marketCap ?? null;
   const marketCapBucket = capBucket(marketCap);
 
@@ -275,12 +286,13 @@ export async function runBacktest(ticker: string, horizon: number): Promise<Back
     calibratedIntercept,
     categoryIC,
     optimalWeights,
-    currentWeights: { trend: 30, momentum: 20, volume: 15, relativeStrength: 15, regime: 10 },
+    currentWeights: { trend: 24, momentum: 18, volume: 13, relativeStrength: 20, regime: 4 },
     bull:    { count: bull.length,    hitRate: hitRate(bull,    true),  avgReturn: avg(bull.map(d => d.fwdReturn)) },
     neutral: { count: neutral.length, hitRate: hitRate(neutral, true),  avgReturn: avg(neutral.map(d => d.fwdReturn)) },
     bear:    { count: bear.length,    hitRate: hitRate(bear,    false), avgReturn: avg(bear.map(d => d.fwdReturn)) },
     deciles,
     scatter,
+    timeline,
     cachedAt: new Date().toISOString(),
   };
 }
