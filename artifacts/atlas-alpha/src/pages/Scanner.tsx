@@ -149,7 +149,7 @@ function ScannerTable({
       await Promise.all(batch.map(async (ticker) => {
         try {
           const r = await fetch(
-            `/api/backtest/ic?ticker=${encodeURIComponent(ticker)}&horizon=10`,
+            `/api/backtest/ic?ticker=${encodeURIComponent(ticker)}&horizon=5`,
             { signal: ctrl.signal }
           );
           if (r.ok) {
@@ -231,7 +231,7 @@ function ScannerTable({
               className="flex items-center gap-1.5 text-primary/80 hover:text-primary border border-primary/25 rounded px-2 py-0.5 hover:bg-primary/10 transition-colors"
             >
               <FlaskConical className="w-3 h-3" />
-              RUN BACKTEST (10D) · {tickers.length} tickers
+              RUN BACKTEST (5D) · {tickers.length} tickers
             </button>
           )}
 
@@ -290,7 +290,7 @@ function ScannerTable({
               {showKeyLevel && <SortableTh col="keyLevelDist" label="DIST%" className="text-right w-20" {...thProps} />}
               <SortableTh col="rsi"            label="RSI"    className="text-right w-16"  {...thProps} />
               <SortableTh col="relativeVolume" label="RVOL"   className="text-right w-16"  {...thProps} />
-              <SortableTh col="rankIC"         label="IC 10D" className="text-right w-20"  {...thProps} />
+              <SortableTh col="rankIC"         label="IC 5D"  className="text-right w-20"  {...thProps} />
               <th className="px-3 py-2 w-36">LEVELS</th>
             </tr>
           </thead>
