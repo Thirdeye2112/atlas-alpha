@@ -176,6 +176,11 @@ function buildNarrative(
       (exhaustion.consecutiveDownDays >= 5 ? ` After ${exhaustion.consecutiveDownDays} consecutive down sessions, this bar shifts risk/reward to the upside.` : "") +
       ` RSI at ${momentum.rsi.toFixed(1)} — oversold momentum provides additional tailwind for a mean-reversion bounce.`
     );
+  } else if (exhaustion.exhaustionSignal === "breakout") {
+    parts.push(
+      `🚀 CATALYST BREAKOUT: Gap-up of +${exhaustion.gapPct.toFixed(1)}% on ${volume.relativeVolume.toFixed(1)}x volume, closing in the top ${Math.round(exhaustion.wickRatio * 100)}% of the day's range.` +
+      (trend.priceVsSma200 < -20 ? ` Stock was ${Math.abs(trend.priceVsSma200).toFixed(1)}% below SMA200 — this event may mark a structural trend reversal.` : ` Strong momentum — watch for follow-through or fade on the next session.`)
+    );
   } else if (exhaustion.exhaustionSignal === "extended_decline") {
     parts.push(
       `📉 EXTENDED DECLINE: ${exhaustion.consecutiveDownDays} consecutive down sessions with price ${Math.abs(trend.priceVsSma200).toFixed(1)}% below SMA200.` +

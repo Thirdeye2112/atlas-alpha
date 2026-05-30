@@ -105,7 +105,7 @@ export interface ExhaustionResult {
   consecutiveDownDays: number;  // unbroken run of down closes
   capitulationVolume: boolean;  // relVol > 5x at RSI < 25
   exhaustionScore: number;      // 0-100; high = potential bottom exhaustion
-  exhaustionSignal: "capitulation" | "reversal_bar" | "extended_decline" | "none";
+  exhaustionSignal: "capitulation" | "reversal_bar" | "breakout" | "extended_decline" | "none";
 }
 
 function last<T>(arr: T[]): T {
@@ -719,14 +719,22 @@ export function calcExhaustion(
   score = clamp(score);
 
   // Classify the primary signal type
+  // Key distinction: gap-UP with high wick = breakout (earnings/catalyst); 
+  // gap-DOWN or flat open with high wick after oversold = reversal bar.
   let exhaustionSignal: ExhaustionResult["exhaustionSignal"] = "none";
   if (score >= 70) {
-    if (capitulationVolume)
+    if (capitulationVolume) {
       exhaustionSignal = "capitulation";
-    else if (wickRatio > 0.60 && volume.relativeVolume > 2)
+    } else if (gapPct > 8 && wickRatio > 0.60 && volume.relativeVolume > 2) {
+      // Gap-up on elevated volume closing near highs = catalyst-driven breakout,
+      // not an organic reversal bar. Don't mislabel it.
+      exhaustionSignal = "breakout";
+    } else if (wickRatio > 0.60 && volume.relativeVolume > 2 && momentum.rsi < 50) {
+      // Organic reversal: opened weak/flat, buyers took it back, stock was oversold
       exhaustionSignal = "reversal_bar";
-    else if (consecutiveDownDays >= 7)
+    } else if (consecutiveDownDays >= 7) {
       exhaustionSignal = "extended_decline";
+    }
   }
 
   return {
