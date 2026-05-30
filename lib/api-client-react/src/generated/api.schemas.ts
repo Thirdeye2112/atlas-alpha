@@ -332,6 +332,11 @@ export interface StockAnalysis {
   cachedAt: string;
 }
 
+export type ScannerResponseProgress = {
+  done: number;
+  total: number;
+};
+
 export type ScannerResultSignalStrength = typeof ScannerResultSignalStrength[keyof typeof ScannerResultSignalStrength];
 
 
@@ -361,6 +366,12 @@ export interface ScannerResult {
   relativeVolume: number;
   rsi: number;
   catalysts: string[];
+}
+
+export interface ScannerResponse {
+  results: ScannerResult[];
+  progress: ScannerResponseProgress;
+  complete: boolean;
 }
 
 export interface WatchlistEntry {

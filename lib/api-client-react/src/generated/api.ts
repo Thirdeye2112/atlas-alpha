@@ -34,7 +34,7 @@ import type {
   HealthStatus,
   MarketOverview,
   OHLCVBar,
-  ScannerResult,
+  ScannerResponse,
   StockAnalysis,
   StockQuote,
   WatchlistEntry,
@@ -382,9 +382,9 @@ export const getGetScannerTopLongsUrl = (params?: GetScannerTopLongsParams,) => 
 /**
  * @summary Top bullish candidates (Bullish Prob > 75%, Confidence > 80%)
  */
-export const getScannerTopLongs = async (params?: GetScannerTopLongsParams, options?: RequestInit): Promise<ScannerResult[]> => {
+export const getScannerTopLongs = async (params?: GetScannerTopLongsParams, options?: RequestInit): Promise<ScannerResponse> => {
 
-  return customFetch<ScannerResult[]>(getGetScannerTopLongsUrl(params),
+  return customFetch<ScannerResponse>(getGetScannerTopLongsUrl(params),
   {
     ...options,
     method: 'GET'
@@ -466,9 +466,9 @@ export const getGetScannerTopShortsUrl = (params?: GetScannerTopShortsParams,) =
 /**
  * @summary Top bearish candidates (Bearish Prob > 75%, Confidence > 80%)
  */
-export const getScannerTopShorts = async (params?: GetScannerTopShortsParams, options?: RequestInit): Promise<ScannerResult[]> => {
+export const getScannerTopShorts = async (params?: GetScannerTopShortsParams, options?: RequestInit): Promise<ScannerResponse> => {
 
-  return customFetch<ScannerResult[]>(getGetScannerTopShortsUrl(params),
+  return customFetch<ScannerResponse>(getGetScannerTopShortsUrl(params),
   {
     ...options,
     method: 'GET'
@@ -550,9 +550,9 @@ export const getGetScannerBreakoutsUrl = (params?: GetScannerBreakoutsParams,) =
 /**
  * @summary Breakout candidates
  */
-export const getScannerBreakouts = async (params?: GetScannerBreakoutsParams, options?: RequestInit): Promise<ScannerResult[]> => {
+export const getScannerBreakouts = async (params?: GetScannerBreakoutsParams, options?: RequestInit): Promise<ScannerResponse> => {
 
-  return customFetch<ScannerResult[]>(getGetScannerBreakoutsUrl(params),
+  return customFetch<ScannerResponse>(getGetScannerBreakoutsUrl(params),
   {
     ...options,
     method: 'GET'
@@ -634,9 +634,9 @@ export const getGetScannerBreakdownsUrl = (params?: GetScannerBreakdownsParams,)
 /**
  * @summary Breakdown candidates
  */
-export const getScannerBreakdowns = async (params?: GetScannerBreakdownsParams, options?: RequestInit): Promise<ScannerResult[]> => {
+export const getScannerBreakdowns = async (params?: GetScannerBreakdownsParams, options?: RequestInit): Promise<ScannerResponse> => {
 
-  return customFetch<ScannerResult[]>(getGetScannerBreakdownsUrl(params),
+  return customFetch<ScannerResponse>(getGetScannerBreakdownsUrl(params),
   {
     ...options,
     method: 'GET'
@@ -718,9 +718,9 @@ export const getGetScannerGammaSqueezeUrl = (params?: GetScannerGammaSqueezePara
 /**
  * @summary Gamma squeeze candidates
  */
-export const getScannerGammaSqueeze = async (params?: GetScannerGammaSqueezeParams, options?: RequestInit): Promise<ScannerResult[]> => {
+export const getScannerGammaSqueeze = async (params?: GetScannerGammaSqueezeParams, options?: RequestInit): Promise<ScannerResponse> => {
 
-  return customFetch<ScannerResult[]>(getGetScannerGammaSqueezeUrl(params),
+  return customFetch<ScannerResponse>(getGetScannerGammaSqueezeUrl(params),
   {
     ...options,
     method: 'GET'
@@ -802,9 +802,9 @@ export const getGetScannerShortSqueezeUrl = (params?: GetScannerShortSqueezePara
 /**
  * @summary Short squeeze candidates
  */
-export const getScannerShortSqueeze = async (params?: GetScannerShortSqueezeParams, options?: RequestInit): Promise<ScannerResult[]> => {
+export const getScannerShortSqueeze = async (params?: GetScannerShortSqueezeParams, options?: RequestInit): Promise<ScannerResponse> => {
 
-  return customFetch<ScannerResult[]>(getGetScannerShortSqueezeUrl(params),
+  return customFetch<ScannerResponse>(getGetScannerShortSqueezeUrl(params),
   {
     ...options,
     method: 'GET'
@@ -886,9 +886,9 @@ export const getGetScannerInstitutionalAccumulationUrl = (params?: GetScannerIns
 /**
  * @summary Institutional accumulation candidates
  */
-export const getScannerInstitutionalAccumulation = async (params?: GetScannerInstitutionalAccumulationParams, options?: RequestInit): Promise<ScannerResult[]> => {
+export const getScannerInstitutionalAccumulation = async (params?: GetScannerInstitutionalAccumulationParams, options?: RequestInit): Promise<ScannerResponse> => {
 
-  return customFetch<ScannerResult[]>(getGetScannerInstitutionalAccumulationUrl(params),
+  return customFetch<ScannerResponse>(getGetScannerInstitutionalAccumulationUrl(params),
   {
     ...options,
     method: 'GET'
@@ -970,9 +970,9 @@ export const getGetScannerMeanReversionUrl = (params?: GetScannerMeanReversionPa
 /**
  * @summary Mean reversion candidates
  */
-export const getScannerMeanReversion = async (params?: GetScannerMeanReversionParams, options?: RequestInit): Promise<ScannerResult[]> => {
+export const getScannerMeanReversion = async (params?: GetScannerMeanReversionParams, options?: RequestInit): Promise<ScannerResponse> => {
 
-  return customFetch<ScannerResult[]>(getGetScannerMeanReversionUrl(params),
+  return customFetch<ScannerResponse>(getGetScannerMeanReversionUrl(params),
   {
     ...options,
     method: 'GET'
@@ -1054,9 +1054,9 @@ export const getGetScannerGapUpUrl = (params?: GetScannerGapUpParams,) => {
 /**
  * @summary Gap-up candidates (open > prev close by ≥2%)
  */
-export const getScannerGapUp = async (params?: GetScannerGapUpParams, options?: RequestInit): Promise<ScannerResult[]> => {
+export const getScannerGapUp = async (params?: GetScannerGapUpParams, options?: RequestInit): Promise<ScannerResponse> => {
 
-  return customFetch<ScannerResult[]>(getGetScannerGapUpUrl(params),
+  return customFetch<ScannerResponse>(getGetScannerGapUpUrl(params),
   {
     ...options,
     method: 'GET'
@@ -1138,9 +1138,9 @@ export const getGetScannerGapDownUrl = (params?: GetScannerGapDownParams,) => {
 /**
  * @summary Gap-down candidates (open < prev close by ≥2%)
  */
-export const getScannerGapDown = async (params?: GetScannerGapDownParams, options?: RequestInit): Promise<ScannerResult[]> => {
+export const getScannerGapDown = async (params?: GetScannerGapDownParams, options?: RequestInit): Promise<ScannerResponse> => {
 
-  return customFetch<ScannerResult[]>(getGetScannerGapDownUrl(params),
+  return customFetch<ScannerResponse>(getGetScannerGapDownUrl(params),
   {
     ...options,
     method: 'GET'

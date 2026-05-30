@@ -1,5 +1,6 @@
 import YahooFinanceClass from "yahoo-finance2";
 import { quoteCache, ohlcvCache } from "./cache.js";
+import { persistQuote, persistOhlcv } from "./dbCache.js";
 import { logger } from "./logger.js";
 
 const yahooFinance = new YahooFinanceClass({ suppressNotices: ["yahooSurvey"] });
@@ -118,6 +119,7 @@ export async function fetchQuote(ticker: string): Promise<YahooQuote> {
   };
 
   quoteCache.set(ticker, result);
+  persistQuote(ticker, result as unknown as object); // fire-and-forget DB write
   return result;
 }
 
@@ -204,6 +206,7 @@ export async function fetchOHLCV(ticker: string, period = "3mo", interval = "1d"
     });
 
   ohlcvCache.set(key, bars);
+  persistOhlcv(key, bars as unknown as object); // fire-and-forget DB write
 
   // Pre-warm shorter-period cache keys so the chart doesn't need a second fetch
   seedShorterPeriods(ticker, period, interval, bars);

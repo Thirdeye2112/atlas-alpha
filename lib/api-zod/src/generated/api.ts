@@ -226,7 +226,8 @@ export const GetScannerTopLongsQueryParams = zod.object({
   "limit": zod.coerce.number().default(getScannerTopLongsQueryLimitDefault)
 })
 
-export const GetScannerTopLongsResponseItem = zod.object({
+export const GetScannerTopLongsResponse = zod.object({
+  "results": zod.array(zod.object({
   "ticker": zod.string(),
   "name": zod.string(),
   "price": zod.number(),
@@ -245,8 +246,13 @@ export const GetScannerTopLongsResponseItem = zod.object({
   "relativeVolume": zod.number(),
   "rsi": zod.number(),
   "catalysts": zod.array(zod.string())
+})),
+  "progress": zod.object({
+  "done": zod.number(),
+  "total": zod.number()
+}),
+  "complete": zod.boolean()
 })
-export const GetScannerTopLongsResponse = zod.array(GetScannerTopLongsResponseItem)
 
 
 /**
@@ -258,7 +264,8 @@ export const GetScannerTopShortsQueryParams = zod.object({
   "limit": zod.coerce.number().default(getScannerTopShortsQueryLimitDefault)
 })
 
-export const GetScannerTopShortsResponseItem = zod.object({
+export const GetScannerTopShortsResponse = zod.object({
+  "results": zod.array(zod.object({
   "ticker": zod.string(),
   "name": zod.string(),
   "price": zod.number(),
@@ -277,8 +284,13 @@ export const GetScannerTopShortsResponseItem = zod.object({
   "relativeVolume": zod.number(),
   "rsi": zod.number(),
   "catalysts": zod.array(zod.string())
+})),
+  "progress": zod.object({
+  "done": zod.number(),
+  "total": zod.number()
+}),
+  "complete": zod.boolean()
 })
-export const GetScannerTopShortsResponse = zod.array(GetScannerTopShortsResponseItem)
 
 
 /**
@@ -290,7 +302,8 @@ export const GetScannerBreakoutsQueryParams = zod.object({
   "limit": zod.coerce.number().default(getScannerBreakoutsQueryLimitDefault)
 })
 
-export const GetScannerBreakoutsResponseItem = zod.object({
+export const GetScannerBreakoutsResponse = zod.object({
+  "results": zod.array(zod.object({
   "ticker": zod.string(),
   "name": zod.string(),
   "price": zod.number(),
@@ -309,8 +322,13 @@ export const GetScannerBreakoutsResponseItem = zod.object({
   "relativeVolume": zod.number(),
   "rsi": zod.number(),
   "catalysts": zod.array(zod.string())
+})),
+  "progress": zod.object({
+  "done": zod.number(),
+  "total": zod.number()
+}),
+  "complete": zod.boolean()
 })
-export const GetScannerBreakoutsResponse = zod.array(GetScannerBreakoutsResponseItem)
 
 
 /**
@@ -322,7 +340,8 @@ export const GetScannerBreakdownsQueryParams = zod.object({
   "limit": zod.coerce.number().default(getScannerBreakdownsQueryLimitDefault)
 })
 
-export const GetScannerBreakdownsResponseItem = zod.object({
+export const GetScannerBreakdownsResponse = zod.object({
+  "results": zod.array(zod.object({
   "ticker": zod.string(),
   "name": zod.string(),
   "price": zod.number(),
@@ -341,8 +360,13 @@ export const GetScannerBreakdownsResponseItem = zod.object({
   "relativeVolume": zod.number(),
   "rsi": zod.number(),
   "catalysts": zod.array(zod.string())
+})),
+  "progress": zod.object({
+  "done": zod.number(),
+  "total": zod.number()
+}),
+  "complete": zod.boolean()
 })
-export const GetScannerBreakdownsResponse = zod.array(GetScannerBreakdownsResponseItem)
 
 
 /**
@@ -354,7 +378,8 @@ export const GetScannerGammaSqueezeQueryParams = zod.object({
   "limit": zod.coerce.number().default(getScannerGammaSqueezeQueryLimitDefault)
 })
 
-export const GetScannerGammaSqueezeResponseItem = zod.object({
+export const GetScannerGammaSqueezeResponse = zod.object({
+  "results": zod.array(zod.object({
   "ticker": zod.string(),
   "name": zod.string(),
   "price": zod.number(),
@@ -373,8 +398,13 @@ export const GetScannerGammaSqueezeResponseItem = zod.object({
   "relativeVolume": zod.number(),
   "rsi": zod.number(),
   "catalysts": zod.array(zod.string())
+})),
+  "progress": zod.object({
+  "done": zod.number(),
+  "total": zod.number()
+}),
+  "complete": zod.boolean()
 })
-export const GetScannerGammaSqueezeResponse = zod.array(GetScannerGammaSqueezeResponseItem)
 
 
 /**
@@ -386,7 +416,8 @@ export const GetScannerShortSqueezeQueryParams = zod.object({
   "limit": zod.coerce.number().default(getScannerShortSqueezeQueryLimitDefault)
 })
 
-export const GetScannerShortSqueezeResponseItem = zod.object({
+export const GetScannerShortSqueezeResponse = zod.object({
+  "results": zod.array(zod.object({
   "ticker": zod.string(),
   "name": zod.string(),
   "price": zod.number(),
@@ -405,8 +436,13 @@ export const GetScannerShortSqueezeResponseItem = zod.object({
   "relativeVolume": zod.number(),
   "rsi": zod.number(),
   "catalysts": zod.array(zod.string())
+})),
+  "progress": zod.object({
+  "done": zod.number(),
+  "total": zod.number()
+}),
+  "complete": zod.boolean()
 })
-export const GetScannerShortSqueezeResponse = zod.array(GetScannerShortSqueezeResponseItem)
 
 
 /**
@@ -418,7 +454,8 @@ export const GetScannerInstitutionalAccumulationQueryParams = zod.object({
   "limit": zod.coerce.number().default(getScannerInstitutionalAccumulationQueryLimitDefault)
 })
 
-export const GetScannerInstitutionalAccumulationResponseItem = zod.object({
+export const GetScannerInstitutionalAccumulationResponse = zod.object({
+  "results": zod.array(zod.object({
   "ticker": zod.string(),
   "name": zod.string(),
   "price": zod.number(),
@@ -437,8 +474,13 @@ export const GetScannerInstitutionalAccumulationResponseItem = zod.object({
   "relativeVolume": zod.number(),
   "rsi": zod.number(),
   "catalysts": zod.array(zod.string())
+})),
+  "progress": zod.object({
+  "done": zod.number(),
+  "total": zod.number()
+}),
+  "complete": zod.boolean()
 })
-export const GetScannerInstitutionalAccumulationResponse = zod.array(GetScannerInstitutionalAccumulationResponseItem)
 
 
 /**
@@ -450,7 +492,8 @@ export const GetScannerMeanReversionQueryParams = zod.object({
   "limit": zod.coerce.number().default(getScannerMeanReversionQueryLimitDefault)
 })
 
-export const GetScannerMeanReversionResponseItem = zod.object({
+export const GetScannerMeanReversionResponse = zod.object({
+  "results": zod.array(zod.object({
   "ticker": zod.string(),
   "name": zod.string(),
   "price": zod.number(),
@@ -469,8 +512,13 @@ export const GetScannerMeanReversionResponseItem = zod.object({
   "relativeVolume": zod.number(),
   "rsi": zod.number(),
   "catalysts": zod.array(zod.string())
+})),
+  "progress": zod.object({
+  "done": zod.number(),
+  "total": zod.number()
+}),
+  "complete": zod.boolean()
 })
-export const GetScannerMeanReversionResponse = zod.array(GetScannerMeanReversionResponseItem)
 
 
 /**
@@ -482,7 +530,8 @@ export const GetScannerGapUpQueryParams = zod.object({
   "limit": zod.coerce.number().default(getScannerGapUpQueryLimitDefault)
 })
 
-export const GetScannerGapUpResponseItem = zod.object({
+export const GetScannerGapUpResponse = zod.object({
+  "results": zod.array(zod.object({
   "ticker": zod.string(),
   "name": zod.string(),
   "price": zod.number(),
@@ -501,8 +550,13 @@ export const GetScannerGapUpResponseItem = zod.object({
   "relativeVolume": zod.number(),
   "rsi": zod.number(),
   "catalysts": zod.array(zod.string())
+})),
+  "progress": zod.object({
+  "done": zod.number(),
+  "total": zod.number()
+}),
+  "complete": zod.boolean()
 })
-export const GetScannerGapUpResponse = zod.array(GetScannerGapUpResponseItem)
 
 
 /**
@@ -514,7 +568,8 @@ export const GetScannerGapDownQueryParams = zod.object({
   "limit": zod.coerce.number().default(getScannerGapDownQueryLimitDefault)
 })
 
-export const GetScannerGapDownResponseItem = zod.object({
+export const GetScannerGapDownResponse = zod.object({
+  "results": zod.array(zod.object({
   "ticker": zod.string(),
   "name": zod.string(),
   "price": zod.number(),
@@ -533,8 +588,13 @@ export const GetScannerGapDownResponseItem = zod.object({
   "relativeVolume": zod.number(),
   "rsi": zod.number(),
   "catalysts": zod.array(zod.string())
+})),
+  "progress": zod.object({
+  "done": zod.number(),
+  "total": zod.number()
+}),
+  "complete": zod.boolean()
 })
-export const GetScannerGapDownResponse = zod.array(GetScannerGapDownResponseItem)
 
 
 /**

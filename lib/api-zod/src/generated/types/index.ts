@@ -39,6 +39,8 @@ export * from './optionsAnalysis';
 export * from './patternDetection';
 export * from './patternDetectionMarketStructure';
 export * from './relativeStrength';
+export * from './scannerResponse';
+export * from './scannerResponseProgress';
 export * from './scannerResult';
 export * from './scannerResultSignalStrength';
 export * from './stockAnalysis';
