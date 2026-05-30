@@ -36,7 +36,10 @@ interface BacktestResult {
   scatter: BacktestPoint[];
 }
 
-function calcGapProbScore(atrPct: number, bbWidth: number, relVol: number): number {
+// gapPct: open vs prior close (%). If session already gapped ≥1.5%, elevated
+// ATR/BB/RVOL are post-gap aftermath, not a forward signal → score 0.
+function calcGapProbScore(atrPct: number, bbWidth: number, relVol: number, gapPct = 0): number {
+  if (Math.abs(gapPct) >= 1.5) return 0;
   const c = (v: number) => Math.max(0, Math.min(100, v));
   const atrS  = c((atrPct  - 3.2)  / (4.8  - 3.2)  * 100);
   const bbS   = c((bbWidth - 15)   / (23.7 - 15)   * 100);
@@ -606,6 +609,9 @@ export default function Dashboard() {
                   displayAnalysis.volatility.atrPercent,
                   displayAnalysis.volatility.bollingerWidth,
                   displayAnalysis.volume.relativeVolume,
+                  displayAnalysis.quote.previousClose && displayAnalysis.quote.open
+                    ? ((displayAnalysis.quote.open - displayAnalysis.quote.previousClose) / displayAnalysis.quote.previousClose) * 100
+                    : 0,
                 )} />
                 <MiniGauge title="Regime" score={displayAnalysis.atlasScore.marketRegimeScore} />
                 <MiniGauge title="Exhaustion" score={displayAnalysis.atlasScore.exhaustionScore} />

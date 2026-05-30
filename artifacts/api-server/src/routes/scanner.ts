@@ -10,7 +10,12 @@ const router: IRouter = Router();
 // Weights mirror research effect sizes: ATR +1.40σ (40%), BB +1.14σ (35%), RVOL +0.72σ (25%)
 // Score = 0 at filter threshold, 100 at the mean value observed on historical gap days
 function clamp01(v: number): number { return Math.max(0, Math.min(100, v)); }
-function calcGapProbScore(atrPct: number, bbWidth: number, relVol: number): number {
+// gapPct: today's open vs prior close (%). If the session has already gapped ≥1.5%,
+// the elevated ATR/BB/RVOL are post-gap aftermath — not a forward signal. Score → 0.
+// Thresholds are calibrated from T=0 (gap-day) conditions; a future improvement would
+// re-derive them from T-1 data to eliminate the gap-event's own inflation of these metrics.
+function calcGapProbScore(atrPct: number, bbWidth: number, relVol: number, gapPct = 0): number {
+  if (Math.abs(gapPct) >= 1.5) return 0; // gap already fired — conditions are aftermath
   const atrScore  = clamp01((atrPct - 3.2)  / (4.8  - 3.2)  * 100); // 0 at 3.2%, 100 at 4.8%
   const bbScore   = clamp01((bbWidth - 15)   / (23.7 - 15)   * 100); // 0 at 15%, 100 at 23.7%
   const rvolScore = clamp01((relVol - 1.2)   / (1.45 - 1.2)  * 100); // 0 at 1.2x, 100 at 1.45x
@@ -26,7 +31,8 @@ function toGapSetupRow(a: AnalysisResult, direction: "long" | "short"): object {
   const bbWidth = a.volatility.bollingerWidth;
   const relVol  = a.volume.relativeVolume;
   const vs200   = a.trend.priceVsSma200;
-  const gapSetupScore = calcGapProbScore(atrPct, bbWidth, relVol);
+  const gapPct  = getGapPercent(a);
+  const gapSetupScore = calcGapProbScore(atrPct, bbWidth, relVol, gapPct);
 
   const conditions: string[] = [];
 
