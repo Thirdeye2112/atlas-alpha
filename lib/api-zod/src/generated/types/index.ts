@@ -29,6 +29,8 @@ export * from './getScannerBreakdownsParams';
 export * from './getScannerBreakoutsParams';
 export * from './getScannerGammaSqueezeParams';
 export * from './getScannerGapDownParams';
+export * from './getScannerGapSetupLongParams';
+export * from './getScannerGapSetupShortParams';
 export * from './getScannerGapUpParams';
 export * from './getScannerInstitutionalAccumulationParams';
 export * from './getScannerMeanReversionParams';

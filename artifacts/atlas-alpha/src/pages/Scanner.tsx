@@ -9,6 +9,8 @@ import {
   useGetScannerShortSqueeze,         getGetScannerShortSqueezeQueryKey,
   useGetScannerInstitutionalAccumulation, getGetScannerInstitutionalAccumulationQueryKey,
   useGetScannerMeanReversion,        getGetScannerMeanReversionQueryKey,
+  useGetScannerGapSetupLong,         getGetScannerGapSetupLongQueryKey,
+  useGetScannerGapSetupShort,        getGetScannerGapSetupShortQueryKey,
   useGetScannerGapUp,                getGetScannerGapUpQueryKey,
   useGetScannerGapDown,              getGetScannerGapDownQueryKey,
   type ScannerResponse,
@@ -208,19 +210,21 @@ export default function Scanner() {
     refetchInterval,
   });
 
-  const { data: longs,      isLoading: lLoading    } = useGetScannerTopLongs({ limit },    { query: qOpts(getGetScannerTopLongsQueryKey({ limit }))    });
-  const { data: shorts,     isLoading: sLoading    } = useGetScannerTopShorts({ limit },   { query: qOpts(getGetScannerTopShortsQueryKey({ limit }))   });
-  const { data: breakouts,  isLoading: bLoading    } = useGetScannerBreakouts({ limit },   { query: qOpts(getGetScannerBreakoutsQueryKey({ limit }))   });
-  const { data: breakdowns, isLoading: bdLoading   } = useGetScannerBreakdowns({ limit },  { query: qOpts(getGetScannerBreakdownsQueryKey({ limit }))  });
-  const { data: gamma,      isLoading: gLoading    } = useGetScannerGammaSqueeze({ limit },{ query: qOpts(getGetScannerGammaSqueezeQueryKey({ limit })) });
-  const { data: ss,         isLoading: ssLoading   } = useGetScannerShortSqueeze({ limit },{ query: qOpts(getGetScannerShortSqueezeQueryKey({ limit })) });
-  const { data: inst,       isLoading: instLoading } = useGetScannerInstitutionalAccumulation({ limit }, { query: qOpts(getGetScannerInstitutionalAccumulationQueryKey({ limit })) });
-  const { data: mean,       isLoading: meanLoading } = useGetScannerMeanReversion({ limit },{ query: qOpts(getGetScannerMeanReversionQueryKey({ limit })) });
-  const { data: gapUp,      isLoading: guLoading   } = useGetScannerGapUp({ limit },       { query: qOpts(getGetScannerGapUpQueryKey({ limit }))       });
-  const { data: gapDown,    isLoading: gdLoading   } = useGetScannerGapDown({ limit },     { query: qOpts(getGetScannerGapDownQueryKey({ limit }))     });
+  const { data: longs,        isLoading: lLoading    } = useGetScannerTopLongs({ limit },    { query: qOpts(getGetScannerTopLongsQueryKey({ limit }))    });
+  const { data: shorts,       isLoading: sLoading    } = useGetScannerTopShorts({ limit },   { query: qOpts(getGetScannerTopShortsQueryKey({ limit }))   });
+  const { data: breakouts,    isLoading: bLoading    } = useGetScannerBreakouts({ limit },   { query: qOpts(getGetScannerBreakoutsQueryKey({ limit }))   });
+  const { data: breakdowns,   isLoading: bdLoading   } = useGetScannerBreakdowns({ limit },  { query: qOpts(getGetScannerBreakdownsQueryKey({ limit }))  });
+  const { data: gamma,        isLoading: gLoading    } = useGetScannerGammaSqueeze({ limit },{ query: qOpts(getGetScannerGammaSqueezeQueryKey({ limit })) });
+  const { data: ss,           isLoading: ssLoading   } = useGetScannerShortSqueeze({ limit },{ query: qOpts(getGetScannerShortSqueezeQueryKey({ limit })) });
+  const { data: inst,         isLoading: instLoading } = useGetScannerInstitutionalAccumulation({ limit }, { query: qOpts(getGetScannerInstitutionalAccumulationQueryKey({ limit })) });
+  const { data: mean,         isLoading: meanLoading } = useGetScannerMeanReversion({ limit },{ query: qOpts(getGetScannerMeanReversionQueryKey({ limit })) });
+  const { data: gapSetupLong, isLoading: gslLoading  } = useGetScannerGapSetupLong({ limit }, { query: qOpts(getGetScannerGapSetupLongQueryKey({ limit })) });
+  const { data: gapSetupShort,isLoading: gssLoading  } = useGetScannerGapSetupShort({ limit },{ query: qOpts(getGetScannerGapSetupShortQueryKey({ limit })) });
+  const { data: gapUp,        isLoading: guLoading   } = useGetScannerGapUp({ limit },       { query: qOpts(getGetScannerGapUpQueryKey({ limit }))       });
+  const { data: gapDown,      isLoading: gdLoading   } = useGetScannerGapDown({ limit },     { query: qOpts(getGetScannerGapDownQueryKey({ limit }))     });
 
   // Derive overall scan progress from the active-tab response (all tabs share the same job)
-  const anyResponse = longs ?? shorts ?? breakouts ?? breakdowns ?? gapUp ?? gapDown ?? gamma ?? ss ?? inst ?? mean;
+  const anyResponse = longs ?? shorts ?? breakouts ?? breakdowns ?? gapSetupLong ?? gapSetupShort ?? gapUp ?? gapDown ?? gamma ?? ss ?? inst ?? mean;
   const scanComplete = anyResponse?.complete ?? false;
 
   return (
@@ -250,6 +254,8 @@ export default function Scanner() {
           <TabsTrigger value="shorts"     className="font-mono text-xs data-[state=active]:bg-destructive data-[state=active]:text-destructive-foreground">HIGH PROB SHORTS</TabsTrigger>
           <TabsTrigger value="breakouts"  className="font-mono text-xs data-[state=active]:bg-success data-[state=active]:text-success-foreground">BREAKOUTS</TabsTrigger>
           <TabsTrigger value="breakdowns" className="font-mono text-xs data-[state=active]:bg-destructive data-[state=active]:text-destructive-foreground">BREAKDOWNS</TabsTrigger>
+          <TabsTrigger value="gap-setup-long"  className="font-mono text-xs data-[state=active]:bg-warning data-[state=active]:text-warning-foreground">GAP SETUP ↑</TabsTrigger>
+          <TabsTrigger value="gap-setup-short" className="font-mono text-xs data-[state=active]:bg-warning data-[state=active]:text-warning-foreground">GAP SETUP ↓</TabsTrigger>
           <TabsTrigger value="gap-up"     className="font-mono text-xs data-[state=active]:bg-success data-[state=active]:text-success-foreground">GAP UP ↑</TabsTrigger>
           <TabsTrigger value="gap-down"   className="font-mono text-xs data-[state=active]:bg-destructive data-[state=active]:text-destructive-foreground">GAP DOWN ↓</TabsTrigger>
           <TabsTrigger value="gamma"      className="font-mono text-xs data-[state=active]:bg-warning data-[state=active]:text-warning-foreground">GAMMA SQUEEZE</TabsTrigger>
@@ -263,6 +269,24 @@ export default function Scanner() {
           <TabsContent value="shorts"     className="m-0 h-full"><ScannerTable response={shorts}     isLoading={sLoading}    /></TabsContent>
           <TabsContent value="breakouts"  className="m-0 h-full"><ScannerTable response={breakouts}  isLoading={bLoading}    /></TabsContent>
           <TabsContent value="breakdowns" className="m-0 h-full"><ScannerTable response={breakdowns} isLoading={bdLoading}   /></TabsContent>
+          <TabsContent value="gap-setup-long" className="m-0 h-full flex flex-col gap-3">
+            <div className="border border-warning/30 rounded-md bg-warning/5 px-4 py-2.5 text-xs font-mono text-muted-foreground leading-relaxed shrink-0">
+              <span className="text-warning font-bold mr-2">GAP SETUP — LONG</span>
+              Stocks primed to gap UP based on research from 771 historical gaps.
+              Filter: <span className="text-foreground">ATR ≥ 3.2%</span> · <span className="text-foreground">BB Width ≥ 15%</span> · <span className="text-foreground">RVOL ≥ 1.2×</span> · RSI &lt; 70 · not already gapping · direction not bearish.
+              Sorted by <span className="text-foreground">ATR% × RVOL</span> (most volatility-primed first). Check RVOL column — elevated volume is the second-strongest predictor.
+            </div>
+            <ScannerTable response={gapSetupLong} isLoading={gslLoading} />
+          </TabsContent>
+          <TabsContent value="gap-setup-short" className="m-0 h-full flex flex-col gap-3">
+            <div className="border border-warning/30 rounded-md bg-warning/5 px-4 py-2.5 text-xs font-mono text-muted-foreground leading-relaxed shrink-0">
+              <span className="text-warning font-bold mr-2">GAP SETUP — SHORT</span>
+              Stocks primed to gap DOWN based on research from 771 historical gaps.
+              Filter: <span className="text-foreground">ATR ≥ 3.2%</span> · <span className="text-foreground">BB Width ≥ 15%</span> · <span className="text-foreground">RVOL ≥ 1.2×</span> · <span className="text-foreground">SMA200 extended &gt; 5%</span> · not already gapping · direction not bullish.
+              Extended-above-SMA200 is the <span className="text-foreground">strongest directional predictor</span> (+0.64σ) for gap-downs. Sorted by SMA200 extension × ATR.
+            </div>
+            <ScannerTable response={gapSetupShort} isLoading={gssLoading} />
+          </TabsContent>
           <TabsContent value="gap-up"     className="m-0 h-full"><ScannerTable response={gapUp}      isLoading={guLoading}   showGap /></TabsContent>
           <TabsContent value="gap-down"   className="m-0 h-full"><ScannerTable response={gapDown}    isLoading={gdLoading}   showGap /></TabsContent>
           <TabsContent value="gamma"      className="m-0 h-full"><ScannerTable response={gamma}      isLoading={gLoading}    /></TabsContent>

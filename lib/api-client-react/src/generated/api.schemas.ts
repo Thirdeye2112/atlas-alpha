@@ -573,6 +573,14 @@ export type GetScannerMeanReversionParams = {
 limit?: number;
 };
 
+export type GetScannerGapSetupLongParams = {
+limit?: number;
+};
+
+export type GetScannerGapSetupShortParams = {
+limit?: number;
+};
+
 export type GetScannerGapUpParams = {
 limit?: number;
 };

@@ -523,6 +523,82 @@ export const GetScannerMeanReversionResponse = zod.object({
 
 
 /**
+ * @summary Gap setup — long candidates (elevated ATR + wide BB + volume spike, not yet gapping)
+ */
+export const getScannerGapSetupLongQueryLimitDefault = 25;
+
+export const GetScannerGapSetupLongQueryParams = zod.object({
+  "limit": zod.coerce.number().default(getScannerGapSetupLongQueryLimitDefault)
+})
+
+export const GetScannerGapSetupLongResponse = zod.object({
+  "results": zod.array(zod.object({
+  "ticker": zod.string(),
+  "name": zod.string(),
+  "price": zod.number(),
+  "change": zod.number(),
+  "changePercent": zod.number(),
+  "gapPercent": zod.number(),
+  "atlasScore": zod.number(),
+  "atlasLabel": zod.string(),
+  "bullishProbability": zod.number(),
+  "bearishProbability": zod.number(),
+  "confidenceScore": zod.number(),
+  "direction": zod.string(),
+  "signalStrength": zod.enum(['strong', 'moderate', 'weak']),
+  "sector": zod.string().nullable(),
+  "volume": zod.number(),
+  "relativeVolume": zod.number(),
+  "rsi": zod.number(),
+  "catalysts": zod.array(zod.string())
+})),
+  "progress": zod.object({
+  "done": zod.number(),
+  "total": zod.number()
+}),
+  "complete": zod.boolean()
+})
+
+
+/**
+ * @summary Gap setup — short candidates (elevated ATR + wide BB + extended above SMA200)
+ */
+export const getScannerGapSetupShortQueryLimitDefault = 25;
+
+export const GetScannerGapSetupShortQueryParams = zod.object({
+  "limit": zod.coerce.number().default(getScannerGapSetupShortQueryLimitDefault)
+})
+
+export const GetScannerGapSetupShortResponse = zod.object({
+  "results": zod.array(zod.object({
+  "ticker": zod.string(),
+  "name": zod.string(),
+  "price": zod.number(),
+  "change": zod.number(),
+  "changePercent": zod.number(),
+  "gapPercent": zod.number(),
+  "atlasScore": zod.number(),
+  "atlasLabel": zod.string(),
+  "bullishProbability": zod.number(),
+  "bearishProbability": zod.number(),
+  "confidenceScore": zod.number(),
+  "direction": zod.string(),
+  "signalStrength": zod.enum(['strong', 'moderate', 'weak']),
+  "sector": zod.string().nullable(),
+  "volume": zod.number(),
+  "relativeVolume": zod.number(),
+  "rsi": zod.number(),
+  "catalysts": zod.array(zod.string())
+})),
+  "progress": zod.object({
+  "done": zod.number(),
+  "total": zod.number()
+}),
+  "complete": zod.boolean()
+})
+
+
+/**
  * @summary Gap-up candidates (open > prev close by ≥2%)
  */
 export const getScannerGapUpQueryLimitDefault = 25;

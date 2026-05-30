@@ -27,6 +27,8 @@ import type {
   GetScannerBreakoutsParams,
   GetScannerGammaSqueezeParams,
   GetScannerGapDownParams,
+  GetScannerGapSetupLongParams,
+  GetScannerGapSetupShortParams,
   GetScannerGapUpParams,
   GetScannerInstitutionalAccumulationParams,
   GetScannerMeanReversionParams,
@@ -1026,6 +1028,174 @@ export function useGetScannerMeanReversion<TData = Awaited<ReturnType<typeof get
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetScannerMeanReversionQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetScannerGapSetupLongUrl = (params?: GetScannerGapSetupLongParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/scanner/gap-setup-long?${stringifiedParams}` : `/api/scanner/gap-setup-long`
+}
+
+/**
+ * @summary Gap setup — long candidates (elevated ATR + wide BB + volume spike, not yet gapping)
+ */
+export const getScannerGapSetupLong = async (params?: GetScannerGapSetupLongParams, options?: RequestInit): Promise<ScannerResponse> => {
+
+  return customFetch<ScannerResponse>(getGetScannerGapSetupLongUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetScannerGapSetupLongQueryKey = (params?: GetScannerGapSetupLongParams,) => {
+    return [
+    `/api/scanner/gap-setup-long`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetScannerGapSetupLongQueryOptions = <TData = Awaited<ReturnType<typeof getScannerGapSetupLong>>, TError = ErrorType<unknown>>(params?: GetScannerGapSetupLongParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getScannerGapSetupLong>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetScannerGapSetupLongQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getScannerGapSetupLong>>> = ({ signal }) => getScannerGapSetupLong(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getScannerGapSetupLong>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetScannerGapSetupLongQueryResult = NonNullable<Awaited<ReturnType<typeof getScannerGapSetupLong>>>
+export type GetScannerGapSetupLongQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Gap setup — long candidates (elevated ATR + wide BB + volume spike, not yet gapping)
+ */
+
+export function useGetScannerGapSetupLong<TData = Awaited<ReturnType<typeof getScannerGapSetupLong>>, TError = ErrorType<unknown>>(
+ params?: GetScannerGapSetupLongParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getScannerGapSetupLong>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetScannerGapSetupLongQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetScannerGapSetupShortUrl = (params?: GetScannerGapSetupShortParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/scanner/gap-setup-short?${stringifiedParams}` : `/api/scanner/gap-setup-short`
+}
+
+/**
+ * @summary Gap setup — short candidates (elevated ATR + wide BB + extended above SMA200)
+ */
+export const getScannerGapSetupShort = async (params?: GetScannerGapSetupShortParams, options?: RequestInit): Promise<ScannerResponse> => {
+
+  return customFetch<ScannerResponse>(getGetScannerGapSetupShortUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetScannerGapSetupShortQueryKey = (params?: GetScannerGapSetupShortParams,) => {
+    return [
+    `/api/scanner/gap-setup-short`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetScannerGapSetupShortQueryOptions = <TData = Awaited<ReturnType<typeof getScannerGapSetupShort>>, TError = ErrorType<unknown>>(params?: GetScannerGapSetupShortParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getScannerGapSetupShort>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetScannerGapSetupShortQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getScannerGapSetupShort>>> = ({ signal }) => getScannerGapSetupShort(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getScannerGapSetupShort>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetScannerGapSetupShortQueryResult = NonNullable<Awaited<ReturnType<typeof getScannerGapSetupShort>>>
+export type GetScannerGapSetupShortQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Gap setup — short candidates (elevated ATR + wide BB + extended above SMA200)
+ */
+
+export function useGetScannerGapSetupShort<TData = Awaited<ReturnType<typeof getScannerGapSetupShort>>, TError = ErrorType<unknown>>(
+ params?: GetScannerGapSetupShortParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getScannerGapSetupShort>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetScannerGapSetupShortQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

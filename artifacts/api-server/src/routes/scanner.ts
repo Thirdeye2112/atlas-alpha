@@ -173,6 +173,78 @@ router.get("/scanner/mean-reversion", (req, res): void => {
   }
 });
 
+// ── Gap Setup (pre-gap precursor alert) ──────────────────────────────────────
+// Based on research findings: ATR% and BB Width are the top predictors for both
+// gap directions. Volume spike the prior day adds a strong second signal.
+// Long setup: elevated volatility environment + volume + not overextended upside.
+// Short setup: same volatility conditions + price extended above SMA200.
+
+router.get("/scanner/gap-setup-long", (req, res): void => {
+  const limit = Math.min(Number(req.query.limit) || 25, 50);
+  try {
+    res.json(scanResponse(
+      a => {
+        const atrPct  = a.volatility.atrPercent;          // % of price, baseline 2.7%, gaps 4.8%
+        const bbWidth = a.volatility.bollingerWidth;       // (upper-lower)/mid, baseline 12.6%, gaps 23.7%
+        const relVol  = a.volume.relativeVolume;           // baseline 1.02x, gaps 1.45x
+        const gap     = getGapPercent(a);                  // exclude stocks already gapping
+        const rsi     = a.momentum.rsi;
+        const vs200   = a.trend.priceVsSma200;             // not massively extended above SMA200
+        return (
+          atrPct  >= 3.2   &&   // elevated volatility (research: 3.5% mean at gap, threshold 3.2)
+          bbWidth >= 15    &&   // wide bands (research: 23.7% mean at gap, threshold 15)
+          relVol  >= 1.2   &&   // prior-day volume elevated (research: 1.45x mean at gap)
+          gap < 2.0        &&   // not already gapping up
+          gap > -5.0       &&   // not in a big gap-down right now
+          rsi < 70         &&   // not overbought
+          vs200 < 30       &&   // not massively extended above SMA200 (gap-down risk)
+          a.atlasScore.direction !== "bearish"  // not in confirmed downtrend
+        );
+      },
+      // Sort: composite of ATR% × relative volume — most "primed" stocks first
+      (a, b) => (b.volatility.atrPercent * b.volume.relativeVolume) -
+                (a.volatility.atrPercent * a.volume.relativeVolume),
+      limit
+    ));
+  } catch (err) {
+    logger.error({ err }, "Scanner gap-setup-long failed");
+    res.json({ results: [], progress: { done: 0, total: 0 }, complete: true });
+  }
+});
+
+router.get("/scanner/gap-setup-short", (req, res): void => {
+  const limit = Math.min(Number(req.query.limit) || 25, 50);
+  try {
+    res.json(scanResponse(
+      a => {
+        const atrPct  = a.volatility.atrPercent;
+        const bbWidth = a.volatility.bollingerWidth;
+        const relVol  = a.volume.relativeVolume;
+        const gap     = getGapPercent(a);
+        const vs200   = a.trend.priceVsSma200;             // +0.64σ effect: gap-downs come from extended stocks
+        const rsi     = a.momentum.rsi;
+        return (
+          atrPct  >= 3.2   &&   // elevated volatility
+          bbWidth >= 15    &&   // wide bands
+          relVol  >= 1.2   &&   // volume elevation
+          gap > -2.0       &&   // not already gapping down
+          gap < 5.0        &&   // not in a big gap-up right now
+          vs200 > 5        &&   // extended above SMA200 (research strongest directional predictor)
+          rsi > 45         &&   // not already sold off
+          a.atlasScore.direction !== "bullish"  // not in confirmed uptrend
+        );
+      },
+      // Sort: most extended above SMA200 with highest ATR (most vulnerable to down-gap)
+      (a, b) => (b.trend.priceVsSma200 * b.volatility.atrPercent) -
+                (a.trend.priceVsSma200 * a.volatility.atrPercent),
+      limit
+    ));
+  } catch (err) {
+    logger.error({ err }, "Scanner gap-setup-short failed");
+    res.json({ results: [], progress: { done: 0, total: 0 }, complete: true });
+  }
+});
+
 router.get("/scanner/gap-up", (req, res): void => {
   const limit = Math.min(Number(req.query.limit) || 25, 50);
   try {
