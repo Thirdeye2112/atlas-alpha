@@ -214,42 +214,44 @@ export default function LightweightChart({
       }
     }
 
-    // ── Extended hours price point ────────────────────────────────────────────
-    // When pre/post market data is available, plot a projected price dot at
-    // the next trading day and draw a dashed horizontal price line across the chart.
+    // ── Extended hours candle ─────────────────────────────────────────────────
+    // Plot a projected candle at the next trading day's slot.
+    // open = last regular-session close, close = extended hours price.
+    // This shows the implied gap clearly without overlapping real bars.
     if (extendedHours && formattedData.length > 0) {
       const lastBar = formattedData[formattedData.length - 1];
       const lastDateStr = toDateString(lastBar.time);
-      // Only show on daily timeframes (date strings, not intraday timestamps)
-      const isDaily = typeof lastBar.time === "string" || String(lastBar.time).length === 10;
-      if (isDaily || typeof lastBar.time === "string") {
+      // Only render on daily-interval charts where bars are YYYY-MM-DD strings
+      if (typeof lastBar.time === "string") {
         const nextDay = nextTradingDay(lastDateStr);
         const isPost = extendedHours.type === "post";
-        const ehColor = isPost ? "#f59e0b" : "#818cf8"; // amber = post, indigo = pre
-        const chgSign = extendedHours.changePercent >= 0 ? "+" : "";
-        const label = `${isPost ? "AH" : "PM"} ${chgSign}${extendedHours.changePercent.toFixed(2)}%`;
+        const baseColor = isPost ? "#f59e0b" : "#818cf8"; // amber = AH, indigo = PM
+        const prevClose = lastBar.close;
+        const ehPrice   = extendedHours.price;
+        const isUp      = ehPrice >= prevClose;
+        // Color the candle green/red for direction clarity, border in theme color
+        const bodyColor = isUp ? "hsl(142 71% 45%)" : "hsl(0 84% 60%)";
 
-        // Dashed horizontal price line spanning the last 2 real bars + next day
-        const ehLineSeries = chart.addSeries(LineSeries, {
-          color: ehColor,
-          lineWidth: 1,
-          lineStyle: LineStyle.Dashed,
-          priceLineVisible: false,
+        const ehSeries = chart.addSeries(CandlestickSeries, {
+          upColor:        bodyColor,
+          downColor:      bodyColor,
+          borderUpColor:  bodyColor,
+          borderDownColor: bodyColor,
+          wickUpColor:    baseColor,
+          wickDownColor:  baseColor,
+          borderVisible:  true,
           lastValueVisible: true,
-          crosshairMarkerVisible: true,
-          crosshairMarkerRadius: 5,
-          title: label,
+          priceLineVisible: false,
+          title: isPost ? "AH" : "PM",
         });
 
-        const prev2Bar = formattedData.length >= 2
-          ? formattedData[formattedData.length - 2]
-          : lastBar;
-
-        ehLineSeries.setData([
-          { time: prev2Bar.time, value: extendedHours.price },
-          { time: lastBar.time,  value: extendedHours.price },
-          { time: nextDay as unknown as UTCTimestamp,       value: extendedHours.price },
-        ]);
+        ehSeries.setData([{
+          time:  nextDay as unknown as UTCTimestamp,
+          open:  prevClose,
+          close: ehPrice,
+          high:  Math.max(prevClose, ehPrice),
+          low:   Math.min(prevClose, ehPrice),
+        }]);
       }
     }
 
