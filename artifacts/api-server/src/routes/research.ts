@@ -22,12 +22,19 @@ router.get("/research/gap-analysis", async (req, res) => {
 });
 
 /**
- * GET /research/run-dynamics?ticker=NVDA&period=5d&interval=5m
+ * GET /research/run-dynamics?ticker=NVDA&period=2y&interval=1h
  *
- * Analyses intraday directional runs on a 5-min (or custom) chart:
+ * Analyses directional price runs on a configurable timeframe:
  * detects momentum runs, measures velocity / distance / retrace time,
  * and computes correlations to determine whether this asset is a
- * momentum or mean-reversion vehicle at the intraday level.
+ * momentum or mean-reversion vehicle at that timeframe.
+ *
+ * Yahoo Finance data limits (hard ceiling):
+ *   1m  → max 7 days
+ *   5m, 15m, 30m → max 60 days
+ *   1h  → max 2 years
+ *   1d  → max 10 years
+ *
  * Results are cached 15 min (matches OHLCV cache).
  */
 router.get("/research/run-dynamics", async (req, res) => {
@@ -35,25 +42,37 @@ router.get("/research/run-dynamics", async (req, res) => {
     ? req.query["ticker"].toUpperCase().trim()
     : null;
 
-  if (!ticker || ticker.length < 1 || ticker.length > 8) {
-    res.status(400).json({ error: "ticker is required (1–8 chars)" });
+  if (!ticker || ticker.length < 1 || ticker.length > 10) {
+    res.status(400).json({ error: "ticker is required (1–10 chars)" });
     return;
   }
 
-  const VALID_PERIODS   = new Set(["1d", "5d", "1mo", "3mo"]);
-  const VALID_INTERVALS = new Set(["1m", "5m", "15m", "30m", "60m"]);
+  // Enforce Yahoo Finance limits: map interval → allowed periods
+  const PERIOD_LIMITS: Record<string, string[]> = {
+    "1m":  ["1d", "5d", "7d"],
+    "5m":  ["1d", "5d", "1mo", "2mo"],
+    "15m": ["5d", "1mo", "2mo"],
+    "30m": ["5d", "1mo", "2mo"],
+    "1h":  ["1mo", "3mo", "6mo", "1y", "2y"],
+    "1d":  ["3mo", "6mo", "1y", "2y", "5y"],
+  };
 
-  const period   = typeof req.query["period"]   === "string" && VALID_PERIODS.has(req.query["period"])
-    ? req.query["period"] : "5d";
-  const interval = typeof req.query["interval"] === "string" && VALID_INTERVALS.has(req.query["interval"])
-    ? req.query["interval"] : "5m";
+  const VALID_INTERVALS = Object.keys(PERIOD_LIMITS);
+
+  const interval = typeof req.query["interval"] === "string" && VALID_INTERVALS.includes(req.query["interval"])
+    ? req.query["interval"]
+    : "1h";
+
+  const allowedPeriods = PERIOD_LIMITS[interval];
+  const rawPeriod = typeof req.query["period"] === "string" ? req.query["period"] : "";
+  const period = allowedPeriods.includes(rawPeriod) ? rawPeriod : allowedPeriods[allowedPeriods.length - 1];
 
   try {
     const result = await runDynamicsAnalysis(ticker, period, interval);
     res.json(result);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    req.log.warn({ ticker, err: msg }, "run-dynamics error");
+    req.log.warn({ ticker, period, interval, err: msg }, "run-dynamics error");
     res.status(500).json({ error: msg });
   }
 });

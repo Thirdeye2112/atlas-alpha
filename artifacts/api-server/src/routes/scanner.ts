@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { getOrStartScanJob } from "../lib/scanJob.js";
 import { calcScannerResult } from "../lib/scoring.js";
+import { getAssetType, isStructurallyDistorted } from "../lib/scannerUniverse.js";
 import { logger } from "../lib/logger.js";
 import type { AnalysisResult } from "../lib/analysisEngine.js";
 
@@ -82,20 +83,25 @@ function getGapPercent(a: AnalysisResult): number {
 }
 
 function toRow(a: AnalysisResult) {
-  return calcScannerResult(
-    a.quote.ticker as string,
-    a.quote.name as string,
-    a.quote.price as number,
-    a.quote.change as number,
-    a.quote.changePercent as number,
-    a.atlasScore,
-    a.volume,
-    a.momentum,
-    a.trend,
-    (a.quote.sector as string | null) ?? null,
-    a.quote.volume as number,
-    getGapPercent(a)
-  );
+  const ticker = a.quote.ticker as string;
+  return {
+    ...calcScannerResult(
+      ticker,
+      a.quote.name as string,
+      a.quote.price as number,
+      a.quote.change as number,
+      a.quote.changePercent as number,
+      a.atlasScore,
+      a.volume,
+      a.momentum,
+      a.trend,
+      (a.quote.sector as string | null) ?? null,
+      a.quote.volume as number,
+      getGapPercent(a)
+    ),
+    assetType: getAssetType(ticker),
+    isDistorted: isStructurallyDistorted(ticker),
+  };
 }
 
 type Filter = (a: AnalysisResult) => boolean;

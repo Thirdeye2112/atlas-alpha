@@ -608,10 +608,14 @@ function CorrRow({ label, r, description }: { label: string; r: number | null; d
   );
 }
 
-function RunsTable({ runs }: { runs: Run[] }) {
+function RunsTable({ runs, interval }: { runs: Run[]; interval: string }) {
   const [showAll, setShowAll] = useState(false);
   const sorted = [...runs].sort((a, b) => b.totalMovePct - a.totalMovePct);
   const visible = showAll ? sorted : sorted.slice(0, 15);
+  const isDaily = interval === "1d";
+  const fmtStart = (t: string) => isDaily
+    ? new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })
+    : new Date(t).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
   return (
     <div className="rounded-lg border border-border bg-card">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
@@ -644,7 +648,9 @@ function RunsTable({ runs }: { runs: Run[] }) {
                   <td className={cn("py-1 px-2 text-right font-mono font-bold tabular-nums", isUp ? "text-success" : "text-destructive")}>
                     {isUp ? "+" : "−"}{r.totalMovePct.toFixed(3)}%
                   </td>
-                  <td className="py-1 px-2 text-right font-mono tabular-nums text-muted-foreground">{r.durationMin}m</td>
+                  <td className="py-1 px-2 text-right font-mono tabular-nums text-muted-foreground">
+                    {fmtDuration(r.durationMin, interval)}
+                  </td>
                   <td className="py-1 px-2 text-right font-mono tabular-nums text-muted-foreground">{(r.vel3BarAvg * 100).toFixed(2)}bps/bar</td>
                   <td className={cn("py-1 px-2 text-right font-mono tabular-nums",
                     r.rvolAtStart >= 2 ? "text-warning" : "text-muted-foreground")}>
@@ -652,10 +658,10 @@ function RunsTable({ runs }: { runs: Run[] }) {
                   </td>
                   <td className={cn("py-1 px-2 text-right font-mono tabular-nums",
                     r.retrace50Min === null ? "text-muted-foreground" : "text-foreground")}>
-                    {r.retrace50Min === null ? "still running" : `${r.retrace50Min}m`}
+                    {fmtRetrace(r.retrace50Min, interval)}
                   </td>
                   <td className="py-1 px-2 text-muted-foreground font-mono text-[10px]">
-                    {new Date(r.startTime).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                    {fmtStart(r.startTime)}
                   </td>
                 </tr>
               );
@@ -678,16 +684,66 @@ function RunsTable({ runs }: { runs: Run[] }) {
 
 const PRESET_TICKERS = ["NVDA", "JPM", "GLD", "AAPL", "TSLA", "SPY", "QQQ", "BTC-USD"];
 
+// Per-interval period options (mirrors Yahoo Finance data limits)
+const INTERVAL_PERIODS: Record<string, { value: string; label: string }[]> = {
+  "1m":  [{ value: "1d",  label: "Today" }, { value: "5d", label: "5 days" }],
+  "5m":  [{ value: "1d",  label: "Today" }, { value: "5d", label: "5 days" }, { value: "1mo", label: "1 month" }, { value: "2mo", label: "2 months" }],
+  "15m": [{ value: "5d",  label: "5 days" }, { value: "1mo", label: "1 month" }, { value: "2mo", label: "2 months" }],
+  "30m": [{ value: "5d",  label: "5 days" }, { value: "1mo", label: "1 month" }, { value: "2mo", label: "2 months" }],
+  "1h":  [{ value: "1mo", label: "1 month" }, { value: "3mo", label: "3 months" }, { value: "6mo", label: "6 months" }, { value: "1y", label: "1 year" }, { value: "2y", label: "2 years" }],
+  "1d":  [{ value: "3mo", label: "3 months" }, { value: "6mo", label: "6 months" }, { value: "1y", label: "1 year" }, { value: "2y", label: "2 years" }, { value: "5y", label: "5 years" }],
+};
+
+const INTERVAL_OPTIONS = [
+  { value: "1m",  label: "1m",  note: "max 7d"  },
+  { value: "5m",  label: "5m",  note: "max 60d" },
+  { value: "15m", label: "15m", note: "max 60d" },
+  { value: "30m", label: "30m", note: "max 60d" },
+  { value: "1h",  label: "1h",  note: "max 2y"  },
+  { value: "1d",  label: "1d",  note: "max 5y"  },
+];
+
+/** Format a retrace time (in minutes) into a human-readable string for the given interval */
+function fmtRetrace(minutes: number | null, interval: string): string {
+  if (minutes === null) return "still running";
+  if (interval === "1d") {
+    const days = minutes / 1440;
+    return days < 1 ? "<1d" : `${days.toFixed(0)}d`;
+  }
+  if (interval === "1h") {
+    const hours = minutes / 60;
+    return hours < 1 ? "<1h" : `${hours.toFixed(1)}h`;
+  }
+  return `${minutes}m`;
+}
+
+/** Format run duration */
+function fmtDuration(minutes: number, interval: string): string {
+  if (interval === "1d") return `${(minutes / 1440).toFixed(0)}d`;
+  if (interval === "1h" || minutes >= 120) return `${(minutes / 60).toFixed(1)}h`;
+  return `${minutes}m`;
+}
+
 function RunDynamicsPanel() {
-  const [ticker, setTicker]   = useState("NVDA");
-  const [input, setInput]     = useState("NVDA");
-  const [period, setPeriod]   = useState("5d");
-  const [enabled, setEnabled] = useState(false);
+  const [ticker,   setTicker]   = useState("NVDA");
+  const [input,    setInput]    = useState("NVDA");
+  const [interval, setInterval] = useState("1h");
+  const [period,   setPeriod]   = useState("2y");
+  const [enabled,  setEnabled]  = useState(false);
+
+  // When interval changes, default to longest available period
+  function handleIntervalChange(iv: string) {
+    setInterval(iv);
+    const opts = INTERVAL_PERIODS[iv] ?? [];
+    setPeriod(opts[opts.length - 1]?.value ?? "5d");
+  }
 
   const { data, isLoading, isFetching, error } = useQuery<RunDynamicsResult>({
-    queryKey: ["run-dynamics", ticker, period],
+    queryKey: ["run-dynamics", ticker, period, interval],
     queryFn: async () => {
-      const res = await fetch(`/api/research/run-dynamics?ticker=${encodeURIComponent(ticker)}&period=${period}&interval=5m`);
+      const res = await fetch(
+        `/api/research/run-dynamics?ticker=${encodeURIComponent(ticker)}&period=${period}&interval=${interval}`
+      );
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
@@ -705,11 +761,14 @@ function RunDynamicsPanel() {
 
   const loading = isLoading || isFetching;
   const corr = data?.correlations;
+  const activeInterval = data?.interval ?? interval;
+  const periodOpts = INTERVAL_PERIODS[interval] ?? [];
 
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-4">
       {/* Controls */}
       <div className="flex items-center gap-2 flex-wrap">
+        {/* Ticker input */}
         <div className="flex items-center gap-1 bg-muted rounded border border-border overflow-hidden">
           <Search className="w-3.5 h-3.5 ml-2 text-muted-foreground shrink-0" />
           <input
@@ -722,7 +781,8 @@ function RunDynamicsPanel() {
           />
         </div>
 
-        <div className="flex items-center gap-1">
+        {/* Preset tickers */}
+        <div className="flex items-center gap-1 flex-wrap">
           {PRESET_TICKERS.map(t => (
             <button
               key={t}
@@ -739,14 +799,35 @@ function RunDynamicsPanel() {
           ))}
         </div>
 
+        {/* Interval selector */}
+        <div className="flex items-center gap-1 ml-auto">
+          <span className="text-xs text-muted-foreground">Interval:</span>
+          {INTERVAL_OPTIONS.map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => handleIntervalChange(opt.value)}
+              title={opt.note}
+              className={cn(
+                "text-xs px-2 py-1 rounded border transition-colors font-mono",
+                interval === opt.value
+                  ? "bg-primary/20 border-primary/50 text-primary"
+                  : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Period selector */}
         <select
           value={period}
           onChange={e => setPeriod(e.target.value)}
-          className="text-xs bg-muted border border-border rounded px-2 py-1.5 text-foreground focus:outline-none ml-auto"
+          className="text-xs bg-muted border border-border rounded px-2 py-1.5 text-foreground focus:outline-none"
         >
-          <option value="1d">1 day (today)</option>
-          <option value="5d">5 days</option>
-          <option value="1mo">1 month</option>
+          {periodOpts.map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
         </select>
 
         <button
@@ -762,27 +843,33 @@ function RunDynamicsPanel() {
         </button>
       </div>
 
+      {/* Data-limit note */}
+      <div className="flex items-center gap-2 text-[10px] text-muted-foreground/60 -mt-2">
+        <span>Yahoo Finance limits: 1m→7d · 5m/15m/30m→60d · 1h→2y · 1d→5y</span>
+        <span className="text-primary/60">· Recommended for 2-year study: 1h interval</span>
+      </div>
+
       {/* Empty state */}
       {!enabled && !data && (
         <div className="flex flex-col items-center justify-center h-64 text-center gap-4">
           <Activity className="w-12 h-12 text-muted-foreground/30" />
           <div>
-            <p className="text-sm font-semibold text-muted-foreground">Intraday Run Dynamics</p>
+            <p className="text-sm font-semibold text-muted-foreground">Multi-Timeframe Run Dynamics</p>
             <p className="text-xs text-muted-foreground/70 mt-1 max-w-lg">
-              Detects all directional price runs on a 5-min chart, then measures velocity, distance,
-              and time-to-50%-retrace for each. Computes Pearson correlations to determine whether
-              this asset is momentum-driven (bigger moves sustain longer) or mean-reversion-driven
-              (fast spikes get faded). Select a ticker above to begin.
+              Detects every directional price run at any timeframe (1m → daily), measures initial
+              velocity, total distance, and time-to-50%-retrace, then computes Pearson correlations
+              to answer: does a faster or bigger move sustain longer, or retrace faster? Works on
+              2 years of 1h bars or 5 years of daily bars for deep pattern studies.
             </p>
           </div>
           <div className="flex gap-2">
-            {["NVDA", "JPM", "GLD"].map(t => (
+            {[["NVDA","1h","2y"],["JPM","1h","2y"],["GLD","1h","2y"]].map(([t, iv, p]) => (
               <button
                 key={t}
-                onClick={() => { setInput(t); setTicker(t); setEnabled(true); }}
+                onClick={() => { setInput(t); setTicker(t); setInterval(iv); setPeriod(p); setEnabled(true); }}
                 className="text-sm px-4 py-2 rounded bg-muted border border-border text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors font-mono"
               >
-                {t}
+                {t} · {iv} · {p}
               </button>
             ))}
           </div>
@@ -793,7 +880,10 @@ function RunDynamicsPanel() {
       {loading && !data && (
         <div className="flex flex-col items-center justify-center h-48 gap-3">
           <RefreshCw className="w-7 h-7 text-primary animate-spin" />
-          <p className="text-sm text-muted-foreground">Fetching 5-min bars and detecting runs…</p>
+          <p className="text-sm text-muted-foreground">
+            Fetching {interval} bars ({period}) and detecting runs…
+            {(interval === "1h" || interval === "1d") && " May take ~5s for long lookbacks."}
+          </p>
         </div>
       )}
 
@@ -893,7 +983,7 @@ function RunDynamicsPanel() {
           </div>
 
           {/* Run table */}
-          <RunsTable runs={data.runs} />
+          <RunsTable runs={data.runs} interval={activeInterval} />
         </>
       )}
     </div>

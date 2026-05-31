@@ -2,13 +2,27 @@ import { fetchOHLCV, type OHLCVBar } from "./marketData.js";
 import { ohlcvCache } from "./cache.js";
 import { logger } from "./logger.js";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ─── Per-interval config ──────────────────────────────────────────────────────
+// Thresholds scale with bar size: a "significant" first-bar move on a daily chart
+// (~0.8%) means something very different from one on a 1-min chart (~0.06%).
 
-const MIN_FIRST_BAR_PCT = 0.12;   // minimum first-bar move (%) to start tracking a run
-const RETRACE_THRESHOLD  = 0.50;  // fraction of peak move that defines "run over"
-const MAX_RUN_BARS       = 78;    // 6.5-hour trading day in 5-min bars
-const MIN_RUN_MOVE_PCT   = 0.20;  // minimum peak-to-trough distance to record a run
-const INTERVAL_MINUTES   = 5;     // assumed bar width in minutes
+interface IntervalConfig {
+  minutes:         number;  // bar width in minutes
+  minFirstBarPct:  number;  // min |first-bar return| % to start tracking a run
+  minRunMovePct:   number;  // min peak-to-start move % to record a run
+  maxRunBars:      number;  // cap on run length (prevents runs spanning days on intraday)
+}
+
+const INTERVAL_CONFIG: Record<string, IntervalConfig> = {
+  "1m":  { minutes: 1,    minFirstBarPct: 0.06, minRunMovePct: 0.10, maxRunBars: 60  },
+  "5m":  { minutes: 5,    minFirstBarPct: 0.12, minRunMovePct: 0.20, maxRunBars: 78  },
+  "15m": { minutes: 15,   minFirstBarPct: 0.20, minRunMovePct: 0.35, maxRunBars: 26  },
+  "30m": { minutes: 30,   minFirstBarPct: 0.28, minRunMovePct: 0.45, maxRunBars: 13  },
+  "1h":  { minutes: 60,   minFirstBarPct: 0.40, minRunMovePct: 0.60, maxRunBars: 13  },
+  "1d":  { minutes: 1440, minFirstBarPct: 0.80, minRunMovePct: 1.00, maxRunBars: 20  },
+};
+
+const RETRACE_THRESHOLD = 0.50;  // fraction of peak move that defines "run over" (all intervals)
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -154,8 +168,10 @@ function deriveInsight(
 
 // ─── Run detection ────────────────────────────────────────────────────────────
 
-function detectRuns(bars: OHLCVBar[], intervalMin = INTERVAL_MINUTES): Run[] {
+function detectRuns(bars: OHLCVBar[], cfg: IntervalConfig): Run[] {
   if (bars.length < 10) return [];
+
+  const { minutes: intervalMin, minFirstBarPct, minRunMovePct, maxRunBars } = cfg;
 
   const closes  = bars.map(b => b.close as number);
   const volumes = bars.map(b => b.volume as number);
@@ -171,7 +187,7 @@ function detectRuns(bars: OHLCVBar[], intervalMin = INTERVAL_MINUTES): Run[] {
 
   while (i < bars.length - 5) {
     const r0 = returns[i + 1] ?? 0;
-    if (Math.abs(r0) < MIN_FIRST_BAR_PCT) { i++; continue; }
+    if (Math.abs(r0) < minFirstBarPct) { i++; continue; }
 
     const direction = r0 > 0 ? 1 : -1;
     const startPrice = closes[i];
@@ -179,7 +195,7 @@ function detectRuns(bars: OHLCVBar[], intervalMin = INTERVAL_MINUTES): Run[] {
     let peakIdx = i;
 
     let j = i + 1;
-    while (j < bars.length && j - i <= MAX_RUN_BARS) {
+    while (j < bars.length && j - i <= maxRunBars) {
       const price     = closes[j];
       const movePct   = ((price - startPrice) / startPrice) * 100 * direction;
       const peakMove  = ((peakPrice - startPrice) / startPrice) * 100 * direction;
@@ -189,7 +205,7 @@ function detectRuns(bars: OHLCVBar[], intervalMin = INTERVAL_MINUTES): Run[] {
       const absPeak = Math.abs((peakPrice - startPrice) / startPrice * 100);
       const retracedPct = absPeak > 0 ? (absPeak - movePct * direction) / absPeak : 0;
 
-      if (retracedPct >= RETRACE_THRESHOLD && absPeak >= MIN_RUN_MOVE_PCT) {
+      if (retracedPct >= RETRACE_THRESHOLD && absPeak >= minRunMovePct) {
         break;
       }
       j++;
@@ -199,17 +215,17 @@ function detectRuns(bars: OHLCVBar[], intervalMin = INTERVAL_MINUTES): Run[] {
     const totalMovePct = Math.abs(((peakPrice - startPrice) / startPrice) * 100);
     const totalBars    = peakIdx - i;
 
-    if (totalMovePct < MIN_RUN_MOVE_PCT || totalBars < 2) { i++; continue; }
+    if (totalMovePct < minRunMovePct || totalBars < 2) { i++; continue; }
 
     // Velocity: avg |return| over first 3 bars
     const vel3 = [1, 2, 3]
       .map(k => Math.abs(returns[i + k] ?? 0))
       .reduce((a, b) => a + b, 0) / 3;
 
-    // Time to 50% retrace from peak
+    // Time to 50% retrace from peak (search up to 2× maxRunBars ahead)
     const retrace50Target = totalMovePct * RETRACE_THRESHOLD;
     let retrace50Bars: number | null = null;
-    for (let k = peakIdx + 1; k < Math.min(peakIdx + MAX_RUN_BARS, bars.length); k++) {
+    for (let k = peakIdx + 1; k < Math.min(peakIdx + maxRunBars * 2, bars.length); k++) {
       const pullback = Math.abs(((closes[k] - peakPrice) / peakPrice) * 100);
       if (pullback >= retrace50Target) {
         retrace50Bars = k - peakIdx;
@@ -267,7 +283,8 @@ export async function runDynamicsAnalysis(
     throw new Error(`Insufficient intraday data for ${ticker} (${bars.length} bars)`);
   }
 
-  const runs = detectRuns(bars, INTERVAL_MINUTES);
+  const cfg  = INTERVAL_CONFIG[interval] ?? INTERVAL_CONFIG["5m"];
+  const runs = detectRuns(bars, cfg);
   const upRuns   = runs.filter(r => r.direction === "up");
   const downRuns = runs.filter(r => r.direction === "down");
 

@@ -632,6 +632,159 @@ function ScoreTimelineChart({ data, horizon, rankIC }: {
   );
 }
 
+// ── Cross-Sectional IC Card ────────────────────────────────────────────────────
+
+interface CrossSectionalICResult {
+  status: "accumulating" | "partial" | "complete";
+  horizon: number;
+  crossSections: number;
+  meanCrossIC: number | null;
+  tStat: number | null;
+  positiveRate: number | null;
+  icTimeSeries: Array<{ date: string; ic: number; n: number }>;
+  message?: string;
+}
+
+function CrossSectionalICCard() {
+  const [data, setData] = useState<CrossSectionalICResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [horizon, setHorizon] = useState(5);
+
+  const load = useCallback(async (h: number) => {
+    setLoading(true); setError(null);
+    try {
+      const res = await fetch(`/api/backtest/cross-sectional?horizon=${h}`);
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? `HTTP ${res.status}`); }
+      setData(await res.json());
+    } catch (e: unknown) {
+      if (e instanceof Error) setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(horizon); }, [horizon]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const maxAbsIC = data ? Math.max(...data.icTimeSeries.map(d => Math.abs(d.ic)), 0.01) : 0.01;
+
+  return (
+    <div className="mx-6 mt-4 p-4 bg-card/30 border border-border rounded space-y-3">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-mono font-bold text-muted-foreground tracking-wider">
+            CROSS-SECTIONAL IC — UNIVERSE-WIDE
+          </span>
+          {data && (
+            <span className={cn(
+              "text-[9px] font-bold px-1.5 py-0.5 rounded font-mono",
+              data.status === "complete" ? "bg-emerald-500/20 text-emerald-400" :
+              data.status === "partial"  ? "bg-amber-500/20 text-amber-400" :
+              "bg-zinc-700/40 text-muted-foreground"
+            )}>
+              {data.status.toUpperCase()} · {data.crossSections} dates
+            </span>
+          )}
+        </div>
+        <div className="flex gap-1">
+          {([1, 5, 10] as const).map(h => (
+            <button key={h} onClick={() => setHorizon(h)}
+              className={cn("px-2 py-0.5 text-[10px] font-mono border rounded transition-colors",
+                horizon === h
+                  ? "border-primary text-primary bg-primary/10"
+                  : "border-border text-muted-foreground hover:border-foreground"
+              )}
+            >{h}D</button>
+          ))}
+        </div>
+      </div>
+
+      {loading && (
+        <div className="text-xs font-mono text-muted-foreground animate-pulse">
+          Fetching cross-sectional IC from signal_log…
+        </div>
+      )}
+      {error && (
+        <div className="text-xs font-mono text-destructive">{error}</div>
+      )}
+      {data && !loading && (
+        <>
+          {data.status === "accumulating" ? (
+            <div className="text-xs font-mono text-muted-foreground/70">
+              {data.message ?? "Accumulating signal snapshots — cross-sectional IC requires ≥5 scan dates."}
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-3">
+              <div className={cn("p-2.5 rounded border border-border", icBgColor(data.meanCrossIC ?? 0))}>
+                <div className="text-[10px] text-muted-foreground font-mono mb-1">MEAN CROSS-IC ({data.horizon}D)</div>
+                <div className={cn("text-xl font-bold font-mono", icColor(data.meanCrossIC ?? 0))}>
+                  {data.meanCrossIC != null ? ((data.meanCrossIC >= 0 ? "+" : "") + data.meanCrossIC.toFixed(3)) : "—"}
+                </div>
+                <div className="text-[10px] font-mono mt-0.5 text-muted-foreground">
+                  {data.meanCrossIC != null ? icLabel(Math.abs(data.meanCrossIC)).toUpperCase() : ""}
+                </div>
+              </div>
+              <div className="p-2.5 rounded border border-border bg-card/20">
+                <div className="text-[10px] text-muted-foreground font-mono mb-1">t-STATISTIC</div>
+                <div className={cn("text-xl font-bold font-mono",
+                  data.tStat == null ? "text-muted-foreground" :
+                  Math.abs(data.tStat) >= 2.0 ? "text-emerald-400" :
+                  Math.abs(data.tStat) >= 1.65 ? "text-amber-400" : "text-muted-foreground"
+                )}>
+                  {data.tStat != null ? ((data.tStat >= 0 ? "+" : "") + data.tStat.toFixed(2)) : "—"}
+                </div>
+                <div className="text-[10px] font-mono mt-0.5 text-muted-foreground">
+                  {data.tStat != null && Math.abs(data.tStat) >= 1.65 ? "SIG" : "N.S."}
+                </div>
+              </div>
+              <div className="p-2.5 rounded border border-border bg-card/20">
+                <div className="text-[10px] text-muted-foreground font-mono mb-1">POSITIVE IC RATE</div>
+                <div className={cn("text-xl font-bold font-mono",
+                  data.positiveRate == null ? "text-muted-foreground" :
+                  data.positiveRate >= 60 ? "text-emerald-400" :
+                  data.positiveRate >= 50 ? "text-amber-400" : "text-red-400"
+                )}>
+                  {data.positiveRate != null ? data.positiveRate.toFixed(0) + "%" : "—"}
+                </div>
+                <div className="text-[10px] font-mono mt-0.5 text-muted-foreground">
+                  of {data.crossSections} dates
+                </div>
+              </div>
+            </div>
+          )}
+
+          {data.icTimeSeries.length >= 3 && (
+            <div className="mt-2">
+              <div className="text-[9px] font-mono text-muted-foreground/50 mb-1">IC per scan date</div>
+              <div className="flex items-end gap-0.5 h-10">
+                {data.icTimeSeries.map(pt => {
+                  const h = Math.abs(pt.ic) / maxAbsIC * 100;
+                  const pos = pt.ic >= 0;
+                  return (
+                    <div key={pt.date} title={`${pt.date}: IC=${pt.ic.toFixed(3)} (n=${pt.n})`}
+                      className="flex-1 flex flex-col justify-end cursor-help"
+                      style={{ height: "100%" }}
+                    >
+                      <div
+                        className={cn("rounded-sm transition-all", pos ? "bg-emerald-500/60" : "bg-red-500/60")}
+                        style={{ height: `${h}%`, minHeight: 2 }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex justify-between text-[8px] font-mono text-muted-foreground/40 mt-0.5">
+                <span>{data.icTimeSeries[0]?.date.slice(5)}</span>
+                <span>{data.icTimeSeries[data.icTimeSeries.length - 1]?.date.slice(5)}</span>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function BacktestLab() {
@@ -733,6 +886,9 @@ export default function BacktestLab() {
           </div>
         </div>
       </div>
+
+      {/* ── Universe-wide cross-sectional IC ── */}
+      <CrossSectionalICCard />
 
       {error && (
         <div className="mx-6 mt-4 p-3 bg-destructive/10 border border-destructive/30 rounded text-xs font-mono text-destructive">

@@ -126,6 +126,8 @@ function ScannerTable({
   const data: ScannerResult[] = response?.results ?? [];
   const complete = response?.complete ?? false;
   const progress = response?.progress;
+  // Check if any structurally-distorted instrument (leveraged/volatility ETF) is in results
+  const hasDistorted = (data as Array<ScannerResult & { isDistorted?: boolean }>).some(r => r.isDistorted);
 
   const tickers = useMemo(() => data.map(r => r.ticker), [data]);
 
@@ -272,6 +274,14 @@ function ScannerTable({
         </div>
       )}
 
+      {/* Distorted ETF disclaimer — shown when leveraged/volatility ETFs appear in results */}
+      {hasDistorted && (
+        <div className="px-4 py-2 border-b border-warning/20 bg-warning/5 text-[10px] font-mono text-warning/80 flex items-center gap-2">
+          <span className="font-bold text-warning shrink-0">⚠ LEV/VIX PRODUCTS</span>
+          <span>Results include leveraged or VIX-futures ETFs (marked LEV/VIX). These have structural daily-reset decay — Atlas Alpha scores reflect short-term momentum only. Not suitable for multi-day holds.</span>
+        </div>
+      )}
+
       {data.length === 0 && complete ? (
         <div className="p-8 text-center text-muted-foreground font-mono text-sm">
           NO RESULTS FOUND FOR CURRENT CRITERIA
@@ -300,9 +310,23 @@ function ScannerTable({
               return (
                 <tr key={row.ticker} className="hover:bg-muted/30 transition-colors cursor-pointer">
                   <td className="px-3 py-2">
-                    <Link href={`/?ticker=${row.ticker}`} className="text-primary font-bold hover:underline">
-                      {row.ticker}
-                    </Link>
+                    <div className="flex items-center gap-1.5">
+                      <Link href={`/?ticker=${row.ticker}`} className="text-primary font-bold hover:underline">
+                        {row.ticker}
+                      </Link>
+                      {(row as ScannerResult & { isDistorted?: boolean; assetType?: string }).isDistorted && (
+                        <span
+                          title={
+                            (row as any).assetType === "volatility-etf"
+                              ? "VIX futures — extreme contango decay"
+                              : "Leveraged daily-reset — structural decay"
+                          }
+                          className="text-[8px] font-bold px-1 rounded bg-warning/20 text-warning border border-warning/30 leading-4 cursor-help"
+                        >
+                          {(row as any).assetType === "volatility-etf" ? "VIX" : "LEV"}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-3 py-2 text-muted-foreground truncate max-w-[180px]">{row.name}</td>
                   <td className="px-3 py-2 text-right">{formatCurrency(row.price)}</td>
