@@ -64,10 +64,10 @@ router.get("/backtest/cross-sectional", async (req, res): Promise<void> => {
   try {
     // Count distinct scan dates (each scanner run generates ~373 rows at same UTC day)
     const qr = await db.execute<{ scan_date: string; ticker_count: string }>(sql`
-      SELECT DATE(created_at AT TIME ZONE 'UTC') AS scan_date,
+      SELECT DATE(logged_at AT TIME ZONE 'UTC') AS scan_date,
              COUNT(*)::text AS ticker_count
       FROM signal_log
-      GROUP BY DATE(created_at AT TIME ZONE 'UTC')
+      GROUP BY DATE(logged_at AT TIME ZONE 'UTC')
       ORDER BY scan_date DESC
       LIMIT 60
     `);
