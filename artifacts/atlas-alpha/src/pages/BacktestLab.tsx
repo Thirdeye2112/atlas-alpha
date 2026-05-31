@@ -8,17 +8,26 @@ import { cn } from "@/lib/utils";
 interface CatIC   { trend: number; momentum: number; volume: number; relativeStrength: number; regime: number; }
 interface Weights { trend: number; momentum: number; volume: number; relativeStrength: number; regime: number; }
 
+interface RegimeIC {
+  riskOn: number | null; riskOnN: number;
+  neutral: number | null; neutralN: number;
+  riskOff: number | null; riskOffN: number;
+}
+
 interface BacktestResult {
   ticker: string; horizon: number;
   marketCap: number | null; marketCapBucket: string; marketCapNote: string;
+  isDistorted: boolean; assetType: string;
   ic: number; icRating: string;
   rankIC: number; rankICRating: string; icTStat: number;
   totalObservations: number;
   calibratedSlope: number; calibratedIntercept: number;
   slippageBps: number; brierScore: number | null;
   brierScoreCI: { low: number; high: number } | null;
+  brierIsOos: boolean; winsorThresholdPct: number;
   inSampleIC: number; outOfSampleIC: number; icDegradation: number;
   oosPeriods: Array<{ label: string; start: string; end: string; ic: number; n: number }>;
+  regimeIC: RegimeIC;
   categoryIC: CatIC; optimalWeights: Weights | null; currentWeights: Weights;
   bull: { count: number; hitRate: number | null; hitRateNet: number | null; avgReturn: number | null };
   neutral: { count: number; hitRate: number | null; hitRateNet: number | null; avgReturn: number | null };
@@ -46,6 +55,10 @@ const WEIGHT_LABELS: Array<[keyof Weights, string]> = [
   ["relativeStrength", "REL STR"], ["regime", "REGIME"],
 ];
 const PAGE_SIZE = 30;
+
+function icLabel(absIC: number): string {
+  return absIC >= 0.10 ? "strong" : absIC >= 0.05 ? "moderate" : absIC >= 0.02 ? "weak" : "noise";
+}
 
 function icColor(v: number) {
   if (v >= 0.10) return "text-emerald-400";
@@ -83,16 +96,19 @@ function fmtRet(v: number | null) { return v === null ? "—" : (v >= 0 ? "+" : 
 
 // ── IC Horizon Bar ─────────────────────────────────────────────────────────────
 
-function HorizonBar({ data }: { data: MultiHorizon[] }) {
+function HorizonBar({ data, optimalHorizon }: { data: MultiHorizon[]; optimalHorizon?: number | null }) {
   const max = Math.max(...data.map(d => Math.abs(d.rankIC)), 0.01);
   return (
     <div className="space-y-1.5">
       {data.map(d => {
         const pct = Math.abs(d.rankIC) / max * 100;
         const pos = d.rankIC >= 0;
+        const isOptimal = optimalHorizon != null && d.horizon === optimalHorizon;
         return (
           <div key={d.horizon} className="flex items-center gap-2">
-            <span className="text-xs font-mono text-muted-foreground w-5">{d.horizon}D</span>
+            <span className={cn("text-xs font-mono w-5", isOptimal ? "text-primary font-bold" : "text-muted-foreground")}>
+              {d.horizon}D
+            </span>
             <div className="flex-1 h-4 bg-zinc-800 rounded overflow-hidden relative">
               <div
                 className={cn("h-full rounded transition-all", pos ? "bg-emerald-500/40" : "bg-red-500/40")}
@@ -105,6 +121,11 @@ function HorizonBar({ data }: { data: MultiHorizon[] }) {
             <span className="text-xs font-mono text-muted-foreground w-20">
               {d.rankICRating} {d.icTStat !== 0 ? `t=${d.icTStat.toFixed(2)}` : ""}
             </span>
+            {isOptimal && (
+              <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-primary/15 text-primary border border-primary/30">
+                BEST
+              </span>
+            )}
           </div>
         );
       })}
@@ -621,6 +642,7 @@ export default function BacktestLab() {
   const [horizon, setHorizon] = useState<(typeof HORIZONS)[number]>(10);
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [multiData, setMultiData] = useState<MultiHorizon[] | null>(null);
+  const [multiOptimalHorizon, setMultiOptimalHorizon] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -641,6 +663,7 @@ export default function BacktestLab() {
       if (multiRes.ok) {
         const multi = await multiRes.json();
         setMultiData(multi.horizons);
+        setMultiOptimalHorizon(multi.optimalHorizon ?? null);
       }
     } catch (e: unknown) {
       if (e instanceof Error && e.name !== "AbortError") setError(e.message);
@@ -782,6 +805,16 @@ export default function BacktestLab() {
             </div>
           )}
 
+          {result.isDistorted && (
+            <div className="p-3 bg-red-500/10 border border-red-500/30 rounded text-xs font-mono text-red-300 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>
+                <strong>{result.ticker}</strong> is a <strong>{result.assetType}</strong> — structurally distorted by daily rebalancing or roll decay.
+                IC and calibrated probability figures may not be meaningful. Atlas Score is designed for equities and standard ETFs.
+              </span>
+            </div>
+          )}
+
           {/* ── Score + Return Timeline Chart ── */}
           <div className="p-4 bg-card/30 border border-border rounded space-y-2">
             <div className="flex items-center justify-between">
@@ -852,16 +885,73 @@ export default function BacktestLab() {
             </div>
           </div>
 
+          {/* ── Regime-Conditioned IC ── */}
+          {result.regimeIC && (
+            <div className="p-4 bg-card/30 border border-border rounded space-y-3">
+              <div className="text-xs font-mono font-bold text-muted-foreground tracking-wider">
+                REGIME-CONDITIONED IC — signal quality by market environment
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                {([
+                  { label: "RISK ON",  ic: result.regimeIC.riskOn,  n: result.regimeIC.riskOnN,  color: "emerald" },
+                  { label: "NEUTRAL",  ic: result.regimeIC.neutral,  n: result.regimeIC.neutralN,  color: "zinc" },
+                  { label: "RISK OFF", ic: result.regimeIC.riskOff, n: result.regimeIC.riskOffN, color: "red" },
+                ] as const).map(({ label, ic, n, color }) => (
+                  <div key={label} className={cn("bg-card/50 border rounded p-3",
+                    color === "emerald" ? "border-emerald-500/20" :
+                    color === "red"     ? "border-red-500/20" : "border-border"
+                  )}>
+                    <div className="text-xs text-muted-foreground font-mono mb-1">{label}</div>
+                    {ic !== null ? (
+                      <>
+                        <div className={cn("text-xl font-bold font-mono", icColor(ic))}>
+                          {ic >= 0 ? "+" : ""}{ic.toFixed(3)}
+                        </div>
+                        <div className="text-xs font-mono text-muted-foreground mt-0.5">
+                          {icLabel(Math.abs(ic))} · n={n}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="text-xl font-bold font-mono text-muted-foreground/40">—</div>
+                        <div className="text-xs font-mono text-muted-foreground mt-0.5">n={n} (need ≥10)</div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="text-xs text-muted-foreground font-mono">
+                IC split by market regime at each bar. A large spread between RISK ON and RISK OFF IC indicates the signal is regime-dependent.
+                {result.regimeIC.riskOn !== null && result.regimeIC.riskOff !== null && (
+                  <span className="ml-1">
+                    Regime spread: {Math.abs(result.regimeIC.riskOn - result.regimeIC.riskOff).toFixed(3)}
+                    {Math.abs(result.regimeIC.riskOn - result.regimeIC.riskOff) >= 0.05
+                      ? " — significant regime sensitivity."
+                      : " — regime-stable signal."}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* ── Horizon Progression + Score Buckets ── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {multiData && (
               <div className="p-4 bg-card/30 border border-border rounded space-y-3">
-                <div className="text-xs font-mono font-bold text-muted-foreground tracking-wider">
-                  IC BY HORIZON — signal strengthens with time
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-mono font-bold text-muted-foreground tracking-wider">
+                    IC BY HORIZON — signal strengthens with time
+                  </div>
+                  {multiOptimalHorizon && (
+                    <span className="text-xs font-mono px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/30">
+                      OPTIMAL: {multiOptimalHorizon}D
+                    </span>
+                  )}
                 </div>
-                <HorizonBar data={multiData} />
+                <HorizonBar data={multiData} optimalHorizon={multiOptimalHorizon} />
                 <div className="text-xs text-muted-foreground font-mono">
-                  Score predicts {Math.abs(multiData[multiData.length - 1]?.rankIC ?? 0) > Math.abs(multiData[0]?.rankIC ?? 0) ? "longer" : "shorter"} holding periods better
+                  Score predicts {Math.abs(multiData[multiData.length - 1]?.rankIC ?? 0) > Math.abs(multiData[0]?.rankIC ?? 0) ? "longer" : "shorter"} holding periods better.
+                  {multiOptimalHorizon && ` Run the backtest at ${multiOptimalHorizon}D for the strongest signal.`}
                 </div>
               </div>
             )}
@@ -963,8 +1053,17 @@ export default function BacktestLab() {
                       </span>
                     )}
                     <span className="text-muted-foreground/50 text-xs">(lower = better; 0.25 = coin flip)</span>
+                    {result.brierIsOos && (
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400/80 border border-emerald-500/20 font-mono">
+                        OOS only
+                      </span>
+                    )}
                   </div>
                 )}
+                <div className="text-muted-foreground/50 text-xs font-mono">
+                  Calibration fit on first ~1Y (IS). Brier evaluated on second ~1Y (OOS) — no data leakage.
+                  {result.winsorThresholdPct && ` IC computed on p${Math.round(result.winsorThresholdPct*100)}/p${Math.round((1-result.winsorThresholdPct)*100)} winsorized returns.`}
+                </div>
                 <div className="grid grid-cols-3 gap-1 mt-1">
                   {[30, 50, 70].map(s => {
                     const z = Math.max(-15, Math.min(15, result.calibratedSlope * s + result.calibratedIntercept));

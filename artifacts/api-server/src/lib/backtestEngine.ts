@@ -6,6 +6,7 @@ import {
 import { calcAtlasScore } from "./scoring.js";
 import { calibrationStore } from "./calibrationStore.js";
 import { logger } from "./logger.js";
+import { isStructurallyDistorted, getAssetType } from "./scannerUniverse.js";
 
 // ── Stat helpers ──────────────────────────────────────────────────────────────
 
@@ -21,6 +22,18 @@ function rank(arr: number[]): number[] {
     i = j + 1;
   }
   return ranks;
+}
+
+/**
+ * Winsorize array at given tail percentile (default p5/p95).
+ * Used only for IC computation — raw returns are kept for display.
+ */
+function winsorize(arr: number[], tailPct: number = 0.05): number[] {
+  if (arr.length < 4) return arr;
+  const sorted = [...arr].sort((a, b) => a - b);
+  const lo = sorted[Math.floor(sorted.length * tailPct)] ?? sorted[0]!;
+  const hi = sorted[Math.floor(sorted.length * (1 - tailPct))] ?? sorted[sorted.length - 1]!;
+  return arr.map(v => Math.max(lo, Math.min(hi, v)));
 }
 
 function pearsonIC(xs: number[], ys: number[]): number {
@@ -125,15 +138,21 @@ const CAP_NOTES: Record<string, string> = {
   unknown: "Market cap unknown — IC interpretation depends on ticker type.",
 };
 
+type RegimeBucket = "risk_on" | "neutral" | "risk_off";
+
 interface DataPoint {
   date: string; score: number; fwdReturn: number;
   trendScore: number; momentumScore: number; volumeScore: number;
   rsScore: number; regimeScore: number;
+  regimeBucket: RegimeBucket;
 }
 
 // Assumed round-trip execution cost in basis points (5bps = 0.05%)
 const SLIPPAGE_BPS = 5;
 const SLIPPAGE_PCT = SLIPPAGE_BPS / 100;
+
+// Winsorization percentile used for IC computation (p5/p95)
+const WINSOR_PCT = 0.05;
 
 export interface BacktestOutput {
   ticker: string;
@@ -141,6 +160,8 @@ export interface BacktestOutput {
   marketCap: number | null;
   marketCapBucket: string;
   marketCapNote: string;
+  isDistorted: boolean;
+  assetType: string;
   ic: number;
   icRating: string;
   rankIC: number;
@@ -152,10 +173,17 @@ export interface BacktestOutput {
   slippageBps: number;
   brierScore: number | null;
   brierScoreCI: { low: number; high: number } | null;
+  brierIsOos: boolean;
+  winsorThresholdPct: number;
   inSampleIC: number;
   outOfSampleIC: number;
   icDegradation: number;
   oosPeriods: Array<{ label: string; start: string; end: string; ic: number; n: number }>;
+  regimeIC: {
+    riskOn:   number | null; riskOnN:  number;
+    neutral:  number | null; neutralN: number;
+    riskOff:  number | null; riskOffN: number;
+  };
   categoryIC: { trend: number; momentum: number; volume: number; relativeStrength: number; regime: number };
   optimalWeights: { trend: number; momentum: number; volume: number; relativeStrength: number; regime: number } | null;
   currentWeights: { trend: number; momentum: number; volume: number; relativeStrength: number; regime: number };
@@ -206,9 +234,12 @@ export async function runBacktest(ticker: string, horizon: number): Promise<Back
     const exhaustion = calcExhaustion(slice, momentum, volume, trend, volatility);
     const atlas      = calcAtlasScore(trend, momentum, volume, options, rs, regime.regimeScore, volatility.expectedMovePercent, exhaustion);
 
-    const entry    = bars[i].close;
-    const exit     = bars[i + horizon]?.close ?? entry;
+    const entry     = bars[i].close;
+    const exit      = bars[i + horizon]?.close ?? entry;
     const fwdReturn = (exit / entry - 1) * 100;
+
+    const regimeBucket: RegimeBucket =
+      regime.regimeScore >= 60 ? "risk_on" : regime.regimeScore >= 40 ? "neutral" : "risk_off";
 
     dataPoints.push({
       date: bars[i].time as string,
@@ -219,6 +250,7 @@ export async function runBacktest(ticker: string, horizon: number): Promise<Back
       volumeScore:   atlas.volumeScore,
       rsScore:       atlas.relativeStrengthScore,
       regimeScore:   atlas.marketRegimeScore,
+      regimeBucket,
     });
   }
 
@@ -226,36 +258,58 @@ export async function runBacktest(ticker: string, horizon: number): Promise<Back
   const returns = dataPoints.map(d => d.fwdReturn);
   const n = dataPoints.length;
 
+  // ── Winsorize returns for IC computation only (p5/p95) ────────────────────
+  // Raw returns are kept in dataPoints for display (scatter, timeline, deciles).
+  const winsorizedReturns = winsorize(returns, WINSOR_PCT);
+
   // ── IS / OOS split ────────────────────────────────────────────────────────
   // Strict temporal split: first half = in-sample, second half = out-of-sample.
-  const splitIdx    = Math.floor(n / 2);
-  const isPoints    = dataPoints.slice(0, splitIdx);
-  const oosPoints   = dataPoints.slice(splitIdx);
-  const inSampleIC    = isPoints.length  >= 10 ? r3(spearmanIC(isPoints.map(d => d.score),  isPoints.map(d => d.fwdReturn)))  : 0;
-  const outOfSampleIC = oosPoints.length >= 10 ? r3(spearmanIC(oosPoints.map(d => d.score), oosPoints.map(d => d.fwdReturn))) : 0;
+  const splitIdx  = Math.floor(n / 2);
+  const isPoints  = dataPoints.slice(0, splitIdx);
+  const oosPoints = dataPoints.slice(splitIdx);
+
+  const isWin  = winsorize(isPoints.map(d => d.fwdReturn),  WINSOR_PCT);
+  const oosWin = winsorize(oosPoints.map(d => d.fwdReturn), WINSOR_PCT);
+
+  const inSampleIC    = isPoints.length  >= 10 ? r3(spearmanIC(isPoints.map(d => d.score),  isWin))  : 0;
+  const outOfSampleIC = oosPoints.length >= 10 ? r3(spearmanIC(oosPoints.map(d => d.score), oosWin)) : 0;
   const icDegradation = r3(inSampleIC - outOfSampleIC);
   const oosPeriods = [
     { label: "In-sample",     start: isPoints[0]?.date  ?? "", end: isPoints[isPoints.length - 1]?.date   ?? "", ic: inSampleIC,    n: isPoints.length  },
     { label: "Out-of-sample", start: oosPoints[0]?.date ?? "", end: oosPoints[oosPoints.length - 1]?.date ?? "", ic: outOfSampleIC, n: oosPoints.length },
   ];
 
-  // IC metrics
-  const ic      = r3(pearsonIC(scores, returns));
-  const rankIC  = r3(spearmanIC(scores, returns));
+  // ── IC metrics (winsorized) ───────────────────────────────────────────────
+  const ic      = r3(pearsonIC(scores, winsorizedReturns));
+  const rankIC  = r3(spearmanIC(scores, winsorizedReturns));
   const icTStat = n > 2
     ? r3(rankIC * Math.sqrt(n - 2) / Math.sqrt(Math.max(1 - rankIC ** 2, 1e-9)))
     : 0;
 
-  // Per-category IC
-  const categoryIC = {
-    trend:           r3(spearmanIC(dataPoints.map(d => d.trendScore),    returns)),
-    momentum:        r3(spearmanIC(dataPoints.map(d => d.momentumScore), returns)),
-    volume:          r3(spearmanIC(dataPoints.map(d => d.volumeScore),   returns)),
-    relativeStrength:r3(spearmanIC(dataPoints.map(d => d.rsScore),       returns)),
-    regime:          r3(spearmanIC(dataPoints.map(d => d.regimeScore),   returns)),
+  // ── Regime-conditioned IC ─────────────────────────────────────────────────
+  const riskOnPts  = dataPoints.filter(d => d.regimeBucket === "risk_on");
+  const neutralPts = dataPoints.filter(d => d.regimeBucket === "neutral");
+  const riskOffPts = dataPoints.filter(d => d.regimeBucket === "risk_off");
+
+  const regimeIC = {
+    riskOn:   riskOnPts.length  >= 10 ? r3(spearmanIC(riskOnPts.map(d => d.score),  winsorize(riskOnPts.map(d => d.fwdReturn),  WINSOR_PCT))) : null,
+    riskOnN:  riskOnPts.length,
+    neutral:  neutralPts.length >= 10 ? r3(spearmanIC(neutralPts.map(d => d.score), winsorize(neutralPts.map(d => d.fwdReturn), WINSOR_PCT))) : null,
+    neutralN: neutralPts.length,
+    riskOff:  riskOffPts.length >= 10 ? r3(spearmanIC(riskOffPts.map(d => d.score), winsorize(riskOffPts.map(d => d.fwdReturn), WINSOR_PCT))) : null,
+    riskOffN: riskOffPts.length,
   };
 
-  // IC²-weighted optimal weights
+  // ── Per-category IC (winsorized) ──────────────────────────────────────────
+  const categoryIC = {
+    trend:           r3(spearmanIC(dataPoints.map(d => d.trendScore),    winsorizedReturns)),
+    momentum:        r3(spearmanIC(dataPoints.map(d => d.momentumScore), winsorizedReturns)),
+    volume:          r3(spearmanIC(dataPoints.map(d => d.volumeScore),   winsorizedReturns)),
+    relativeStrength:r3(spearmanIC(dataPoints.map(d => d.rsScore),       winsorizedReturns)),
+    regime:          r3(spearmanIC(dataPoints.map(d => d.regimeScore),   winsorizedReturns)),
+  };
+
+  // ── IC²-weighted optimal weights ──────────────────────────────────────────
   const catVals = [categoryIC.trend, categoryIC.momentum, categoryIC.volume, categoryIC.relativeStrength, categoryIC.regime];
   const icSq    = catVals.map(v => v * v);
   const totalSq = icSq.reduce((a, b) => a + b, 0);
@@ -267,20 +321,23 @@ export async function runBacktest(ticker: string, horizon: number): Promise<Back
     regime:          Math.round(icSq[4] / totalSq * 100),
   } : null;
 
-  // Logistic calibration
-  const binary = returns.map(r => r > 0 ? 1 : 0);
-  const { slope: calibratedSlope, intercept: calibratedIntercept } = fitLogistic(scores, binary);
+  // ── Calibration: fit on IS half only (eliminates data leakage) ───────────
+  const isScores = isPoints.map(d => d.score);
+  const isBinary = isPoints.map(d => d.fwdReturn > 0 ? 1 : 0);
+  const { slope: calibratedSlope, intercept: calibratedIntercept } = fitLogistic(isScores, isBinary);
 
-  // Brier score: mean squared error of predicted P(+) vs actual outcome
-  const brierScore = binary.length > 0
-    ? r3(binary.reduce((s, y, i) => {
-        const p = sigmoid(calibratedSlope, calibratedIntercept, scores[i]) / 100;
+  // ── Brier score: evaluated on OOS half only (true out-of-sample quality) ──
+  const oosScores = oosPoints.map(d => d.score);
+  const oosBinary = oosPoints.map(d => d.fwdReturn > 0 ? 1 : 0);
+  const brierScore = oosBinary.length > 0
+    ? r3(oosBinary.reduce((s, y, i) => {
+        const p = sigmoid(calibratedSlope, calibratedIntercept, oosScores[i]) / 100;
         return s + (p - y) ** 2;
-      }, 0) / binary.length)
+      }, 0) / oosBinary.length)
     : null;
 
   const brierScoreCI = brierScore !== null
-    ? brierCI(scores, binary, calibratedSlope, calibratedIntercept)
+    ? brierCI(oosScores, oosBinary, calibratedSlope, calibratedIntercept)
     : null;
 
   // Write to calibration store (keeps the fitted function for real-time use)
@@ -297,14 +354,17 @@ export async function runBacktest(ticker: string, horizon: number): Promise<Back
     fitSource: "live",
   }, { brierScore: brierScore ?? undefined });
 
-  logger.info({ ticker: sym, horizon, rankIC, observations: n, slope: calibratedSlope, brierScore }, "Calibration fitted");
+  logger.info({ ticker: sym, horizon, rankIC, observations: n, slope: calibratedSlope, brierScore, brierIsOos: true }, "Calibration fitted (IS-only, OOS Brier)");
 
-  // Buckets
+  // ── Universe flags ────────────────────────────────────────────────────────
+  const distorted = isStructurallyDistorted(sym);
+  const assetType = getAssetType(sym) ?? "equity";
+
+  // ── Buckets ───────────────────────────────────────────────────────────────
   const bull    = dataPoints.filter(d => d.score >= 60);
   const neutral = dataPoints.filter(d => d.score > 40 && d.score < 60);
   const bear    = dataPoints.filter(d => d.score <= 40);
 
-  // Net hit rate: hit rate after deducting round-trip slippage cost
   function hitRateNet(pts: Array<{ fwdReturn: number }>, direction: "long" | "short"): number | null {
     if (!pts.length) return null;
     const threshold = direction === "long" ? SLIPPAGE_PCT : -SLIPPAGE_PCT;
@@ -314,7 +374,7 @@ export async function runBacktest(ticker: string, horizon: number): Promise<Back
     return Math.round(hits / pts.length * 100);
   }
 
-  // Decile table
+  // ── Decile table ──────────────────────────────────────────────────────────
   const deciles = Array.from({ length: 10 }, (_, d) => {
     const low = d * 10;
     const pts = dataPoints.filter(p => d === 9 ? p.score >= low : (p.score >= low && p.score < low + 10));
@@ -326,18 +386,18 @@ export async function runBacktest(ticker: string, horizon: number): Promise<Back
     };
   });
 
-  // Scatter (every 3rd point)
+  // ── Scatter (every 3rd point, raw returns for display) ───────────────────
   const scatter = dataPoints
     .filter((_, i) => i % 3 === 0)
     .map(d => ({ x: d.score, y: r2(d.fwdReturn), date: d.date }));
 
-  // Full timeline: every observation with direction + correctness flag
+  // ── Timeline (every observation, raw returns) ─────────────────────────────
   const timeline = dataPoints.map(d => {
     const dir: "bull" | "neutral" | "bear" = d.score >= 60 ? "bull" : d.score <= 40 ? "bear" : "neutral";
     const correct =
       dir === "bull"    ? d.fwdReturn > 0 :
       dir === "bear"    ? d.fwdReturn < 0 :
-      Math.abs(d.fwdReturn) < 2;            // neutral = low volatility is "correct"
+      Math.abs(d.fwdReturn) < 2;
     return { date: d.date, score: d.score, fwdReturn: r2(d.fwdReturn), direction: dir, correct };
   });
 
@@ -350,6 +410,8 @@ export async function runBacktest(ticker: string, horizon: number): Promise<Back
     marketCap,
     marketCapBucket,
     marketCapNote: CAP_NOTES[marketCapBucket],
+    isDistorted: distorted,
+    assetType,
     ic,
     icRating:     icLabel(Math.abs(ic)),
     rankIC,
@@ -361,10 +423,13 @@ export async function runBacktest(ticker: string, horizon: number): Promise<Back
     slippageBps:  SLIPPAGE_BPS,
     brierScore,
     brierScoreCI,
+    brierIsOos: true,
+    winsorThresholdPct: WINSOR_PCT,
     inSampleIC,
     outOfSampleIC,
     icDegradation,
     oosPeriods,
+    regimeIC,
     categoryIC,
     optimalWeights,
     currentWeights: { trend: 24, momentum: 18, volume: 13, relativeStrength: 20, regime: 4 },

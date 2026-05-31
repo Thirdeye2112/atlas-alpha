@@ -40,7 +40,7 @@ router.get("/backtest/multi", async (req, res): Promise<void> => {
         return r;
       })
     );
-    res.json({ ticker, horizons: results.map((r: any) => ({
+    const horizonRows = results.map((r: any) => ({
       horizon: r.horizon,
       rankIC: r.rankIC,
       rankICRating: r.rankICRating,
@@ -48,7 +48,10 @@ router.get("/backtest/multi", async (req, res): Promise<void> => {
       categoryIC: r.categoryIC,
       optimalWeights: r.optimalWeights,
       totalObservations: r.totalObservations,
-    })) });
+    }));
+    const bestRow = horizonRows.reduce((best, r) =>
+      Math.abs(r.rankIC) > Math.abs(best.rankIC) ? r : best, horizonRows[0]!);
+    res.json({ ticker, horizons: horizonRows, optimalHorizon: bestRow?.horizon ?? null });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     res.status(400).json({ error: msg });
