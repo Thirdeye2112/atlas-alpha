@@ -72,6 +72,7 @@ function gapSetupScanResponse(
     results: rows,
     progress: { done: job.done, total: job.total },
     complete: job.complete,
+    scannedAt: job.completedAt ?? job.startedAt,
   };
 }
 
@@ -119,6 +120,7 @@ function scanResponse(filter: Filter, sort: Sorter, limit: number) {
     results: rows,
     progress: { done: job.done, total: job.total },
     complete: job.complete,
+    scannedAt: job.completedAt ?? job.startedAt,
   };
 }
 

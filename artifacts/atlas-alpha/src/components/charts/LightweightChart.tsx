@@ -84,6 +84,25 @@ function calcSMA(closes: number[], period: number): (number | null)[] {
   });
 }
 
+/** Returns a human-readable description for a chart signal label. */
+function describeSignal(label: string): string {
+  if (label.startsWith("GAP+")) return `— gapped up ${label.slice(4)} above prior close`;
+  if (label.startsWith("GAP-")) return `— gapped down ${label.slice(4)} below prior close`;
+  const MAP: Record<string, string> = {
+    "IB":    "— inside bar · price range contained within prior bar",
+    "OB":    "— outside bar · engulfs prior bar's range",
+    "BB↑":   "— closed above upper Bollinger Band",
+    "BB↓":   "— closed below lower Bollinger Band",
+    "BB↪":   "— bounced back inside Bollinger Bands",
+    "RSI↑":  "— RSI recovered from oversold (< 30)",
+    "RSI↓":  "— RSI retreated from overbought (> 70)",
+    "MACD↑": "— MACD bullish crossover",
+    "MACD↓": "— MACD bearish crossover",
+    "VOL":   "— volume spike ≥ 2× average",
+  };
+  return MAP[label] ?? "";
+}
+
 export default function LightweightChart({
   data,
   height = 400,
@@ -93,6 +112,7 @@ export default function LightweightChart({
   extendedHours,
 }: Props) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
+  const tooltipRef        = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
 
@@ -282,6 +302,37 @@ export default function LightweightChart({
       }
     }
 
+    // ── Crosshair tooltip — shows signal details when hovering a marked candle ──
+    const sigMap = new Map<string, ChartSignalMarker[]>();
+    for (const s of signals) {
+      const arr = sigMap.get(s.date) ?? [];
+      arr.push(s);
+      sigMap.set(s.date, arr);
+    }
+    if (sigMap.size > 0) {
+      chart.subscribeCrosshairMove((param) => {
+        const el = tooltipRef.current;
+        if (!el) return;
+        if (!param.time || !param.point) { el.style.display = "none"; return; }
+        const dateStr = typeof param.time === "number"
+          ? new Date((param.time as number) * 1000).toISOString().slice(0, 10)
+          : String(param.time);
+        const sigs = sigMap.get(dateStr);
+        if (!sigs?.length) { el.style.display = "none"; return; }
+        const w = chartContainerRef.current?.clientWidth ?? 600;
+        const tx = param.point.x + 250 > w ? param.point.x - 258 : param.point.x + 8;
+        el.innerHTML =
+          `<div style="color:hsl(215,16%,42%);font-size:9px;letter-spacing:.08em;margin-bottom:5px;text-transform:uppercase">${dateStr}</div>` +
+          sigs.map(s => {
+            const c = s.direction === "bull" ? "#22c55e" : "#ef4444";
+            return `<div style="color:${c};margin-bottom:3px"><span style="font-weight:700">${s.label}</span> <span style="color:hsl(215,16%,52%);font-weight:400">${describeSignal(s.label)}</span></div>`;
+          }).join("");
+        el.style.left = `${tx}px`;
+        el.style.top  = `${Math.max(8, param.point.y - 25)}px`;
+        el.style.display = "block";
+      });
+    }
+
     chart.timeScale().fitContent();
 
     chartRef.current = chart;
@@ -315,9 +366,30 @@ export default function LightweightChart({
 
   return (
     <div
-      ref={chartContainerRef}
-      className="w-full"
+      className="w-full relative"
       style={{ height, cursor: onCandleClick ? "crosshair" : "default" }}
-    />
+    >
+      <div ref={chartContainerRef} style={{ width: "100%", height: "100%" }} />
+      {/* Signal tooltip — positioned by the crosshair subscription above */}
+      <div
+        ref={tooltipRef}
+        style={{
+          display: "none",
+          position: "absolute",
+          zIndex: 10,
+          background: "hsl(222,18%,8%)",
+          border: "1px solid hsl(222,15%,22%)",
+          borderRadius: "5px",
+          padding: "8px 11px",
+          fontSize: "11px",
+          fontFamily: "'JetBrains Mono','Fira Code',monospace",
+          pointerEvents: "none",
+          minWidth: "190px",
+          maxWidth: "290px",
+          lineHeight: "1.65",
+          boxShadow: "0 6px 20px rgba(0,0,0,.55)",
+        }}
+      />
+    </div>
   );
 }

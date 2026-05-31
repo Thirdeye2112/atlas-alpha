@@ -458,8 +458,18 @@ export default function Scanner() {
             </span>
           )}
           {scanComplete && (
-            <span className="text-xs font-mono text-success">
+            <span className="text-xs font-mono text-success flex items-center gap-1.5">
               ✓ {anyResponse?.progress.total} tickers scanned
+              {(anyResponse as any)?.scannedAt && (() => {
+                const ageMs  = Date.now() - (anyResponse as any).scannedAt;
+                const ageMin = Math.floor(ageMs / 60000);
+                const ttlMin = Math.max(0, 30 - ageMin);
+                return (
+                  <span className="text-muted-foreground/60">
+                    · {ageMin === 0 ? "just now" : `${ageMin}m ago`} · refreshes in {ttlMin}m
+                  </span>
+                );
+              })()}
             </span>
           )}
         </div>
@@ -495,7 +505,8 @@ export default function Scanner() {
               <span className="text-warning font-bold mr-2">GAP SETUP — LONG</span>
               Stocks primed to gap UP based on research from 771 historical gaps.
               Filter: <span className="text-foreground">ATR ≥ 3.2%</span> · <span className="text-foreground">BB Width ≥ 15%</span> · <span className="text-foreground">RVOL ≥ 1.2×</span> · RSI &lt; 70 · not already gapping · direction not bearish.
-              Sorted by <span className="text-foreground">ATR% × RVOL</span> (most volatility-primed first). Check RVOL column — elevated volume is the second-strongest predictor.
+              Sorted by <span className="text-foreground">ATR% × RVOL</span> (most volatility-primed first). Check RVOL column — elevated volume is the second-strongest predictor.{" "}
+              <Link href="/research" className="text-warning/80 hover:text-warning underline decoration-dotted underline-offset-2 whitespace-nowrap">→ Gap Factor Research</Link>
             </div>
             <ScannerTable response={gapSetupLong} isLoading={gslLoading} showGapScore />
           </TabsContent>
@@ -504,7 +515,8 @@ export default function Scanner() {
               <span className="text-warning font-bold mr-2">GAP SETUP — SHORT</span>
               Stocks primed to gap DOWN based on research from 771 historical gaps.
               Filter: <span className="text-foreground">ATR ≥ 3.2%</span> · <span className="text-foreground">BB Width ≥ 15%</span> · <span className="text-foreground">RVOL ≥ 1.2×</span> · <span className="text-foreground">SMA200 extended &gt; 5%</span> · not already gapping · direction not bullish.
-              Extended-above-SMA200 is the <span className="text-foreground">strongest directional predictor</span> (+0.64σ) for gap-downs. Sorted by SMA200 extension × ATR.
+              Extended-above-SMA200 is the <span className="text-foreground">strongest directional predictor</span> (+0.64σ) for gap-downs. Sorted by SMA200 extension × ATR.{" "}
+              <Link href="/research" className="text-warning/80 hover:text-warning underline decoration-dotted underline-offset-2 whitespace-nowrap">→ Gap Factor Research</Link>
             </div>
             <ScannerTable response={gapSetupShort} isLoading={gssLoading} showGapScore />
           </TabsContent>

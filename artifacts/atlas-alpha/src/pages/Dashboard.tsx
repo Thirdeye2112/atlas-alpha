@@ -106,6 +106,48 @@ function icColor(rating: string): string {
 
 // ── Quick Backtest Strip (shown inline in the chart section) ─────────────────
 
+/** Mini sparkline of Atlas Score over the last ~60 trading days. */
+function ScoreSparkline({ ticker }: { ticker: string }) {
+  const [pts, setPts] = useState<number[]>([]);
+  useEffect(() => {
+    if (!ticker) return;
+    let cancelled = false;
+    fetch(`/api/backtest/ic?ticker=${encodeURIComponent(ticker)}&horizon=5`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: any) => {
+        if (cancelled || !d?.timeline) return;
+        setPts((d.timeline as Array<{ score: number }>).slice(-60).map((p: { score: number }) => p.score));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [ticker]);
+
+  if (pts.length < 5) return <div className="h-9 mt-2 mx-6 rounded bg-muted/10 animate-pulse" />;
+
+  const W = 180, H = 34, pad = 3;
+  const toY = (s: number) => pad + (1 - s / 100) * (H - pad * 2);
+  const xStep = (W - pad * 2) / (pts.length - 1);
+  const polyPoints = pts.map((s, i) => `${pad + i * xStep},${toY(s)}`).join(" ");
+  const last = pts[pts.length - 1];
+  const lx = pad + (pts.length - 1) * xStep;
+  const lineColor = last >= 65 ? "#22c55e" : last >= 45 ? "#f59e0b" : "#ef4444";
+
+  return (
+    <div className="px-6 mt-2 flex flex-col items-center gap-0.5">
+      <div className="text-[9px] font-mono tracking-widest text-muted-foreground/40">SCORE HISTORY · 60D</div>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ overflow: "visible" }}>
+        {[30, 50, 70].map(ref => (
+          <line key={ref} x1={pad} x2={W - pad} y1={toY(ref)} y2={toY(ref)}
+            stroke="hsl(222,15%,20%)" strokeWidth="0.5" strokeDasharray="2,3" />
+        ))}
+        <polyline points={polyPoints} fill="none" stroke={lineColor}
+          strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" opacity="0.75" />
+        <circle cx={lx} cy={toY(last)} r="2.5" fill={lineColor} />
+      </svg>
+    </div>
+  );
+}
+
 function ChartBacktestStrip({ ticker, currentScore }: { ticker: string; currentScore?: number }) {
   const [, navigate] = useLocation();
   const [result, setResult] = useState<BacktestResult | null>(null);
@@ -971,6 +1013,37 @@ export default function Dashboard() {
             </div>
           </div>
 
+          {/* Signal key legend */}
+          {displayAnalysis?.chartSignals && displayAnalysis.chartSignals.length > 0 &&
+            (timeframe.interval === "1d" || timeframe.interval === "1wk" || timeframe.interval === "1mo") && (
+            <div className="bg-card border border-border rounded-md p-2.5">
+              <div className="text-[9px] font-mono text-muted-foreground/50 tracking-widest font-bold mb-1.5">SIGNAL KEY — hover any candle to see details</div>
+              <div className="flex flex-wrap gap-x-5 gap-y-1 text-[10px] font-mono">
+                {([
+                  ["bull", "IB",    "inside bar"],
+                  ["bull", "OB",    "outside bar"],
+                  ["bull", "GAP+",  "gap up"],
+                  ["bear", "GAP−",  "gap down"],
+                  ["bull", "BB↑",   "BB breakout"],
+                  ["bear", "BB↓",   "BB breakdown"],
+                  ["bull", "BB↪",   "BB mean rev"],
+                  ["bull", "RSI↑",  "oversold bounce"],
+                  ["bear", "RSI↓",  "overbought peak"],
+                  ["bull", "MACD↑", "MACD cross ↑"],
+                  ["bear", "MACD↓", "MACD cross ↓"],
+                  ["bear", "VOL",   "vol surge"],
+                ] as [string, string, string][]).map(([dir, lbl, desc]) => (
+                  <span key={lbl} className="flex items-center gap-1">
+                    <span className={dir === "bull" ? "text-success" : "text-destructive"}>
+                      {dir === "bull" ? "▲" : "▼"} {lbl}
+                    </span>
+                    <span className="text-muted-foreground/45">{desc}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Core Analytics */}
           {displayLoading ? (
             <div className="flex-1 flex items-center justify-center text-muted-foreground animate-pulse text-sm">
@@ -1101,6 +1174,8 @@ export default function Dashboard() {
                   {displayAnalysis.atlasScore.label.replace("_", " ")}
                 </h2>
               </div>
+              <ScoreSparkline ticker={ticker} />
+
               {(() => {
                 const cal = displayAnalysis.calibration as Record<string, unknown> | null | undefined;
                 const isContrarian = cal?.isContrarian === true;

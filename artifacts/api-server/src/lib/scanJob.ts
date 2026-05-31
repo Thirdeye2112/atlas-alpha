@@ -18,6 +18,7 @@ export interface ScanJob {
   total: number;
   complete: boolean;
   startedAt: number;
+  completedAt?: number;
 }
 
 let currentJob: ScanJob | null = null;
@@ -93,8 +94,9 @@ async function runJobBackground(job: ScanJob): Promise<void> {
     job.done = Math.min(i + BATCH_SIZE, SCANNER_UNIVERSE.length);
   }
 
-  job.done     = job.total;
-  job.complete = true;
+  job.done        = job.total;
+  job.complete    = true;
+  job.completedAt = Date.now();
   logger.info({ total: job.analyses.length }, "Scan job complete");
 
   // Batch-insert signal log (fire-and-forget, never blocks scanner)
