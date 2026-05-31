@@ -45,15 +45,18 @@ router.get("/stock/:ticker/analysis", async (req, res): Promise<void> => {
     res.json({
       ...analysis,
       calibration: {
-        status: calStatus,
+        status:              calStatus,
         calibratedProbability,
-        slope:        calEntry?.slope        ?? null,
-        intercept:    calEntry?.intercept     ?? null,
-        observations: calEntry?.observations  ?? null,
-        horizon:      calEntry?.horizon       ?? null,
-        rankIC:       calEntry?.rankIC        ?? null,
-        icRating:     calEntry?.icRating      ?? null,
-        fittedAt:     calEntry?.fittedAt      ?? null,
+        slope:               calEntry?.slope           ?? null,
+        intercept:           calEntry?.intercept        ?? null,
+        observations:        calEntry?.observations     ?? null,
+        horizon:             calEntry?.horizon          ?? null,
+        rankIC:              calEntry?.rankIC           ?? null,
+        icRating:            calEntry?.icRating         ?? null,
+        fittedAt:            calEntry?.fittedAt         ?? null,
+        isContrarian:        calEntry ? (calEntry.rankIC < -0.02 && calEntry.icRating !== "noise") : null,
+        usingAdaptiveWeights:calEntry ? !!calEntry.optimalWeights : false,
+        signalQuality:       calEntry?.icRating         ?? null,
       },
     });
 

@@ -31,6 +31,22 @@ export interface AtlasAlphaScore {
   signalNarrative: string;
 }
 
+/** Per-ticker IC²-optimal weight overrides from the walk-forward backtest engine. */
+export interface WeightOverrides {
+  trend: number;
+  momentum: number;
+  volume: number;
+  relativeStrength: number;
+  regime: number;
+}
+
+/** Options passed to calcAtlasScore to enable adaptive scoring. */
+export interface ScoreOpts {
+  weights?: WeightOverrides | null;
+  rankIC?: number;
+  icRating?: string;
+}
+
 function clamp(val: number, min = 0, max = 100): number {
   return Math.max(min, Math.min(max, val));
 }
@@ -56,7 +72,8 @@ export function calcAtlasScore(
   rs: RelativeStrengthResult,
   marketRegimeScore: number,
   expectedMovePercent: number,
-  exhaustion: ExhaustionResult
+  exhaustion: ExhaustionResult,
+  opts?: ScoreOpts
 ): AtlasAlphaScore {
   // Regime gate: in choppy/fearful markets (low regime), dampen trend+momentum
   // because price-based signals produce more false positives without a clear trend.
@@ -65,23 +82,29 @@ export function calcAtlasScore(
     : marketRegimeScore < 50 ? 0.85
     : 1.0;
 
-  // Weighted composite:
-  //   Trend 24% + Momentum 18% + Volume 13% + VolSqueeze 9% + RS 20% + Regime 4% + Exhaustion 12%
-  // Weights derived from walk-forward IC²-proportional analysis across 2Y of daily data.
-  // RS raised 13→20%: consistently strongest predictor (rank IC 0.18–0.40 at 5–20D horizon).
-  // Regime lowered 8→4%: near-zero or negative IC for individual stocks; dampens false signals.
-  // Trend lowered 27→24%: still important but was overweighted relative to empirical IC.
-  // Exhaustion is a counter-trend signal: it captures capitulation, reversal bars, and
-  // distribution tops that pure trend-following always misses.
-  // Trend and Momentum are gated by regime to avoid false signals in choppy markets.
+  // Adaptive weights: when the walk-forward backtest has computed IC²-optimal weights
+  // for this specific ticker, use them instead of global defaults. Options (9%) and
+  // Exhaustion (12%) are pinned; the remaining 79% budget is allocated proportionally
+  // by optimalWeights from the calibration store.
+  // Global defaults: Trend 24%, Momentum 18%, Volume 13%, RS 20%, Regime 4%.
+  const OPTS_W  = 0.09;
+  const EXHS_W  = 0.12;
+  const FACT_BG = 1 - OPTS_W - EXHS_W; // 0.79
+  const ow      = opts?.weights;
+  const trendW  = ow ? (ow.trend            / 100) * FACT_BG : 0.24;
+  const momW    = ow ? (ow.momentum         / 100) * FACT_BG : 0.18;
+  const volW    = ow ? (ow.volume           / 100) * FACT_BG : 0.13;
+  const rsW     = ow ? (ow.relativeStrength / 100) * FACT_BG : 0.20;
+  const regW    = ow ? (ow.regime           / 100) * FACT_BG : 0.04;
+
   const overall = clamp(
-    trend.trendAlignmentScore       * 0.24 * regimeGate +
-    momentum.momentumScore          * 0.18 * regimeGate +
-    volume.volumeScore              * 0.13 +
-    options.optionsScore            * 0.09 +
-    rs.rsScore                      * 0.20 +
-    marketRegimeScore               * 0.04 +
-    exhaustion.exhaustionScore      * 0.12
+    trend.trendAlignmentScore       * trendW * regimeGate +
+    momentum.momentumScore          * momW   * regimeGate +
+    volume.volumeScore              * volW +
+    options.optionsScore            * OPTS_W +
+    rs.rsScore                      * rsW +
+    marketRegimeScore               * regW +
+    exhaustion.exhaustionScore      * EXHS_W
   );
 
   const label = labelFromScore(overall);
@@ -112,6 +135,16 @@ export function calcAtlasScore(
   const indicatorsAgreeing = overall >= 50 ? bullCats : bearCats;
   const confidenceScore = clamp(Math.max(bullCats, bearCats) / totalIndicators * 100);
 
+  // IC quality gate: cap confidence when historical IC is noise-level (<3% rank correlation).
+  // A noise IC means the score has no demonstrated predictive power for this ticker —
+  // we still show the score but refuse to claim high confidence in it.
+  // Contrarian flag: significantly negative IC means the score's direction is historically
+  // inverted — high scores precede mean-reversion, not continuation.
+  const icRankAbs    = opts?.rankIC !== undefined ? Math.abs(opts.rankIC) : undefined;
+  const isNoiseIC    = opts?.icRating === "noise" || (icRankAbs !== undefined && icRankAbs < 0.03);
+  const isContrarian = opts?.rankIC !== undefined && opts.rankIC < -0.02 && !isNoiseIC;
+  const cappedConfidence = isNoiseIC ? Math.min(confidenceScore, 50) : confidenceScore;
+
   // Logistic-calibrated probability
   const bullishProbability = logisticProb(overall);
   const bearishProbability = clamp(100 - bullishProbability);
@@ -119,15 +152,16 @@ export function calcAtlasScore(
   const direction: Direction = overall >= 60 ? "bullish" : overall <= 40 ? "bearish" : "neutral";
 
   let timeHorizon: TimeHorizon = "1-2w";
-  if (confidenceScore >= 80 && Math.abs(overall - 50) > 25) timeHorizon = "1-3d";
-  else if (confidenceScore < 60) timeHorizon = "1-3m";
+  if (cappedConfidence >= 80 && Math.abs(overall - 50) > 25) timeHorizon = "1-3d";
+  else if (cappedConfidence < 60) timeHorizon = "1-3m";
 
-  const riskScore = clamp(100 - confidenceScore + (expectedMovePercent > 5 ? 20 : 0));
+  const riskScore = clamp(100 - cappedConfidence + (expectedMovePercent > 5 ? 20 : 0));
 
   const signalNarrative = buildNarrative(
     trend, momentum, volume, options, rs, exhaustion,
-    direction, overall, confidenceScore,
-    bullCats, bearCats, totalIndicators, regimeGate
+    direction, overall, cappedConfidence,
+    bullCats, bearCats, totalIndicators, regimeGate,
+    isContrarian, !!ow
   );
 
   return {
@@ -142,7 +176,7 @@ export function calcAtlasScore(
     exhaustionScore: Math.round(exhaustion.exhaustionScore),
     bullishProbability,
     bearishProbability,
-    confidenceScore: Math.round(confidenceScore),
+    confidenceScore: Math.round(cappedConfidence),
     riskScore: Math.round(riskScore),
     direction,
     timeHorizon,
@@ -166,11 +200,23 @@ function buildNarrative(
   bullCats: number,
   bearCats: number,
   totalCats: number,
-  regimeGate: number
+  regimeGate: number,
+  isContrarian = false,
+  isAdaptive = false
 ): string {
   const parts: string[] = [];
   const strength = overall >= 75 ? "Strong" : overall >= 60 ? "Moderate" : overall <= 25 ? "Strong bearish" : overall <= 40 ? "Moderate bearish" : "Mixed";
   const agreeing = overall >= 50 ? bullCats : bearCats;
+
+  // ── Contrarian / adaptive-weights annotation ──────────────────────────────
+  if (isContrarian) {
+    parts.push(
+      `⚠️ CONTRARIAN SIGNAL: Walk-forward Rank IC is negative for this ticker — elevated Atlas Scores historically precede mean-reversion, not trend continuation. Treat high scores (>60) as short-side setups and low scores (<40) as long-side setups.`
+    );
+  }
+  if (isAdaptive) {
+    parts.push(`[IC²-ADAPTIVE] Score weighted by ticker-specific IC²-optimal factors derived from 2Y walk-forward backtest.`);
+  }
 
   // ── Exhaustion override: lead with the reversal/distribution signal if strong ─
   if (exhaustion.exhaustionSignal === "distribution_top") {

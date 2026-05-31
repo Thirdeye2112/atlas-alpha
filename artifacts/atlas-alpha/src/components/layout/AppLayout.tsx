@@ -1,10 +1,10 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { 
   useGetMarketOverview, 
   getGetMarketOverviewQueryKey 
 } from "@workspace/api-client-react";
-import { Activity, LayoutDashboard, Radar, ListTree, FlaskConical, TestTube2 } from "lucide-react";
+import { Activity, LayoutDashboard, Radar, ListTree, FlaskConical, TestTube2, Bell } from "lucide-react";
 import { formatCurrency, formatPercent } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 
@@ -73,6 +73,35 @@ function MarketBar() {
   );
 }
 
+function AlertBell() {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const r = await fetch("/api/alerts/triggered");
+        if (r.ok) { const d = await r.json() as unknown[]; setCount(d.length); }
+      } catch { /* non-critical */ }
+    };
+    void poll();
+    const id = setInterval(() => void poll(), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <Link href="/watchlist" className={cn(
+      "relative flex items-center justify-center w-9 h-9 rounded-md transition-colors ml-1",
+      count > 0 ? "text-warning hover:bg-warning/10" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+    )}>
+      <Bell className="w-4 h-4" />
+      {count > 0 && (
+        <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-destructive text-[10px] font-bold text-white flex items-center justify-center leading-none">
+          {count > 9 ? "9+" : count}
+        </span>
+      )}
+    </Link>
+  );
+}
+
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
 
@@ -105,6 +134,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </Link>
             );
           })}
+          <AlertBell />
         </nav>
       </header>
       <main className="flex-1 flex overflow-hidden">

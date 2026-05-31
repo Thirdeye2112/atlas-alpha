@@ -1101,12 +1101,38 @@ export default function Dashboard() {
                   {displayAnalysis.atlasScore.label.replace("_", " ")}
                 </h2>
               </div>
+              {(() => {
+                const cal = displayAnalysis.calibration as Record<string, unknown> | null | undefined;
+                const isContrarian = cal?.isContrarian === true;
+                const isAdaptive   = cal?.usingAdaptiveWeights === true;
+                const isNoise      = cal?.signalQuality === "noise";
+                if (!isContrarian && !isAdaptive && !isNoise) return null;
+                return (
+                  <div className="flex items-center justify-center gap-1.5 mt-2 flex-wrap">
+                    {isContrarian && (
+                      <span className="px-1.5 py-0.5 text-[9px] font-bold tracking-wider rounded border bg-amber-500/10 text-amber-400 border-amber-500/25">
+                        ⚠ CONTRARIAN IC
+                      </span>
+                    )}
+                    {isAdaptive && (
+                      <span className="px-1.5 py-0.5 text-[9px] font-bold tracking-wider rounded border bg-primary/10 text-primary border-primary/25">
+                        ◆ ADAPTIVE WEIGHTS
+                      </span>
+                    )}
+                    {isNoise && !isContrarian && (
+                      <span className="px-1.5 py-0.5 text-[9px] font-bold tracking-wider rounded border bg-zinc-700/30 text-muted-foreground border-border">
+                        IC NOISE
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="p-4 space-y-4 border-b border-border font-mono text-sm">
               {(() => {
                 const cal = displayAnalysis.calibration;
-                const isFitted   = cal?.status === "fitted";
+                const isFitted   = cal?.status === "live-fit" || cal?.status === "stale-fit";
                 const isPending  = cal?.status === "pending";
                 const bullProb   = isFitted && cal.calibratedProbability != null
                   ? cal.calibratedProbability

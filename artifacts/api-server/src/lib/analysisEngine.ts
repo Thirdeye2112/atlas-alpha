@@ -52,7 +52,12 @@ function buildResult(
   const spyTrend       = calcTrend(spyBars, spyBars[spyBars.length - 1]?.close ?? 500);
   const regimeIndicators = calcRegimeIndicators(spyBars, spyTrend);
   const exhaustion     = calcExhaustion(bars, momentum, volume, trend, volatility);
-  const atlasScore     = calcAtlasScore(trend, momentum, volume, options, rs, regimeIndicators.regimeScore, volatility.expectedMovePercent, exhaustion);
+  const calEntry       = calibrationStore.getFitted(sym);
+  const atlasScore     = calcAtlasScore(
+    trend, momentum, volume, options, rs,
+    regimeIndicators.regimeScore, volatility.expectedMovePercent, exhaustion,
+    { weights: calEntry?.optimalWeights ?? null, rankIC: calEntry?.rankIC, icRating: calEntry?.icRating }
+  );
   const chartSignals   = calcChartSignals(bars);
 
   return {

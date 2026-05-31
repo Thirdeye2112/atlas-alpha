@@ -1,6 +1,6 @@
 import { db, calibrationModelsTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
-import { SCORE_VERSION } from "./scoring.js";
+import { SCORE_VERSION, type WeightOverrides } from "./scoring.js";
 import { logger } from "./logger.js";
 
 export type CalibrationStatus = "none" | "pending" | "cold-start" | "stale-fit" | "live-fit" | "error";
@@ -16,6 +16,7 @@ export interface CalibrationEntry {
   icRating: string;
   fittedAt: string;
   fitSource: "live" | "db";
+  optimalWeights?: WeightOverrides | null;
 }
 
 type StoreValue =

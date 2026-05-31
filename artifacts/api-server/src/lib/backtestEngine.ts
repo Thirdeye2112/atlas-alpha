@@ -352,6 +352,7 @@ export async function runBacktest(ticker: string, horizon: number): Promise<Back
     icRating: icLabel(Math.abs(rankIC)),
     fittedAt: new Date().toISOString(),
     fitSource: "live",
+    optimalWeights: optimalWeights ?? null,
   }, { brierScore: brierScore ?? undefined });
 
   logger.info({ ticker: sym, horizon, rankIC, observations: n, slope: calibratedSlope, brierScore, brierIsOos: true }, "Calibration fitted (IS-only, OOS Brier)");
