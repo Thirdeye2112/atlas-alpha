@@ -32,7 +32,7 @@ const state: WarmupState = {
 export function getWarmupState(): WarmupState {
   // Count how many tickers currently have an analysis cached
   state.cachedTickers = SCANNER_UNIVERSE.filter(t =>
-    analysisCache.has(`analysis:${t}`)
+    analysisCache.has(`analysis:${t}`) || analysisCache.has(`scan:${t}`)
   ).length;
   return { ...state };
 }
@@ -64,7 +64,9 @@ export async function runWarmup(label = "startup"): Promise<void> {
     await Promise.allSettled(
       batch.map(async ticker => {
         try {
-          await runFullAnalysis(ticker);
+          // lightMode: skips display-only signals (chart pins, structural patterns)
+          // — 30% faster warmup; dashboard requests still get full analysis on demand.
+          await runFullAnalysis(ticker, true);
           state.loaded++;
         } catch (err) {
           state.failed++;

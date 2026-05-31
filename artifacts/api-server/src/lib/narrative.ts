@@ -32,7 +32,10 @@ export interface NarrativeInput {
 export async function generateNarrative(input: NarrativeInput): Promise<string | null> {
   if (process.env.ENABLE_AI_NARRATIVE !== "true") return null;
 
-  const cacheKey = `narrative:${input.ticker}:${input.score}:${input.direction}`;
+  // Cache by ticker + direction only — score fluctuates on every quote refresh which
+  // would bust the cache constantly and mint a fresh OpenAI call each time.
+  const scoreBucket = Math.round(input.score / 5) * 5;   // round to nearest 5 for prompt variety
+  const cacheKey = `narrative:${input.ticker}:${input.direction}:${scoreBucket}`;
   const cached = narrativeCache.get<string>(cacheKey);
   if (cached) return cached;
 

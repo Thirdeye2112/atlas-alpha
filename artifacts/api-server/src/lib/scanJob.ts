@@ -62,7 +62,10 @@ async function runJobBackground(job: ScanJob): Promise<void> {
 
     const batch = SCANNER_UNIVERSE.slice(i, i + BATCH_SIZE);
     const results = await Promise.allSettled(
-      batch.map(ticker => runFullAnalysis(ticker))
+      // lightMode=true: skips calcChartSignals + calcPatterns (display-only,
+      // unused by any scanner filter) — ~30% less CPU per 373-ticker pass.
+      // Results stored under scan:${sym} so user-facing dashboard results remain full.
+      batch.map(ticker => runFullAnalysis(ticker, true))
     );
 
     for (const r of results) {

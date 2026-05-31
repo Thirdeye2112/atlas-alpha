@@ -40,14 +40,15 @@ function buildResult(
   qqqBars: OHLCVBar[],
   iwmBars: OHLCVBar[],
   quoteOverride: Record<string, unknown>,
-  historicalDate?: string
+  historicalDate?: string,
+  /** Skip display-only signals (chart pins, structural patterns) — for scanner/warmup paths */
+  lightMode = false,
 ): AnalysisResult {
   const trend          = calcTrend(bars, price);
   const momentum       = calcMomentum(bars);
   const volume         = calcVolume(bars, (quoteOverride.avgVolume as number) ?? 0);
   const volatility     = calcVolatility(bars, price);
   const options        = calcOptions(momentum, volume, volatility, price);
-  const patterns       = calcPatterns(bars, trend, volatility);
   const rs             = calcRelativeStrength(sym, bars, spyBars, qqqBars, iwmBars, (quoteOverride.sector as string | null) ?? null);
   const spyTrend       = calcTrend(spyBars, spyBars[spyBars.length - 1]?.close ?? 500);
   const regimeIndicators = calcRegimeIndicators(spyBars, spyTrend);
@@ -58,7 +59,12 @@ function buildResult(
     regimeIndicators.regimeScore, volatility.expectedMovePercent, exhaustion,
     { weights: calEntry?.optimalWeights ?? null, rankIC: calEntry?.rankIC, icRating: calEntry?.icRating }
   );
-  const chartSignals   = calcChartSignals(bars);
+
+  // Display-only signals — skipped in scanner/warmup light-mode paths to reduce CPU per cycle
+  const patterns     = lightMode
+    ? { patterns: [], marketStructure: "ranging" as const, supportLevel: 0, resistanceLevel: 0 }
+    : calcPatterns(bars, trend, volatility);
+  const chartSignals = lightMode ? [] : calcChartSignals(bars);
 
   return {
     quote: quoteOverride,
@@ -90,12 +96,22 @@ function maybeCalibrate(sym: string): void {
   });
 }
 
-export async function runFullAnalysis(ticker: string): Promise<AnalysisResult> {
+/**
+ * Run a full analysis for a ticker.
+ *
+ * @param lightMode  When true (used by scanner/warmup passes) skips the two
+ *                   display-only computations — `calcChartSignals` (35 pattern
+ *                   detectors × 90 bars) and `calcPatterns` (12 structural
+ *                   patterns).  Results are stored under a separate
+ *                   `scan:${sym}` cache key so dashboard requests always get
+ *                   the fully-annotated result.
+ */
+export async function runFullAnalysis(ticker: string, lightMode = false): Promise<AnalysisResult> {
   const sym      = ticker.toUpperCase();
-  const cacheKey = `analysis:${sym}`;
+  // Light-mode results go to a separate namespace so they never evict a full result.
+  const cacheKey = lightMode ? `scan:${sym}` : `analysis:${sym}`;
   const cached   = analysisCache.get<AnalysisResult>(cacheKey);
   if (cached) {
-    // Always trigger calibration even for cached analyses (markPending is a no-op if already tracked)
     maybeCalibrate(sym);
     return cached;
   }
@@ -110,14 +126,12 @@ export async function runFullAnalysis(ticker: string): Promise<AnalysisResult> {
 
   if (bars.length < 30) throw new Error(`Insufficient historical data for ${sym}`);
 
-  const result = buildResult(sym, quote.price, bars, spyBars, qqqBars, iwmBars, quote as unknown as Record<string, unknown>);
+  const result = buildResult(sym, quote.price, bars, spyBars, qqqBars, iwmBars, quote as unknown as Record<string, unknown>, undefined, lightMode);
 
   analysisCache.set(cacheKey, result);
   logger.info({ ticker: sym, atlasScore: result.atlasScore.overall }, "Analysis complete");
 
-  // Kick off background calibration (non-blocking)
   maybeCalibrate(sym);
-
   return result;
 }
 
@@ -176,7 +190,9 @@ export function getCachedBreadth(): { total: number; pctAboveSma50: number | nul
   let aboveSma50 = 0, aboveSma200 = 0, total = 0;
 
   for (const ticker of SCANNER_UNIVERSE) {
-    const cached = analysisCache.get<AnalysisResult>(`analysis:${ticker}`);
+    // Check full-mode cache first; fall back to scanner light-mode cache
+    const cached = analysisCache.get<AnalysisResult>(`analysis:${ticker}`)
+                ?? analysisCache.get<AnalysisResult>(`scan:${ticker}`);
     if (!cached) continue;
     total++;
     const price = cached.quote.price as number;

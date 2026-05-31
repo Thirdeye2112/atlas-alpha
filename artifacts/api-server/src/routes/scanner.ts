@@ -236,9 +236,14 @@ router.get("/scanner/mean-reversion", (req, res): void => {
   const limit = Math.min(Number(req.query.limit) || 25, 50);
   try {
     res.json(scanResponse(
-      a => (a.momentum.rsiSignal === "oversold" && a.atlasScore.direction !== "bearish") ||
-        (a.momentum.rsiSignal === "overbought" && a.atlasScore.direction !== "bullish"),
-      (a, b) => Math.abs(b.momentum.rsi - 50) - Math.abs(a.momentum.rsi - 50),
+      // Mean-reversion candidates: stocks that are EITHER
+      //   (a) showing meaningful exhaustion signals (exh > 55), OR
+      //   (b) at RSI extremes (>75 overbought / <30 oversold)
+      // Direction label is deliberately NOT used as a filter here — the entire
+      // point of a mean-reversion scan is to fade the prevailing direction.
+      // Sort by exhaustion score desc (most likely to revert first).
+      a => a.atlasScore.exhaustionScore > 55 || a.momentum.rsi > 75 || a.momentum.rsi < 30,
+      (a, b) => b.atlasScore.exhaustionScore - a.atlasScore.exhaustionScore,
       limit
     ));
   } catch (err) {
