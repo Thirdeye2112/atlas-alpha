@@ -250,6 +250,27 @@ function buildNarrative(
     );
   }
 
+  // ── Structural pattern warnings (fire regardless of overall score direction) ──
+  if (exhaustion.doubleTop) {
+    const pctStr = exhaustion.doubleTopPeakPct < -0.5
+      ? ` Price is now ${Math.abs(exhaustion.doubleTopPeakPct).toFixed(1)}% below the dual-peak level.`
+      : ` Price is currently testing the dual-peak resistance zone.`;
+    parts.push(
+      `⚠️ DOUBLE-TOP STRUCTURE DETECTED: Two roughly-equal price highs separated by a meaningful trough — a classical distribution/reversal pattern.${pctStr}` +
+      ` A bullish score here reflects current momentum, NOT the structural setup.` +
+      ` Risk/reward skews to the downside until price reclaims both peaks on conviction volume, or breaks the trough (neckline) decisively.`
+    );
+  }
+
+  if (exhaustion.parabolicRise) {
+    parts.push(
+      `📐 PARABOLIC EXTENSION: The stock rose ${exhaustion.riseSpeed5d.toFixed(1)}% in 5 sessions — significantly faster than its prior baseline velocity.` +
+      ` Parabolic moves ("humps") statistically resolve with a proportional retracement.` +
+      ` The steeper the angle of ascent, the sharper the mean-reversion snap when buying exhausts.` +
+      ` Reduce position size or use trailing stops; avoid chasing at current velocity.`
+    );
+  }
+
   parts.push(`${strength} ${direction} setup detected. ${agreeing}/${totalCats} independent categories in agreement (confidence: ${Math.round(confidence)}%).`);
 
   if (regimeGate < 1.0) {
@@ -337,6 +358,8 @@ export function calcScannerResult(
   if (momentum.rsiSignal === "overbought") catalysts.push("RSI Overbought");
   if (momentum.rsiDivergence) catalysts.push(`RSI ${momentum.rsiDivergence} divergence`);
   if (exhaustion?.exhaustionSignal === "distribution_top") catalysts.push("Distribution Top");
+  if (exhaustion?.doubleTop)     catalysts.push("Double Top");
+  if (exhaustion?.parabolicRise) catalysts.push("Parabolic Rise");
 
   const signalStrength = atlasScore.confidenceScore >= 80 ? "strong"
     : atlasScore.confidenceScore >= 60 ? "moderate"

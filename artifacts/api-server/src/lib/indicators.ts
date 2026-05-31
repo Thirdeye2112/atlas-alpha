@@ -107,6 +107,10 @@ export interface ExhaustionResult {
   capitulationVolume: boolean;  // relVol > 5x at RSI < 25
   exhaustionScore: number;      // 0-100; high = potential bottom exhaustion
   exhaustionSignal: "capitulation" | "reversal_bar" | "breakout" | "extended_decline" | "distribution_top" | "none";
+  doubleTop: boolean;           // price-pattern: two roughly-equal highs with trough ≥3% between them
+  parabolicRise: boolean;       // rapid ascent vs prior baseline velocity — "hump" retracement risk
+  doubleTopPeakPct: number;     // how far current price is from the double-top peak level (neg = below peak)
+  riseSpeed5d: number;          // 5-day ROC at the time of detection (0 if not parabolic)
 }
 
 function last<T>(arr: T[]): T {
@@ -703,6 +707,7 @@ export function calcExhaustion(
     return {
       gapPct: 0, wickRatio: 0.5, consecutiveDownDays: 0,
       capitulationVolume: false, distributionTop: false, exhaustionScore: 50, exhaustionSignal: "none",
+      doubleTop: false, parabolicRise: false, doubleTopPeakPct: 0, riseSpeed5d: 0,
     };
   }
 
@@ -810,6 +815,74 @@ export function calcExhaustion(
     momentum.stochK > 80 && momentum.stochD > 80 &&
     (trend.priceVsSma20 > 10 || (volatility ? bars[bars.length - 1].close > volatility.bollingerUpper : false));
 
+  // ── Double-top price pattern: two roughly-equal highs separated by a ≥3% trough ──
+  // Looks back 60 bars; second peak must be in the last 20 bars.
+  let doubleTop = false;
+  let doubleTopPeakPct = 0;
+  {
+    const lb = bars.slice(-60);
+    const len = lb.length;
+    if (len >= 20) {
+      const highs = lb.map(b => b.high);
+      const lows  = lb.map(b => b.low);
+
+      // Step 1: find the global peak (first/leftmost peak)
+      let p1Idx = 0;
+      for (let i = 1; i < len; i++) if (highs[i] > highs[p1Idx]) p1Idx = i;
+      const p1 = highs[p1Idx];
+
+      // Step 2: peak must not be in the last 5 bars (room for second peak) nor first 3
+      if (p1Idx >= 3 && p1Idx <= len - 5) {
+        // Step 3: find the trough after the first peak
+        let troughIdx = p1Idx + 1;
+        let troughLow = lows[p1Idx + 1] ?? p1;
+        for (let i = p1Idx + 1; i < len - 2; i++) {
+          if (lows[i] < troughLow) { troughLow = lows[i]; troughIdx = i; }
+        }
+        const troughDepth = (p1 - troughLow) / p1 * 100;
+
+        // Step 4: find the second peak after the trough
+        if (troughDepth >= 3 && troughIdx > p1Idx) {
+          let p2Idx = troughIdx;
+          let p2 = highs[troughIdx];
+          for (let i = troughIdx + 1; i < len; i++) {
+            if (highs[i] > p2) { p2 = highs[i]; p2Idx = i; }
+          }
+          // Second peak within 3.5% of first peak AND in last 20 bars
+          const peakDiff = Math.abs(p2 - p1) / p1 * 100;
+          if (peakDiff <= 3.5 && p2Idx >= len - 20 && troughDepth >= 3) {
+            doubleTop = true;
+            const currentClose = bars[bars.length - 1].close;
+            doubleTopPeakPct = (currentClose - Math.max(p1, p2)) / Math.max(p1, p2) * 100;
+          }
+        }
+      }
+    }
+  }
+  if (doubleTop) score -= 14;
+
+  // ── Parabolic rise: recent 5D velocity >> prior 15D baseline → "hump" risk ──
+  // The faster the ascent, the more proportional the retracement tends to be.
+  let parabolicRise = false;
+  let riseSpeed5d = 0;
+  {
+    const closes = bars.map(b => b.close);
+    const n2 = closes.length;
+    if (n2 >= 26) {
+      const roc5  = (closes[n2 - 1] - closes[n2 - 6])  / closes[n2 - 6]  * 100;
+      // baseline: the 15-day move that ended 5 days ago (non-overlapping window)
+      const roc15 = (closes[n2 - 6] - closes[n2 - 21]) / closes[n2 - 21] * 100;
+      riseSpeed5d = roc5;
+      // Parabolic: 5D gain > 8% AND faster than 1.5× the prior 15D pace AND extended above SMA20
+      if (roc5 > 8 && roc5 > Math.abs(roc15) * 1.5 && trend.priceVsSma20 > 5) {
+        parabolicRise = true;
+      }
+    }
+  }
+  if (parabolicRise) score -= 10;
+
+  score = clamp(score);
+
   let exhaustionSignal: ExhaustionResult["exhaustionSignal"] = "none";
   if (score >= 70) {
     if (capitulationVolume) {
@@ -836,6 +909,10 @@ export function calcExhaustion(
     distributionTop,
     exhaustionScore:      score,
     exhaustionSignal,
+    doubleTop,
+    parabolicRise,
+    doubleTopPeakPct:     Math.round(doubleTopPeakPct * 10) / 10,
+    riseSpeed5d:          Math.round(riseSpeed5d * 10) / 10,
   };
 }
 
