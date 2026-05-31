@@ -16,6 +16,9 @@ interface BacktestResult {
   totalObservations: number;
   calibratedSlope: number; calibratedIntercept: number;
   slippageBps: number; brierScore: number | null;
+  brierScoreCI: { low: number; high: number } | null;
+  inSampleIC: number; outOfSampleIC: number; icDegradation: number;
+  oosPeriods: Array<{ label: string; start: string; end: string; ic: number; n: number }>;
   categoryIC: CatIC; optimalWeights: Weights | null; currentWeights: Weights;
   bull: { count: number; hitRate: number | null; hitRateNet: number | null; avgReturn: number | null };
   neutral: { count: number; hitRate: number | null; hitRateNet: number | null; avgReturn: number | null };
@@ -805,6 +808,50 @@ export default function BacktestLab() {
             <ScoreTimelineChart data={result.timeline} horizon={result.horizon} rankIC={result.rankIC} />
           </div>
 
+          {/* ── IS vs OOS Walk-Forward ── */}
+          <div className="p-4 bg-card/30 border border-border rounded space-y-3">
+            <div className="text-xs font-mono font-bold text-muted-foreground tracking-wider">
+              IN-SAMPLE vs OUT-OF-SAMPLE IC — temporal generalization test
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: "IN-SAMPLE", ic: result.inSampleIC, period: result.oosPeriods[0] },
+                { label: "OUT-OF-SAMPLE", ic: result.outOfSampleIC, period: result.oosPeriods[1] },
+                { label: "DEGRADATION", ic: null, degradation: result.icDegradation },
+              ].map(({ label, ic, period, degradation }) => (
+                <div key={label} className="bg-card/50 border border-border rounded p-3">
+                  <div className="text-xs text-muted-foreground font-mono mb-1">{label}</div>
+                  {ic !== null ? (
+                    <>
+                      <div className={cn("text-xl font-bold font-mono", icColor(ic))}>
+                        {ic >= 0 ? "+" : ""}{ic.toFixed(3)}
+                      </div>
+                      <div className="text-xs text-muted-foreground font-mono mt-0.5">
+                        {period?.n ?? "—"} obs · {period?.start?.slice(0, 7)} → {period?.end?.slice(0, 7)}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className={cn("text-xl font-bold font-mono",
+                        Math.abs(result.icDegradation) <= 0.02 ? "text-emerald-400" :
+                        Math.abs(result.icDegradation) <= 0.06 ? "text-amber-400" : "text-red-400"
+                      )}>
+                        {(degradation ?? 0) >= 0 ? "+" : ""}{(degradation ?? 0).toFixed(3)}
+                      </div>
+                      <div className="text-xs font-mono mt-0.5 text-muted-foreground">
+                        {Math.abs(result.icDegradation) <= 0.02 ? "robust" :
+                         Math.abs(result.icDegradation) <= 0.06 ? "mild overfit" : "overfit risk"}
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="text-xs text-muted-foreground font-mono">
+              First ~1Y of data trains the model (IS); second ~1Y tests it (OOS). Degradation &gt; 0.05 suggests the score pattern may not generalize.
+            </div>
+          </div>
+
           {/* ── Horizon Progression + Score Buckets ── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {multiData && (
@@ -904,6 +951,20 @@ export default function BacktestLab() {
                 <div className="text-muted-foreground">
                   P(+return) = sigmoid({result.calibratedSlope.toFixed(3)} · score {result.calibratedIntercept >= 0 ? "+" : ""}{result.calibratedIntercept.toFixed(3)})
                 </div>
+                {result.brierScore !== null && (
+                  <div className="text-muted-foreground flex items-center gap-2 flex-wrap">
+                    <span>Brier score: <span className={cn("font-bold",
+                      result.brierScore < 0.20 ? "text-emerald-400" :
+                      result.brierScore < 0.25 ? "text-amber-400" : "text-red-400"
+                    )}>{result.brierScore.toFixed(3)}</span></span>
+                    {result.brierScoreCI && (
+                      <span className="text-muted-foreground/60">
+                        90% CI [{result.brierScoreCI.low.toFixed(3)}, {result.brierScoreCI.high.toFixed(3)}]
+                      </span>
+                    )}
+                    <span className="text-muted-foreground/50 text-xs">(lower = better; 0.25 = coin flip)</span>
+                  </div>
+                )}
                 <div className="grid grid-cols-3 gap-1 mt-1">
                   {[30, 50, 70].map(s => {
                     const z = Math.max(-15, Math.min(15, result.calibratedSlope * s + result.calibratedIntercept));

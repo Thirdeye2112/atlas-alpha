@@ -3,7 +3,7 @@ import type { TrendResult, MomentumResult, VolumeResult, OptionsResult, Relative
 // Bump this string whenever scoring weights or formula change materially.
 // calibration_models rows with a different score_version are automatically
 // treated as stale and excluded from inference.
-export const SCORE_VERSION = "v1.2";
+export const SCORE_VERSION = "v1.3";
 
 export type AtlasLabel = "extreme_bearish" | "bearish" | "neutral" | "bullish" | "extreme_bullish";
 export type Direction = "bullish" | "bearish" | "neutral";

@@ -3,6 +3,8 @@ import { fetchQuote, fetchOHLCV } from "../lib/marketData.js";
 import { runFullAnalysis, runHistoricalAnalysis } from "../lib/analysisEngine.js";
 import { calibrationStore } from "../lib/calibrationStore.js";
 import { GetStockQuoteParams, GetStockAnalysisParams, GetStockOhlcvParams } from "@workspace/api-zod";
+import { checkAlertsForTicker } from "./alerts.js";
+import { generateNarrative } from "../lib/narrative.js";
 
 const router: IRouter = Router();
 
@@ -53,6 +55,10 @@ router.get("/stock/:ticker/analysis", async (req, res): Promise<void> => {
         fittedAt:     calEntry?.fittedAt      ?? null,
       },
     });
+
+    // Fire-and-forget: check if any score/direction alerts fire for this ticker
+    checkAlertsForTicker(sym, analysis.atlasScore.overall, analysis.atlasScore.direction)
+      .catch(() => { /* non-critical */ });
   } catch (err) {
     req.log.warn({ err, ticker: params.data.ticker }, "Analysis failed");
     res.status(404).json({ error: `Could not analyze ticker: ${params.data.ticker}` });
@@ -90,6 +96,44 @@ router.get("/stock/:ticker/ohlcv", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.warn({ err, ticker: params.data.ticker }, "OHLCV fetch failed");
     res.status(404).json({ error: `No OHLCV data for ${params.data.ticker}` });
+  }
+});
+
+// ── AI Narrative (cached 5 min; requires ENABLE_AI_NARRATIVE=true) ────────────
+router.get("/stock/:ticker/narrative", async (req, res): Promise<void> => {
+  const ticker = (req.params.ticker as string).toUpperCase();
+  try {
+    const analysis = await runFullAnalysis(ticker);
+    const calEntry  = calibrationStore.getFitted(ticker);
+
+    const narrative = await generateNarrative({
+      ticker,
+      score:              analysis.atlasScore.overall,
+      direction:          analysis.atlasScore.direction,
+      timeHorizon:        analysis.atlasScore.timeHorizon,
+      bullishProbability: analysis.atlasScore.bullishProbability ?? 50,
+      rsi14:              analysis.momentum.rsi ?? 50,
+      macdSignal:         analysis.momentum.macdCrossover ?? "neutral",
+      priceAboveSma20:    (analysis.trend.priceVsSma20  ?? 0) > 0,
+      priceAboveSma50:    (analysis.trend.priceVsSma50  ?? 0) > 0,
+      priceAboveSma200:   (analysis.trend.priceVsSma200 ?? 0) > 0,
+      relativeVolume:     analysis.volume.relativeVolume ?? 1,
+      vwapDistancePct:    analysis.volume.vwap > 0
+                            ? ((analysis.quote as { price: number }).price - analysis.volume.vwap) / analysis.volume.vwap * 100
+                            : 0,
+      atr14Pct:           analysis.volatility.atrPercent ?? 2,
+      bbWidth:            analysis.volatility.bollingerWidth ?? 15,
+      rankIC:             calEntry?.rankIC ?? undefined,
+    });
+
+    if (!narrative) {
+      res.status(503).json({ error: "AI narrative unavailable. Set ENABLE_AI_NARRATIVE=true and provision the OpenAI integration." });
+      return;
+    }
+    res.json({ ticker, narrative });
+  } catch (err) {
+    req.log.warn({ err, ticker }, "Narrative generation failed");
+    res.status(500).json({ error: "Narrative generation failed" });
   }
 });
 

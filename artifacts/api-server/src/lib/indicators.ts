@@ -598,9 +598,28 @@ export interface RegimeIndicators {
   realizedVol20: number;
   realizedVolPct: number;
   regimeScore: number;
+  /** Pre-computed HYG/LQD 20D momentum factor (0–100); null when data unavailable. */
+  creditSpreadFactor: number | null;
+  /** Pre-computed VIX3M/VIX ratio factor (0–100); null when data unavailable. */
+  vixTermStructureFactor: number | null;
 }
 
-export function calcRegimeIndicators(bars: OHLCVBar[], spyTrend: TrendResult): RegimeIndicators {
+/**
+ * Optional extra market context for enhanced regime scoring.
+ * All fields are optional — safe to omit (neutral 50 is assumed for missing values).
+ */
+export interface RegimeExtra {
+  /** 0–100: HYG/LQD 20D ratio momentum. 100 = improving credit (risk-on). */
+  creditSpreadFactor?: number;
+  /** 0–100: VIX3M/VIX ratio. 100 = strong contango (calm). 0 = backwardation (fear). */
+  vixTermStructureFactor?: number;
+}
+
+export function calcRegimeIndicators(
+  bars: OHLCVBar[],
+  spyTrend: TrendResult,
+  extra?: RegimeExtra,
+): RegimeIndicators {
   const highs = bars.map(b => b.high);
   const lows = bars.map(b => b.low);
   const closes = bars.map(b => b.close);
@@ -628,24 +647,35 @@ export function calcRegimeIndicators(bars: OHLCVBar[], spyTrend: TrendResult): R
   const rank = rollingVols.filter(v => v < realizedVol20).length;
   const realizedVolPct = rollingVols.length > 0 ? (rank / rollingVols.length) * 100 : 50;
 
-  // Composite regime score:
-  //   50% SPY SMA alignment (trend direction)
-  //   30% vol state (low vol = calm market = high score)
-  //   20% ADX (whether there's a clear trend to ride)
+  // Extra factors: default to 50 (neutral) when unavailable so score scale
+  // is preserved in backtestEngine historical runs without HYG/LQD data.
+  const creditFactor = extra?.creditSpreadFactor    ?? 50;
+  const vtsFactor    = extra?.vixTermStructureFactor ?? 50;
+
+  // Composite regime score (weights sum to 100%):
+  //   40% SPY SMA alignment     — primary market trend direction
+  //   20% volatility state      — low vol = calm = risk-on
+  //   15% ADX                   — whether there is a clear trend to follow
+  //   15% credit spread momentum— HYG/LQD ratio improving = risk-on
+  //   10% VIX term structure    — contango = calm, backwardation = fear
   const volFactor = 100 - realizedVolPct;
   const adxFactor = clamp((adxVal - 15) * 5); // ADX 15→0, ADX 35→100
   const regimeScore = clamp(
-    spyTrend.trendAlignmentScore * 0.50 +
-    volFactor * 0.30 +
-    adxFactor * 0.20
+    spyTrend.trendAlignmentScore * 0.40 +
+    volFactor * 0.20 +
+    adxFactor * 0.15 +
+    creditFactor * 0.15 +
+    vtsFactor  * 0.10
   );
 
   return {
     adx: Math.round(adxVal * 10) / 10,
     adxTrending,
-    realizedVol20: Math.round(realizedVol20 * 10) / 10,
+    realizedVol20:  Math.round(realizedVol20 * 10) / 10,
     realizedVolPct: Math.round(realizedVolPct),
-    regimeScore: Math.round(regimeScore),
+    regimeScore:    Math.round(regimeScore),
+    creditSpreadFactor:     extra?.creditSpreadFactor    ?? null,
+    vixTermStructureFactor: extra?.vixTermStructureFactor ?? null,
   };
 }
 

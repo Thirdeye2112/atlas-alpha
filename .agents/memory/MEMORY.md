@@ -4,3 +4,4 @@
 - [Calibration persistence](calibration-persistence.md) — DB-backed calibrationStore; status values are 'live-fit'|'stale-fit'|'cold-start'|'pending'|'error'; SCORE_VERSION in scoring.ts invalidates stale rows
 - [Signal logging pattern](signal-logging.md) — batch insert to signal_log at scan job end; fire-and-forget; AnalysisResult.quote is Record<string,unknown> so ticker needs String() cast
 - [Backtest cost model](backtest-cost-model.md) — SLIPPAGE_BPS=5 baked in; hitRateNet = direction-aware net hit rate per bucket; brierScore persisted to calibration_models
+- [Platform upgrades v1.3](platform-upgrades-v1.3.md) — regime v1.3 field names, IS/OOS split design, alert DB schema, AI narrative toggle, and AnalysisResult field gotchas.

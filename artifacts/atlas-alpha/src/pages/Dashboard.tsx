@@ -542,6 +542,46 @@ function formatDateLabel(date: string): string {
   });
 }
 
+// ── AI Narrative section ──────────────────────────────────────────────────────
+function NarrativeSection({ ticker, fallback }: { ticker: string; fallback: string }) {
+  const { data: narrativeData, isLoading, isError } = useQuery<{ ticker: string; narrative: string } | null>({
+    queryKey: ["narrative", ticker],
+    queryFn: async () => {
+      const r = await fetch(`/api/stock/${encodeURIComponent(ticker)}/narrative`);
+      if (!r.ok) return null;
+      return r.json();
+    },
+    enabled: !!ticker,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+    gcTime: 10 * 60 * 1000,
+  });
+
+  const narrative = narrativeData?.narrative;
+
+  return (
+    <>
+      <h3 className="text-xs font-bold text-muted-foreground tracking-wider mb-2 flex items-center gap-2">
+        {/* Info icon imported in parent */}
+        <span className="w-3 h-3 inline-block opacity-60">ℹ</span>
+        SIGNAL NARRATIVE
+        {narrative && <span className="text-[9px] text-primary/60 font-mono normal-case tracking-normal ml-auto">AI</span>}
+      </h3>
+      {isLoading ? (
+        <div className="space-y-1.5">
+          <div className="h-3 bg-muted/60 rounded animate-pulse w-full" />
+          <div className="h-3 bg-muted/60 rounded animate-pulse w-5/6" />
+          <div className="h-3 bg-muted/60 rounded animate-pulse w-4/6" />
+        </div>
+      ) : (
+        <p className="text-sm text-secondary-foreground leading-relaxed">
+          {(narrative && !isError) ? narrative : fallback}
+        </p>
+      )}
+    </>
+  );
+}
+
 export default function Dashboard() {
   const search = useSearch();
   const [, navigate] = useLocation();
@@ -942,13 +982,10 @@ export default function Dashboard() {
             </div>
 
             <div className="p-4 flex-1 overflow-y-auto">
-              <h3 className="text-xs font-bold text-muted-foreground tracking-wider mb-2 flex items-center gap-2">
-                <Info className="w-3 h-3" />
-                SIGNAL NARRATIVE
-              </h3>
-              <p className="text-sm text-secondary-foreground leading-relaxed">
-                {displayAnalysis.atlasScore.signalNarrative}
-              </p>
+              <NarrativeSection
+                ticker={ticker}
+                fallback={displayAnalysis.atlasScore.signalNarrative}
+              />
 
               <div className="mt-6">
                 <h3 className="text-xs font-bold text-muted-foreground tracking-wider mb-2">KEY CATALYSTS</h3>

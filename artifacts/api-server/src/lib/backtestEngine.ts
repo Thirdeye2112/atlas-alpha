@@ -82,6 +82,33 @@ function sigmoid(slope: number, intercept: number, score: number): number {
   return Math.round((1 / (1 + Math.exp(-z))) * 100);
 }
 
+/** Bootstrap 90% CI for Brier score via 200 resamples with replacement. */
+function brierCI(
+  scores: number[],
+  binary: number[],
+  slope: number,
+  intercept: number,
+  nResamples = 200,
+): { low: number; high: number } | null {
+  const n = scores.length;
+  if (n < 20) return null;
+  const samples: number[] = [];
+  for (let s = 0; s < nResamples; s++) {
+    let bs = 0;
+    for (let i = 0; i < n; i++) {
+      const idx = Math.floor(Math.random() * n);
+      const p = sigmoid(slope, intercept, scores[idx]) / 100;
+      bs += (p - binary[idx]) ** 2;
+    }
+    samples.push(bs / n);
+  }
+  samples.sort((a, b) => a - b);
+  return {
+    low:  r3(samples[Math.floor(nResamples * 0.05)]),
+    high: r3(samples[Math.floor(nResamples * 0.95)]),
+  };
+}
+
 function capBucket(marketCap: number | null): string {
   if (!marketCap) return "unknown";
   if (marketCap >= 200e9) return "mega";
@@ -124,6 +151,11 @@ export interface BacktestOutput {
   calibratedIntercept: number;
   slippageBps: number;
   brierScore: number | null;
+  brierScoreCI: { low: number; high: number } | null;
+  inSampleIC: number;
+  outOfSampleIC: number;
+  icDegradation: number;
+  oosPeriods: Array<{ label: string; start: string; end: string; ic: number; n: number }>;
   categoryIC: { trend: number; momentum: number; volume: number; relativeStrength: number; regime: number };
   optimalWeights: { trend: number; momentum: number; volume: number; relativeStrength: number; regime: number } | null;
   currentWeights: { trend: number; momentum: number; volume: number; relativeStrength: number; regime: number };
@@ -194,6 +226,19 @@ export async function runBacktest(ticker: string, horizon: number): Promise<Back
   const returns = dataPoints.map(d => d.fwdReturn);
   const n = dataPoints.length;
 
+  // ── IS / OOS split ────────────────────────────────────────────────────────
+  // Strict temporal split: first half = in-sample, second half = out-of-sample.
+  const splitIdx    = Math.floor(n / 2);
+  const isPoints    = dataPoints.slice(0, splitIdx);
+  const oosPoints   = dataPoints.slice(splitIdx);
+  const inSampleIC    = isPoints.length  >= 10 ? r3(spearmanIC(isPoints.map(d => d.score),  isPoints.map(d => d.fwdReturn)))  : 0;
+  const outOfSampleIC = oosPoints.length >= 10 ? r3(spearmanIC(oosPoints.map(d => d.score), oosPoints.map(d => d.fwdReturn))) : 0;
+  const icDegradation = r3(inSampleIC - outOfSampleIC);
+  const oosPeriods = [
+    { label: "In-sample",     start: isPoints[0]?.date  ?? "", end: isPoints[isPoints.length - 1]?.date   ?? "", ic: inSampleIC,    n: isPoints.length  },
+    { label: "Out-of-sample", start: oosPoints[0]?.date ?? "", end: oosPoints[oosPoints.length - 1]?.date ?? "", ic: outOfSampleIC, n: oosPoints.length },
+  ];
+
   // IC metrics
   const ic      = r3(pearsonIC(scores, returns));
   const rankIC  = r3(spearmanIC(scores, returns));
@@ -232,6 +277,10 @@ export async function runBacktest(ticker: string, horizon: number): Promise<Back
         const p = sigmoid(calibratedSlope, calibratedIntercept, scores[i]) / 100;
         return s + (p - y) ** 2;
       }, 0) / binary.length)
+    : null;
+
+  const brierScoreCI = brierScore !== null
+    ? brierCI(scores, binary, calibratedSlope, calibratedIntercept)
     : null;
 
   // Write to calibration store (keeps the fitted function for real-time use)
@@ -311,6 +360,11 @@ export async function runBacktest(ticker: string, horizon: number): Promise<Back
     calibratedIntercept,
     slippageBps:  SLIPPAGE_BPS,
     brierScore,
+    brierScoreCI,
+    inSampleIC,
+    outOfSampleIC,
+    icDegradation,
+    oosPeriods,
     categoryIC,
     optimalWeights,
     currentWeights: { trend: 24, momentum: 18, volume: 13, relativeStrength: 20, regime: 4 },

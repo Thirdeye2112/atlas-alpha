@@ -14,13 +14,17 @@ router.get("/market/overview", async (req, res): Promise<void> => {
     return;
   }
 
-  // 1y bars for SPY so realized vol percentile has a full year of history
-  const [spy, qqq, iwm, vix, spyBars] = await Promise.all([
+  // 1y bars for SPY (vol percentile needs full year).
+  // HYG/LQD 3-month bars for credit spread momentum; ^VIX3M for term structure.
+  const [spy, qqq, iwm, vix, spyBars, hygBars, lqdBars, vix3mQuote] = await Promise.all([
     fetchQuote("SPY"),
     fetchQuote("QQQ"),
     fetchQuote("IWM"),
     fetchQuote("^VIX"),
     fetchOHLCV("SPY", "1y", "1d"),
+    fetchOHLCV("HYG", "3mo", "1d").catch(() => []),
+    fetchOHLCV("LQD", "3mo", "1d").catch(() => []),
+    fetchQuote("^VIX3M").catch(() => null),
   ]);
 
   const toMarketQuote = (q: typeof spy) => ({
@@ -31,8 +35,29 @@ router.get("/market/overview", async (req, res): Promise<void> => {
     volume: q.volume,
   });
 
+  // ── Credit spread factor: HYG/LQD 20D ratio momentum (0–100) ─────────────
+  // Rising HYG/LQD ratio = credit spreads tightening = risk-on environment.
+  let creditSpreadFactor: number | undefined;
+  if (hygBars.length >= 21 && lqdBars.length >= 21) {
+    const minLen = Math.min(hygBars.length, lqdBars.length);
+    const latest = hygBars[minLen - 1].close / lqdBars[minLen - 1].close;
+    const prior  = hygBars[minLen - 21].close / lqdBars[minLen - 21].close;
+    const momentum20D = (latest / prior - 1) * 100; // percentage
+    // -2% → factor 0 (credit widening, risk-off); +2% → factor 100 (credit improving, risk-on)
+    creditSpreadFactor = Math.max(0, Math.min(100, (momentum20D + 2) / 4 * 100));
+  }
+
+  // ── VIX term structure factor: VIX3M / VIX ratio (0–100) ────────────────
+  // Normal contango (ratio > 1) = calm; backwardation (ratio < 1) = fear.
+  let vixTermStructureFactor: number | undefined;
+  if (vix3mQuote && vix.price > 0) {
+    const vts = vix3mQuote.price / vix.price;
+    // 0.80 → factor 0 (strong backwardation/fear); 1.30 → factor 100 (strong contango/calm)
+    vixTermStructureFactor = Math.max(0, Math.min(100, (vts - 0.80) / 0.50 * 100));
+  }
+
   const spyTrend = calcTrend(spyBars, spy.price);
-  const regime = calcRegimeIndicators(spyBars, spyTrend);
+  const regime = calcRegimeIndicators(spyBars, spyTrend, { creditSpreadFactor, vixTermStructureFactor });
   const vixPrice = vix.price;
 
   let marketRegime: "risk_on" | "neutral" | "risk_off" = "neutral";
@@ -62,6 +87,8 @@ router.get("/market/overview", async (req, res): Promise<void> => {
     adxTrending: regime.adxTrending,
     realizedVol20: regime.realizedVol20,
     realizedVolPct: regime.realizedVolPct,
+    creditSpreadFactor: regime.creditSpreadFactor,
+    vixTermStructureFactor: regime.vixTermStructureFactor,
     pctAboveSma50:  breadth.pctAboveSma50,
     pctAboveSma200: breadth.pctAboveSma200,
     breadthUniverse: breadth.total > 0 ? breadth.total : null,

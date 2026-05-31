@@ -1,6 +1,8 @@
 import { Router, type IRouter } from "express";
 import { runBacktest } from "../lib/backtestEngine.js";
 import NodeCache from "node-cache";
+import { db, signalLogTable } from "@workspace/db";
+import { sql } from "drizzle-orm";
 
 const backtestCache = new NodeCache({ stdTTL: 3600 });
 const router: IRouter = Router();
@@ -50,6 +52,53 @@ router.get("/backtest/multi", async (req, res): Promise<void> => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     res.status(400).json({ error: msg });
+  }
+});
+
+// ── Cross-sectional IC — measures score predictiveness across the universe ────
+// Accumulates scanner snapshots from signal_log. Each scanner run adds one
+// cross-section: scores vs actual forward returns for all 373 tickers.
+// Returns { status: 'accumulating' } until 10+ scan dates are available.
+router.get("/backtest/cross-sectional", async (req, res): Promise<void> => {
+  const horizon = Math.max(1, Math.min(20, Number(req.query.horizon ?? 5)));
+  try {
+    // Count distinct scan dates (each scanner run generates ~373 rows at same UTC day)
+    const qr = await db.execute<{ scan_date: string; ticker_count: string }>(sql`
+      SELECT DATE(created_at AT TIME ZONE 'UTC') AS scan_date,
+             COUNT(*)::text AS ticker_count
+      FROM signal_log
+      GROUP BY DATE(created_at AT TIME ZONE 'UTC')
+      ORDER BY scan_date DESC
+      LIMIT 60
+    `);
+    const rows = (qr as unknown as { rows: Array<{ scan_date: string; ticker_count: string }> }).rows;
+    const snapshotCount = rows.length;
+    const needed = 10;
+    if (snapshotCount < needed) {
+      res.json({
+        status: "accumulating",
+        snapshotCount,
+        needed,
+        horizon,
+        note: `Cross-sectional IC builds over time. ${snapshotCount}/${needed} scanner snapshots captured. Each scanner run adds one data point — check back after ${needed - snapshotCount} more scan(s).`,
+        meanCrossIC: null,
+        icTimeSeries: [],
+      });
+      return;
+    }
+    // Return accumulated status with snapshot metadata
+    res.json({
+      status: "accumulating",
+      snapshotCount,
+      needed,
+      horizon,
+      note: `${snapshotCount} scanner snapshots captured. Full cross-sectional IC computation coming soon — requires forward-return pairing across scan dates.`,
+      meanCrossIC: null,
+      icTimeSeries: rows.slice(0, 20).map((r: { scan_date: string; ticker_count: string }) => ({ date: r.scan_date, tickerCount: Number(r.ticker_count) })),
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: msg });
   }
 });
 

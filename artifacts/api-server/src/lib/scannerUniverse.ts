@@ -94,3 +94,68 @@ export const SCANNER_UNIVERSE: string[] = [
   // ── International & Emerging ─────────────────────────────────────────────
   "EEM", "IEMG", "EFA", "VEA", "ARKK",
 ];
+
+// ── Asset-type metadata ────────────────────────────────────────────────────
+
+export type AssetType =
+  | "equity"
+  | "etf"
+  | "leveraged-etf"
+  | "volatility-etf"
+  | "bond-etf"
+  | "commodity-etf"
+  | "international-etf";
+
+/** Explicit overrides — everything else is classified via getAssetType(). */
+export const UNIVERSE_METADATA: Readonly<Record<string, AssetType>> = {
+  // Leveraged / inverse (2× or 3× daily reset — structural decay)
+  TQQQ: "leveraged-etf", SQQQ: "leveraged-etf",
+  UPRO: "leveraged-etf", SPXU: "leveraged-etf",
+  SSO:  "leveraged-etf", SDS:  "leveraged-etf",
+  DDM:  "leveraged-etf", DXD:  "leveraged-etf",
+  TMF:  "leveraged-etf", TBT:  "leveraged-etf",
+
+  // Volatility products (VIX futures — persistent contango drag)
+  VXX: "volatility-etf", UVXY: "volatility-etf", SVXY: "volatility-etf",
+
+  // Fixed-income ETFs
+  TLT: "bond-etf", IEF: "bond-etf", SHY: "bond-etf",
+  AGG: "bond-etf", BND: "bond-etf",
+  LQD: "bond-etf", HYG: "bond-etf", JNK: "bond-etf",
+
+  // Commodity ETFs
+  GLD: "commodity-etf", SLV: "commodity-etf",
+  GDX: "commodity-etf", GDXJ: "commodity-etf",
+  USO: "commodity-etf", UNG: "commodity-etf",
+
+  // International / emerging-market ETFs
+  EEM: "international-etf", IEMG: "international-etf",
+  EFA: "international-etf", VEA:  "international-etf",
+  ARKK: "international-etf",
+};
+
+const BROAD_ETF_SET = new Set<string>([
+  "SPY","IVV","VOO","RSP","OEF","SPYG","SPYV",
+  "QQQ","QQQM","ONEQ","QQEW","DIA",
+  "IWM","IWB","IWV","IWF","IWD","IWO","IWN",
+  "MDY","IJH","IJR","SPSM","VTI","ITOT","SCHB",
+  "VUG","VTV","MGC","MGK","MGV",
+  "EUSA","QUAL","MTUM","VLUE","SIZE",
+  "XLK","XLF","XLE","XLV","XLP","XLI","XLY","XLU","XLB","XLRE","XLC",
+  "VGT","VFH","VDE","VHT","VDC","VIS","VCR","VPU","VAW",
+]);
+
+/** Returns the asset type for any ticker in the universe. */
+export function getAssetType(ticker: string): AssetType {
+  return UNIVERSE_METADATA[ticker] ?? (BROAD_ETF_SET.has(ticker) ? "etf" : "equity");
+}
+
+/**
+ * Returns true for tickers with structurally distorted price dynamics:
+ * leveraged daily-reset decay or VIX futures contango drag.
+ * These should carry disclaimers in the scanner and use caution in backtests.
+ */
+export function isStructurallyDistorted(ticker: string): boolean {
+  const t = UNIVERSE_METADATA[ticker];
+  return t === "leveraged-etf" || t === "volatility-etf";
+}
