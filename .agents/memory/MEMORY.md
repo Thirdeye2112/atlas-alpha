@@ -1,3 +1,6 @@
 - [Backtest IC findings](backtest-ic-findings.md) — IC is positive for small/mid-cap stocks but negative (contrarian) for mega-caps/indices; RS is most underpaid factor
 - [Distribution top signal](distribution-top-signal.md) — overbought exhaustion mirror: stoch K/D >90, price above BB+, SMA20 deviation, low RVOL at highs
 - [Scoring weights rationale](scoring-weights.md) — weights updated via IC²-analysis; RS 13→20%, Regime 8→4%, Trend 27→24%
+- [Calibration persistence](calibration-persistence.md) — DB-backed calibrationStore; status values are 'live-fit'|'stale-fit'|'cold-start'|'pending'|'error'; SCORE_VERSION in scoring.ts invalidates stale rows
+- [Signal logging pattern](signal-logging.md) — batch insert to signal_log at scan job end; fire-and-forget; AnalysisResult.quote is Record<string,unknown> so ticker needs String() cast
+- [Backtest cost model](backtest-cost-model.md) — SLIPPAGE_BPS=5 baked in; hitRateNet = direction-aware net hit rate per bucket; brierScore persisted to calibration_models

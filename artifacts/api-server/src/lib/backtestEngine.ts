@@ -104,6 +104,10 @@ interface DataPoint {
   rsScore: number; regimeScore: number;
 }
 
+// Assumed round-trip execution cost in basis points (5bps = 0.05%)
+const SLIPPAGE_BPS = 5;
+const SLIPPAGE_PCT = SLIPPAGE_BPS / 100;
+
 export interface BacktestOutput {
   ticker: string;
   horizon: number;
@@ -118,12 +122,14 @@ export interface BacktestOutput {
   totalObservations: number;
   calibratedSlope: number;
   calibratedIntercept: number;
+  slippageBps: number;
+  brierScore: number | null;
   categoryIC: { trend: number; momentum: number; volume: number; relativeStrength: number; regime: number };
   optimalWeights: { trend: number; momentum: number; volume: number; relativeStrength: number; regime: number } | null;
   currentWeights: { trend: number; momentum: number; volume: number; relativeStrength: number; regime: number };
-  bull:    { count: number; hitRate: number | null; avgReturn: number | null };
-  neutral: { count: number; hitRate: number | null; avgReturn: number | null };
-  bear:    { count: number; hitRate: number | null; avgReturn: number | null };
+  bull:    { count: number; hitRate: number | null; hitRateNet: number | null; avgReturn: number | null };
+  neutral: { count: number; hitRate: number | null; hitRateNet: number | null; avgReturn: number | null };
+  bear:    { count: number; hitRate: number | null; hitRateNet: number | null; avgReturn: number | null };
   deciles: Array<{ bucket: string; count: number; hitRate: number | null; avgReturn: number | null }>;
   scatter: Array<{ x: number; y: number; date: string }>;
   timeline: Array<{ date: string; score: number; fwdReturn: number; direction: "bull" | "neutral" | "bear"; correct: boolean }>;
@@ -220,6 +226,14 @@ export async function runBacktest(ticker: string, horizon: number): Promise<Back
   const binary = returns.map(r => r > 0 ? 1 : 0);
   const { slope: calibratedSlope, intercept: calibratedIntercept } = fitLogistic(scores, binary);
 
+  // Brier score: mean squared error of predicted P(+) vs actual outcome
+  const brierScore = binary.length > 0
+    ? r3(binary.reduce((s, y, i) => {
+        const p = sigmoid(calibratedSlope, calibratedIntercept, scores[i]) / 100;
+        return s + (p - y) ** 2;
+      }, 0) / binary.length)
+    : null;
+
   // Write to calibration store (keeps the fitted function for real-time use)
   calibrationStore.set(sym, {
     ticker: sym,
@@ -231,14 +245,25 @@ export async function runBacktest(ticker: string, horizon: number): Promise<Back
     rankIC,
     icRating: icLabel(Math.abs(rankIC)),
     fittedAt: new Date().toISOString(),
-  });
+    fitSource: "live",
+  }, { brierScore: brierScore ?? undefined });
 
-  logger.info({ ticker: sym, horizon, rankIC, observations: n, slope: calibratedSlope }, "Calibration fitted");
+  logger.info({ ticker: sym, horizon, rankIC, observations: n, slope: calibratedSlope, brierScore }, "Calibration fitted");
 
   // Buckets
   const bull    = dataPoints.filter(d => d.score >= 60);
   const neutral = dataPoints.filter(d => d.score > 40 && d.score < 60);
   const bear    = dataPoints.filter(d => d.score <= 40);
+
+  // Net hit rate: hit rate after deducting round-trip slippage cost
+  function hitRateNet(pts: Array<{ fwdReturn: number }>, direction: "long" | "short"): number | null {
+    if (!pts.length) return null;
+    const threshold = direction === "long" ? SLIPPAGE_PCT : -SLIPPAGE_PCT;
+    const hits = direction === "long"
+      ? pts.filter(d => d.fwdReturn > threshold).length
+      : pts.filter(d => d.fwdReturn < threshold).length;
+    return Math.round(hits / pts.length * 100);
+  }
 
   // Decile table
   const deciles = Array.from({ length: 10 }, (_, d) => {
@@ -284,12 +309,14 @@ export async function runBacktest(ticker: string, horizon: number): Promise<Back
     totalObservations: n,
     calibratedSlope,
     calibratedIntercept,
+    slippageBps:  SLIPPAGE_BPS,
+    brierScore,
     categoryIC,
     optimalWeights,
     currentWeights: { trend: 24, momentum: 18, volume: 13, relativeStrength: 20, regime: 4 },
-    bull:    { count: bull.length,    hitRate: hitRate(bull,    true),  avgReturn: avg(bull.map(d => d.fwdReturn)) },
-    neutral: { count: neutral.length, hitRate: hitRate(neutral, true),  avgReturn: avg(neutral.map(d => d.fwdReturn)) },
-    bear:    { count: bear.length,    hitRate: hitRate(bear,    false), avgReturn: avg(bear.map(d => d.fwdReturn)) },
+    bull:    { count: bull.length,    hitRate: hitRate(bull,    true),  hitRateNet: hitRateNet(bull,    "long"),  avgReturn: avg(bull.map(d => d.fwdReturn)) },
+    neutral: { count: neutral.length, hitRate: hitRate(neutral, true),  hitRateNet: hitRateNet(neutral, "long"),  avgReturn: avg(neutral.map(d => d.fwdReturn)) },
+    bear:    { count: bear.length,    hitRate: hitRate(bear,    false), hitRateNet: hitRateNet(bear,    "short"), avgReturn: avg(bear.map(d => d.fwdReturn)) },
     deciles,
     scatter,
     timeline,

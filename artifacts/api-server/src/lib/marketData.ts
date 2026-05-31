@@ -88,6 +88,89 @@ export interface OHLCVBar {
   volume: number;
 }
 
+export type DataWarningCode =
+  | "zero_volume"
+  | "bar_integrity"
+  | "outlier_return"
+  | "duplicate_timestamp"
+  | "session_gap";
+
+export interface DataWarning {
+  code: DataWarningCode;
+  index: number;
+  time: string;
+  detail: string;
+}
+
+/**
+ * Validates an OHLCV bar array for common data quality issues.
+ * Returns an array of warnings (empty = clean data).
+ * Does NOT throw — callers decide whether to drop flagged bars.
+ */
+export function validateOHLCV(bars: OHLCVBar[]): DataWarning[] {
+  const warnings: DataWarning[] = [];
+  const seenTimes = new Map<string, number>();
+
+  // Trailing 60-bar volatility for outlier detection
+  const getTrailingVol = (idx: number): number => {
+    const start = Math.max(0, idx - 60);
+    const slice = bars.slice(start, idx);
+    if (slice.length < 10) return Infinity; // not enough history — skip outlier check
+    const returns = slice.map((b, i) =>
+      i === 0 ? 0 : Math.log(b.close / slice[i - 1].close)
+    ).slice(1);
+    const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
+    const variance = returns.reduce((s, r) => s + (r - mean) ** 2, 0) / returns.length;
+    return Math.sqrt(variance);
+  };
+
+  for (let i = 0; i < bars.length; i++) {
+    const bar = bars[i];
+
+    // Duplicate timestamps
+    if (seenTimes.has(bar.time)) {
+      warnings.push({ code: "duplicate_timestamp", index: i, time: bar.time, detail: `Duplicate of bar at index ${seenTimes.get(bar.time)}` });
+    }
+    seenTimes.set(bar.time, i);
+
+    // Zero or negative volume (skip ETFs that can have zero-vol on halted sessions)
+    if (bar.volume <= 0) {
+      warnings.push({ code: "zero_volume", index: i, time: bar.time, detail: `Volume=${bar.volume}` });
+    }
+
+    // Bar integrity: high must be >= max(open, close), low <= min(open, close)
+    const expectedHigh = Math.max(bar.open, bar.close);
+    const expectedLow  = Math.min(bar.open, bar.close);
+    if (bar.high < expectedHigh * 0.999 || bar.low > expectedLow * 1.001) {
+      warnings.push({ code: "bar_integrity", index: i, time: bar.time,
+        detail: `H=${bar.high.toFixed(2)} L=${bar.low.toFixed(2)} O=${bar.open.toFixed(2)} C=${bar.close.toFixed(2)}` });
+    }
+
+    // Outlier single-bar return (> 8σ of trailing 60-day vol)
+    if (i > 0) {
+      const ret = Math.abs(Math.log(bar.close / bars[i - 1].close));
+      const sigma = getTrailingVol(i);
+      if (sigma < Infinity && ret > 8 * sigma && ret > 0.15) {
+        warnings.push({ code: "outlier_return", index: i, time: bar.time,
+          detail: `Return=${(ret * 100).toFixed(1)}% is >${(ret / sigma).toFixed(1)}σ` });
+      }
+    }
+
+    // Session gap: more than 5 calendar days between consecutive daily bars
+    if (i > 0 && !bar.time.includes("T")) { // daily bars only
+      const prev = new Date(bars[i - 1].time);
+      const curr = new Date(bar.time);
+      const gapDays = (curr.getTime() - prev.getTime()) / 86_400_000;
+      if (gapDays > 7) {
+        warnings.push({ code: "session_gap", index: i, time: bar.time,
+          detail: `${gapDays.toFixed(0)}-day gap from ${bars[i - 1].time}` });
+      }
+    }
+  }
+
+  return warnings;
+}
+
 export async function fetchQuote(ticker: string): Promise<YahooQuote> {
   const cached = quoteCache.get<YahooQuote>(ticker);
   if (cached) return cached;

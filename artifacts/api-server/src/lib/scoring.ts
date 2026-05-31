@@ -1,5 +1,10 @@
 import type { TrendResult, MomentumResult, VolumeResult, OptionsResult, RelativeStrengthResult, ExhaustionResult } from "./indicators.js";
 
+// Bump this string whenever scoring weights or formula change materially.
+// calibration_models rows with a different score_version are automatically
+// treated as stale and excluded from inference.
+export const SCORE_VERSION = "v1.2";
+
 export type AtlasLabel = "extreme_bearish" | "bearish" | "neutral" | "bullish" | "extreme_bullish";
 export type Direction = "bullish" | "bearish" | "neutral";
 export type TimeHorizon = "1-3d" | "1-2w" | "1-3m";

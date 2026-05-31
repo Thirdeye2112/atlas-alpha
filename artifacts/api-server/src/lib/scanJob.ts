@@ -5,7 +5,9 @@
  */
 import { SCANNER_UNIVERSE } from "./scannerUniverse.js";
 import { runFullAnalysis, type AnalysisResult } from "./analysisEngine.js";
+import { SCORE_VERSION } from "./scoring.js";
 import { logger } from "./logger.js";
+import { db, signalLogTable } from "@workspace/db";
 
 const JOB_TTL_MS = 30 * 60 * 1000; // keep a completed job for 30 min before re-scanning
 const BATCH_SIZE  = 10;
@@ -52,6 +54,8 @@ export function getOrStartScanJob(): ScanJob {
 }
 
 async function runJobBackground(job: ScanJob): Promise<void> {
+  const logRows: Array<typeof signalLogTable.$inferInsert> = [];
+
   for (let i = 0; i < SCANNER_UNIVERSE.length; i += BATCH_SIZE) {
     // Abort if a newer job has been started
     if (job !== currentJob) return;
@@ -62,7 +66,26 @@ async function runJobBackground(job: ScanJob): Promise<void> {
     );
 
     for (const r of results) {
-      if (r.status === "fulfilled") job.analyses.push(r.value as AnalysisResult);
+      if (r.status === "fulfilled") {
+        const a = r.value as AnalysisResult;
+        job.analyses.push(a);
+
+        // Accumulate signal log rows for DB write at end of job
+        logRows.push({
+          ticker:          String(a.quote.ticker ?? ""),
+          score:           a.atlasScore.overall,
+          trendScore:      a.atlasScore.trendScore,
+          momentumScore:   a.atlasScore.momentumScore,
+          volumeScore:     a.atlasScore.volumeScore,
+          rsScore:         a.atlasScore.relativeStrengthScore,
+          regimeScore:     a.atlasScore.marketRegimeScore,
+          exhaustionScore: a.atlasScore.exhaustionScore,
+          direction:       a.atlasScore.direction as string,
+          marketRegime:    null,
+          scannerCategory: null,
+          scoreVersion:    SCORE_VERSION,
+        });
+      }
     }
     job.done = Math.min(i + BATCH_SIZE, SCANNER_UNIVERSE.length);
   }
@@ -70,4 +93,13 @@ async function runJobBackground(job: ScanJob): Promise<void> {
   job.done     = job.total;
   job.complete = true;
   logger.info({ total: job.analyses.length }, "Scan job complete");
+
+  // Batch-insert signal log (fire-and-forget, never blocks scanner)
+  if (logRows.length > 0) {
+    db.insert(signalLogTable).values(logRows).then(() => {
+      logger.info({ count: logRows.length }, "Signal log written to DB");
+    }).catch(err => {
+      logger.warn({ err }, "Signal log DB write failed");
+    });
+  }
 }

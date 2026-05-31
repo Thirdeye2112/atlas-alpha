@@ -15,10 +15,11 @@ interface BacktestResult {
   rankIC: number; rankICRating: string; icTStat: number;
   totalObservations: number;
   calibratedSlope: number; calibratedIntercept: number;
+  slippageBps: number; brierScore: number | null;
   categoryIC: CatIC; optimalWeights: Weights | null; currentWeights: Weights;
-  bull: { count: number; hitRate: number | null; avgReturn: number | null };
-  neutral: { count: number; hitRate: number | null; avgReturn: number | null };
-  bear: { count: number; hitRate: number | null; avgReturn: number | null };
+  bull: { count: number; hitRate: number | null; hitRateNet: number | null; avgReturn: number | null };
+  neutral: { count: number; hitRate: number | null; hitRateNet: number | null; avgReturn: number | null };
+  bear: { count: number; hitRate: number | null; hitRateNet: number | null; avgReturn: number | null };
   deciles: Array<{ bucket: string; count: number; hitRate: number | null; avgReturn: number | null }>;
   scatter: Array<{ x: number; y: number; date: string }>;
   timeline: Array<{ date: string; score: number; fwdReturn: number; direction: "bull" | "neutral" | "bear"; correct: boolean }>;
@@ -839,12 +840,20 @@ export default function BacktestLab() {
                     )}>
                       {data.hitRate !== null ? data.hitRate + "%" : "—"}
                     </div>
+                    {data.hitRateNet !== null && data.hitRateNet !== data.hitRate && (
+                      <div className="text-xs font-mono text-muted-foreground/60">
+                        {data.hitRateNet}% net
+                      </div>
+                    )}
                     <div className={cn("text-xs font-mono", retColor(data.avgReturn))}>
                       {fmtRet(data.avgReturn)}
                     </div>
                     <div className="text-xs text-muted-foreground font-mono">n={data.count}</div>
                   </div>
                 ))}
+              </div>
+              <div className="text-xs text-muted-foreground/50 font-mono pt-1">
+                gross hit rate · net = after ~{result.slippageBps ?? 5}bps round-trip · universe: current constituents only
               </div>
             </div>
           </div>

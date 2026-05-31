@@ -2,6 +2,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { runWarmup, startScheduler } from "./lib/warmup";
 import { hydrateFromDb } from "./lib/dbCache";
+import { initCalibrationFromDB } from "./lib/calibrationStore";
 
 const rawPort = process.env["PORT"];
 
@@ -27,8 +28,13 @@ app.listen(port, (err) => {
 
   // Hydrate in-memory caches from Postgres first, then run Yahoo Finance warmup
   // for any tickers not yet in the DB cache (or whose entries are stale).
+  // Also load persisted calibration coefficients from DB so P(+) is available
+  // immediately without waiting for the first backtest run.
   setImmediate(() => {
-    hydrateFromDb()
+    Promise.all([
+      hydrateFromDb(),
+      initCalibrationFromDB(),
+    ])
       .then(() => runWarmup("startup"))
       .catch(err => logger.error({ err }, "Startup warmup failed"));
   });

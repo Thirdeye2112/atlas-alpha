@@ -3,6 +3,7 @@ import { fetchQuote, fetchOHLCV } from "../lib/marketData.js";
 import { marketCache } from "../lib/cache.js";
 import { calcTrend, calcRegimeIndicators } from "../lib/indicators.js";
 import { getCachedBreadth } from "../lib/analysisEngine.js";
+import { SCANNER_UNIVERSE } from "../lib/scannerUniverse.js";
 
 const router: IRouter = Router();
 
@@ -64,6 +65,10 @@ router.get("/market/overview", async (req, res): Promise<void> => {
     pctAboveSma50:  breadth.pctAboveSma50,
     pctAboveSma200: breadth.pctAboveSma200,
     breadthUniverse: breadth.total > 0 ? breadth.total : null,
+    universe: {
+      size: SCANNER_UNIVERSE.length,
+      note: "Current large/mid-cap constituents + ETFs. Point-in-time historical membership not tracked — backtests exclude delisted names.",
+    },
     timestamp: new Date().toISOString(),
   };
 
