@@ -10,6 +10,40 @@ import {
   OBV,
   ATR,
   ADX,
+  // ── Single-bar candlestick patterns ──────────────────────────────────────
+  doji,
+  dragonflydoji,
+  gravestonedoji,
+  bullishhammerstick,
+  bearishhammerstick,
+  hangingman,
+  shootingstar,
+  bullishinvertedhammerstick,
+  bearishinvertedhammerstick,
+  bullishmarubozu,
+  bearishmarubozu,
+  bullishspinningtop,
+  bearishspinningtop,
+  // ── Two-bar patterns ──────────────────────────────────────────────────────
+  bullishengulfingpattern,
+  bearishengulfingpattern,
+  bullishharami,
+  bearishharami,
+  bullishharamicross,
+  bearishharamicross,
+  piercingline,
+  darkcloudcover,
+  tweezertop,
+  tweezerbottom,
+  // ── Three-bar patterns ────────────────────────────────────────────────────
+  morningstar,
+  eveningstar,
+  morningdojistar,
+  eveningdojistar,
+  threewhitesoldiers,
+  threeblackcrows,
+  abandonedbaby,
+  downsidetasukigap,
 } from "technicalindicators";
 import type { OHLCVBar } from "./marketData.js";
 
@@ -435,69 +469,219 @@ export function calcOptions(momentum: MomentumResult, volume: VolumeResult, vola
 }
 
 export function calcPatterns(bars: OHLCVBar[], trend: TrendResult, volatility: VolatilityResult): PatternResult {
-  const closes = bars.map(b => b.close);
-  const highs = bars.map(b => b.high);
-  const lows = bars.map(b => b.low);
+  if (bars.length < 10) {
+    return { patterns: [], marketStructure: "ranging", supportLevel: 0, resistanceLevel: 0 };
+  }
+
+  const closes  = bars.map(b => b.close);
+  const highs   = bars.map(b => b.high);
+  const lows    = bars.map(b => b.low);
+  const volumes = bars.map(b => b.volume);
+  const n       = bars.length;
   const patterns: string[] = [];
+  const price   = closes[n - 1];
 
-  // Market structure
-  const recentCloses = closes.slice(-20);
-  const recentHighs = highs.slice(-20);
-  const recentLows = lows.slice(-20);
-
-  const higherHighs = recentHighs[recentHighs.length - 1] > recentHighs[0];
-  const higherLows = recentLows[recentLows.length - 1] > recentLows[0];
-  const lowerHighs = recentHighs[recentHighs.length - 1] < recentHighs[0];
-  const lowerLows = recentLows[recentLows.length - 1] < recentLows[0];
-
+  // ── Market structure (20-bar HH/HL vs LH/LL) ─────────────────────────────────
+  const rH = highs.slice(-20), rL = lows.slice(-20);
+  const higherHighs = rH[rH.length - 1] > rH[0];
+  const higherLows  = rL[rL.length - 1] > rL[0];
+  const lowerHighs  = rH[rH.length - 1] < rH[0];
+  const lowerLows   = rL[rL.length - 1] < rL[0];
   let marketStructure: PatternResult["marketStructure"] = "ranging";
   if (higherHighs && higherLows) marketStructure = "uptrend";
   else if (lowerHighs && lowerLows) marketStructure = "downtrend";
 
-  // Golden/Death Cross patterns
-  if (trend.goldenCross) patterns.push("Golden Cross");
-  if (trend.deathCross) patterns.push("Death Cross");
+  // ── Support / Resistance ──────────────────────────────────────────────────────
+  // Dynamic S/R: use 50-bar swing highs/lows, fall back to 20-bar
+  const lb50H = highs.slice(-50), lb50L = lows.slice(-50);
+  const supportLevel    = Math.min(...(lb50L.length ? lb50L : lows.slice(-20)));
+  const resistanceLevel = Math.max(...(lb50H.length ? lb50H : highs.slice(-20)));
 
-  // Volatility squeeze
+  // ── MA-based structural signals ───────────────────────────────────────────────
+  if (trend.goldenCross)        patterns.push("Golden Cross");
+  if (trend.deathCross)         patterns.push("Death Cross");
   if (volatility.volatilitySqueeze) patterns.push("Volatility Squeeze");
+  if (price > volatility.bollingerUpper) patterns.push("BB Breakout");
+  if (price < volatility.bollingerLower) patterns.push("BB Breakdown");
 
-  // Bollinger Band patterns
-  const price = closes[closes.length - 1];
-  if (price > volatility.bollingerUpper) patterns.push("Bollinger Band Breakout");
-  if (price < volatility.bollingerLower) patterns.push("Bollinger Band Breakdown");
-
-  // Simple pattern detection
-  const last5High = Math.max(...recentHighs.slice(-5));
-  const last5Low = Math.min(...recentLows.slice(-5));
-  const prior5High = Math.max(...recentHighs.slice(-10, -5));
-  const prior5Low = Math.min(...recentLows.slice(-10, -5));
-
-  if (Math.abs(last5High - prior5High) / prior5High < 0.01 && last5Low > prior5Low) {
-    patterns.push("Ascending Triangle");
-  }
-  if (Math.abs(last5Low - prior5Low) / prior5Low < 0.01 && last5High < prior5High) {
-    patterns.push("Descending Triangle");
-  }
-
-  // Bull/Bear flag detection
-  if (marketStructure === "uptrend" && trend.trendAlignmentScore > 65) {
-    const recentConsolidation = Math.max(...recentHighs.slice(-5)) - Math.min(...recentLows.slice(-5));
-    const priorRange = Math.max(...recentHighs.slice(-20, -10)) - Math.min(...recentLows.slice(-20, -10));
-    if (recentConsolidation < priorRange * 0.4) patterns.push("Bull Flag");
-  }
-  if (marketStructure === "downtrend" && trend.trendAlignmentScore < 35) {
-    patterns.push("Bear Flag");
+  // ── Bull Flag / Bear Flag ────────────────────────────────────────────────────
+  // Requires: strong prior leg (10-20 bars ago) + tight recent consolidation (last 5-8 bars)
+  //           + volume declining during consolidation
+  if (n >= 25) {
+    const flagPole   = closes.slice(-20, -8);
+    const flagBody   = closes.slice(-8);
+    const poleGain   = (flagPole[flagPole.length - 1] - flagPole[0]) / flagPole[0] * 100;
+    const flagRange  = Math.max(...highs.slice(-8)) - Math.min(...lows.slice(-8));
+    const poleRange  = Math.max(...highs.slice(-20, -8)) - Math.min(...lows.slice(-20, -8));
+    const volFlagAvg = volumes.slice(-8).reduce((a, b) => a + b, 0) / 8;
+    const volPoleAvg = volumes.slice(-20, -8).reduce((a, b) => a + b, 0) / 12;
+    const volDecline = volFlagAvg < volPoleAvg * 0.75;
+    const tight      = poleRange > 0 && flagRange < poleRange * 0.45;
+    if (poleGain > 6 && tight && volDecline) patterns.push("Bull Flag");
+    if (poleGain < -6 && tight && volDecline) patterns.push("Bear Flag");
   }
 
-  // Support/Resistance (recent swing high/low)
-  const supportLevel = Math.min(...lows.slice(-20));
-  const resistanceLevel = Math.max(...highs.slice(-20));
+  // ── Ascending / Descending Triangle ──────────────────────────────────────────
+  // Flat top + rising lows (ascending) | Flat bottom + falling highs (descending)
+  if (n >= 20) {
+    const tHigh20 = highs.slice(-20), tLow20 = lows.slice(-20);
+    const maxH   = Math.max(...tHigh20), minH  = Math.min(...tHigh20);
+    const maxL   = Math.max(...tLow20),  minL  = Math.min(...tLow20);
+    const flatTop    = (maxH - minH) / maxH < 0.025;   // highs within 2.5%
+    const risingLows = tLow20[tLow20.length - 1] > tLow20[0] + (maxL - minL) * 0.3;
+    const flatBot    = (maxL - minL) / maxL < 0.025;
+    const fallingHighs = tHigh20[tHigh20.length - 1] < tHigh20[0] - (maxH - minH) * 0.3;
+    if (flatTop && risingLows)   patterns.push("Ascending Triangle");
+    if (flatBot && fallingHighs) patterns.push("Descending Triangle");
+  }
+
+  // ── Symmetrical Triangle (converging highs AND lows) ─────────────────────────
+  if (n >= 20) {
+    const tH = highs.slice(-20), tL = lows.slice(-20);
+    const highDiff  = tH[0] - tH[tH.length - 1];
+    const lowDiff   = tL[tL.length - 1] - tL[0];
+    if (highDiff > 0 && lowDiff > 0 &&
+        Math.abs(highDiff - lowDiff) / Math.max(highDiff, lowDiff) < 0.4) {
+      patterns.push("Symmetrical Triangle");
+    }
+  }
+
+  // ── Rising / Falling Wedge ────────────────────────────────────────────────────
+  // Both highs and lows trending same direction but converging
+  if (n >= 25) {
+    const wH = highs.slice(-25), wL = lows.slice(-25);
+    const highSlope = (wH[wH.length - 1] - wH[0]) / wH[0] * 100;
+    const lowSlope  = (wL[wL.length - 1] - wL[0]) / wL[0] * 100;
+    // Rising wedge: both slopes positive but lows rising faster → compression near top
+    if (highSlope > 1 && lowSlope > 1 && lowSlope > highSlope * 1.3) patterns.push("Rising Wedge");
+    // Falling wedge: both slopes negative but highs falling faster → bullish compression
+    if (highSlope < -1 && lowSlope < -1 && highSlope < lowSlope * 1.3) patterns.push("Falling Wedge");
+  }
+
+  // ── Cup and Handle ────────────────────────────────────────────────────────────
+  // Rough detection: U-shaped 30-60 bar base + shallow pullback in last 10 bars
+  if (n >= 50) {
+    const cup    = closes.slice(-50, -10);
+    const cupMax = Math.max(...cup);
+    const cupMin = Math.min(...cup);
+    const midMin = Math.min(...closes.slice(-40, -20));
+    const isU    = cupMin < cupMax * 0.95 && midMin < cupMax * 0.9 && cup[cup.length - 1] > cupMax * 0.95;
+    if (isU) {
+      const handle    = closes.slice(-10);
+      const handleLow = Math.min(...handle);
+      const shallow   = handleLow > cupMax * 0.88;
+      if (shallow) patterns.push("Cup and Handle");
+    }
+  }
+
+  // ── Double Bottom ─────────────────────────────────────────────────────────────
+  // Two roughly-equal lows + meaningful rally between them + price now recovering
+  if (n >= 20) {
+    const lb = lows.slice(-60);
+    const len = lb.length;
+    if (len >= 20) {
+      let v1Idx = 0;
+      for (let i = 1; i < len; i++) if (lb[i] < lb[v1Idx]) v1Idx = i;
+      const v1 = lb[v1Idx];
+      if (v1Idx >= 3 && v1Idx <= len - 5) {
+        let peakIdx = v1Idx, peakVal = closes[n - len + v1Idx];
+        for (let i = v1Idx + 1; i < len - 2; i++) {
+          if (closes[n - len + i] > peakVal) { peakVal = closes[n - len + i]; peakIdx = i; }
+        }
+        const peakRise = (peakVal - v1) / v1 * 100;
+        if (peakRise >= 3 && peakIdx > v1Idx) {
+          let v2Idx = peakIdx, v2 = lb[peakIdx];
+          for (let i = peakIdx + 1; i < len; i++) if (lb[i] < v2) { v2 = lb[i]; v2Idx = i; }
+          const valleyDiff = Math.abs(v2 - v1) / v1 * 100;
+          const isRecent   = v2Idx >= len - 20;
+          if (valleyDiff <= 3.5 && isRecent && peakRise >= 3) patterns.push("Double Bottom");
+        }
+      }
+    }
+  }
+
+  // ── Head and Shoulders (bearish) ─────────────────────────────────────────────
+  if (n >= 40) {
+    const h = highs.slice(-80);
+    const len = h.length;
+    // find head (global peak), then left shoulder and right shoulder
+    let headIdx = 0;
+    for (let i = 1; i < len; i++) if (h[i] > h[headIdx]) headIdx = i;
+    const head = h[headIdx];
+    if (headIdx >= 10 && headIdx <= len - 10) {
+      // left shoulder: highest point in [0, headIdx-5]
+      let lsIdx = 0;
+      for (let i = 1; i < headIdx - 4; i++) if (h[i] > h[lsIdx]) lsIdx = i;
+      // right shoulder: highest point in [headIdx+5, end]
+      let rsIdx = headIdx + 5;
+      for (let i = headIdx + 6; i < len; i++) if (h[i] > h[rsIdx]) rsIdx = i;
+      const ls = h[lsIdx], rs = h[rsIdx];
+      // Shoulders should be roughly equal and meaningfully below the head
+      const shoulderBalance = Math.abs(ls - rs) / head * 100;
+      const headPremium     = (head - Math.max(ls, rs)) / head * 100;
+      const rsRecent        = rsIdx >= len - 25;
+      if (shoulderBalance < 5 && headPremium > 3 && rsRecent) patterns.push("Head and Shoulders");
+    }
+  }
+
+  // ── Inverse Head and Shoulders (bullish) ─────────────────────────────────────
+  if (n >= 40) {
+    const l = lows.slice(-80);
+    const len = l.length;
+    let headIdx = 0;
+    for (let i = 1; i < len; i++) if (l[i] < l[headIdx]) headIdx = i;
+    const head = l[headIdx];
+    if (headIdx >= 10 && headIdx <= len - 10) {
+      let lsIdx = 0;
+      for (let i = 1; i < headIdx - 4; i++) if (l[i] < l[lsIdx]) lsIdx = i;
+      let rsIdx = headIdx + 5;
+      for (let i = headIdx + 6; i < len; i++) if (l[i] < l[rsIdx]) rsIdx = i;
+      const ls = l[lsIdx], rs = l[rsIdx];
+      const shoulderBalance = Math.abs(ls - rs) / Math.abs(head) * 100;
+      const headDiscount    = (Math.min(ls, rs) - head) / Math.abs(head) * 100;
+      const rsRecent        = rsIdx >= len - 25;
+      if (shoulderBalance < 5 && headDiscount > 3 && rsRecent) patterns.push("Inv Head and Shoulders");
+    }
+  }
+
+  // ── Island Reversal ───────────────────────────────────────────────────────────
+  // Gap up followed by gap down (or vice versa), leaving an isolated candle island
+  if (n >= 5) {
+    const g1 = bars[n - 3].open - bars[n - 4].close; // gap into island
+    const g2 = bars[n - 1].open - bars[n - 2].close; // gap out of island
+    if (g1 > 0 && g2 < 0 && Math.abs(g1) > 0.5 && Math.abs(g2) > 0.5) patterns.push("Bearish Island Reversal");
+    if (g1 < 0 && g2 > 0 && Math.abs(g1) > 0.5 && Math.abs(g2) > 0.5) patterns.push("Bullish Island Reversal");
+  }
+
+  // ── Inside Day / NR7 (Narrow Range 7) ────────────────────────────────────────
+  if (n >= 7) {
+    const todayRange = bars[n - 1].high - bars[n - 1].low;
+    const prevRange  = bars[n - 2].high - bars[n - 2].low;
+    if (bars[n - 1].high < bars[n - 2].high && bars[n - 1].low > bars[n - 2].low)
+      patterns.push("Inside Day");
+    // NR7: today's range is smallest of last 7 bars (compression before expansion)
+    const ranges7 = Array.from({ length: 7 }, (_, i) => bars[n - 7 + i].high - bars[n - 7 + i].low);
+    if (todayRange === Math.min(...ranges7) && todayRange < prevRange * 0.6)
+      patterns.push("NR7 Compression");
+  }
+
+  // ── Three-candle patterns (library-based, current state only) ────────────────
+  if (n >= 5) {
+    const ohlc = { open: bars.map(b => b.open), high: highs, low: lows, close: closes };
+    try { if (threewhitesoldiers(ohlc).at(-1)) patterns.push("Three White Soldiers"); } catch { /* skip */ }
+    try { if (threeblackcrows(ohlc).at(-1))    patterns.push("Three Black Crows");    } catch { /* skip */ }
+    try { if (morningstar(ohlc).at(-1))        patterns.push("Morning Star");         } catch { /* skip */ }
+    try { if (eveningstar(ohlc).at(-1))        patterns.push("Evening Star");         } catch { /* skip */ }
+    try { if (morningdojistar(ohlc).at(-1))    patterns.push("Morning Doji Star");    } catch { /* skip */ }
+    try { if (eveningdojistar(ohlc).at(-1))    patterns.push("Evening Doji Star");    } catch { /* skip */ }
+    try { if (abandonedbaby(ohlc).at(-1))      patterns.push("Abandoned Baby");       } catch { /* skip */ }
+  }
 
   return {
-    patterns: patterns.slice(0, 5),
+    patterns: [...new Set(patterns)].slice(0, 12),
     marketStructure,
-    supportLevel,
-    resistanceLevel,
+    supportLevel:    Math.round(supportLevel    * 100) / 100,
+    resistanceLevel: Math.round(resistanceLevel * 100) / 100,
   };
 }
 
@@ -508,72 +692,148 @@ export interface ChartSignal {
   strength: "strong" | "moderate";
 }
 
+/** Run a technicalindicators candlestick pattern function across the full bar array
+ *  and emit a ChartSignal for every bar where the pattern fires within the window. */
+function runCandlePattern(
+  fn: (d: { open: number[]; high: number[]; low: number[]; close: number[] }) => boolean[],
+  opens: number[], highs: number[], lows: number[], closes: number[],
+  bars: OHLCVBar[],
+  windowStart: number,
+  label: string,
+  direction: "bull" | "bear",
+  strength: "strong" | "moderate",
+  signals: ChartSignal[]
+): void {
+  try {
+    const results = fn({ open: opens, high: highs, low: lows, close: closes });
+    const offset = opens.length - results.length;
+    for (let i = 0; i < results.length; i++) {
+      const barIdx = offset + i;
+      if (barIdx < windowStart) continue;
+      if (results[i]) {
+        signals.push({ date: bars[barIdx].time.substring(0, 10), direction, label, strength });
+      }
+    }
+  } catch { /* pattern requires more bars than available — skip */ }
+}
+
 export function calcChartSignals(bars: OHLCVBar[]): ChartSignal[] {
   if (bars.length < 35) return [];
 
+  const opens  = bars.map(b => b.open);
   const closes = bars.map(b => b.close);
+  const highs  = bars.map(b => b.high);
+  const lows   = bars.map(b => b.low);
   const volumes = bars.map(b => b.volume);
   const n = bars.length;
-  const windowStart = Math.max(0, n - 90);
+  const windowStart     = Math.max(0, n - 90);   // candlestick patterns: 90-bar window
+  const recentStart     = Math.max(0, n - 20);    // BB / volume: tighter window
   const signals: ChartSignal[] = [];
 
-  // RSI threshold crossings — most actionable entries/exits
+  // ── Single-bar candlestick patterns ──────────────────────────────────────────
+  runCandlePattern(doji,                    opens, highs, lows, closes, bars, windowStart, "DOJI",     "bear", "moderate", signals);
+  runCandlePattern(dragonflydoji,           opens, highs, lows, closes, bars, windowStart, "DFLYDO",   "bull", "strong",   signals);
+  runCandlePattern(gravestonedoji,          opens, highs, lows, closes, bars, windowStart, "GRAVDO",   "bear", "strong",   signals);
+  runCandlePattern(bullishhammerstick,      opens, highs, lows, closes, bars, windowStart, "HAMMER",   "bull", "strong",   signals);
+  runCandlePattern(bearishhammerstick,      opens, highs, lows, closes, bars, windowStart, "BHAMMER",  "bear", "moderate", signals);
+  runCandlePattern(hangingman,              opens, highs, lows, closes, bars, windowStart, "HANGMAN",  "bear", "strong",   signals);
+  runCandlePattern(shootingstar,            opens, highs, lows, closes, bars, windowStart, "SHOOT★",   "bear", "strong",   signals);
+  runCandlePattern(bullishinvertedhammerstick, opens, highs, lows, closes, bars, windowStart, "INVHAM", "bull", "moderate", signals);
+  runCandlePattern(bearishinvertedhammerstick, opens, highs, lows, closes, bars, windowStart, "INVBH",  "bear", "moderate", signals);
+  runCandlePattern(bullishmarubozu,         opens, highs, lows, closes, bars, windowStart, "MBULL",    "bull", "strong",   signals);
+  runCandlePattern(bearishmarubozu,         opens, highs, lows, closes, bars, windowStart, "MBEAR",    "bear", "strong",   signals);
+  runCandlePattern(bullishspinningtop,      opens, highs, lows, closes, bars, windowStart, "SPINTOP",  "bull", "moderate", signals);
+  runCandlePattern(bearishspinningtop,      opens, highs, lows, closes, bars, windowStart, "SPINBOT",  "bear", "moderate", signals);
+
+  // ── Two-bar candlestick patterns ─────────────────────────────────────────────
+  runCandlePattern(bullishengulfingpattern, opens, highs, lows, closes, bars, windowStart, "ENGULF↑",  "bull", "strong",   signals);
+  runCandlePattern(bearishengulfingpattern, opens, highs, lows, closes, bars, windowStart, "ENGULF↓",  "bear", "strong",   signals);
+  runCandlePattern(bullishharami,           opens, highs, lows, closes, bars, windowStart, "HARAMI↑",  "bull", "moderate", signals);
+  runCandlePattern(bearishharami,           opens, highs, lows, closes, bars, windowStart, "HARAMI↓",  "bear", "moderate", signals);
+  runCandlePattern(bullishharamicross,      opens, highs, lows, closes, bars, windowStart, "HCROSS↑",  "bull", "strong",   signals);
+  runCandlePattern(bearishharamicross,      opens, highs, lows, closes, bars, windowStart, "HCROSS↓",  "bear", "strong",   signals);
+  runCandlePattern(piercingline,            opens, highs, lows, closes, bars, windowStart, "PIERCE",   "bull", "strong",   signals);
+  runCandlePattern(darkcloudcover,          opens, highs, lows, closes, bars, windowStart, "DRKCLOUD", "bear", "strong",   signals);
+  runCandlePattern(tweezertop,              opens, highs, lows, closes, bars, windowStart, "TWZTOP",   "bear", "moderate", signals);
+  runCandlePattern(tweezerbottom,           opens, highs, lows, closes, bars, windowStart, "TWZBOT",   "bull", "moderate", signals);
+
+  // ── Three-bar candlestick patterns ───────────────────────────────────────────
+  runCandlePattern(morningstar,             opens, highs, lows, closes, bars, windowStart, "MORNSTAR", "bull", "strong",   signals);
+  runCandlePattern(eveningstar,             opens, highs, lows, closes, bars, windowStart, "EVENSTAR", "bear", "strong",   signals);
+  runCandlePattern(morningdojistar,         opens, highs, lows, closes, bars, windowStart, "MNDOSTAR", "bull", "strong",   signals);
+  runCandlePattern(eveningdojistar,         opens, highs, lows, closes, bars, windowStart, "EVDOSTAR", "bear", "strong",   signals);
+  runCandlePattern(threewhitesoldiers,      opens, highs, lows, closes, bars, windowStart, "3SOLDIER", "bull", "strong",   signals);
+  runCandlePattern(threeblackcrows,         opens, highs, lows, closes, bars, windowStart, "3CROWS",   "bear", "strong",   signals);
+  runCandlePattern(abandonedbaby,           opens, highs, lows, closes, bars, windowStart, "ABNDBY",   "bull", "strong",   signals);
+  runCandlePattern(downsidetasukigap,       opens, highs, lows, closes, bars, windowStart, "TASUKI↓",  "bear", "moderate", signals);
+
+  // ── Inside Bar and Outside Bar (custom, last 90 bars) ────────────────────────
+  for (let i = windowStart + 1; i < n; i++) {
+    const prev = bars[i - 1];
+    const cur  = bars[i];
+    // Inside bar: today's entire range fits within yesterday's range
+    if (cur.high < prev.high && cur.low > prev.low) {
+      const dir = cur.close >= cur.open ? "bull" : "bear";
+      signals.push({ date: cur.time.substring(0, 10), direction: dir, label: "IB", strength: "moderate" });
+    }
+    // Outside bar / engulfing range: today's range fully swallows yesterday's
+    if (cur.high > prev.high && cur.low < prev.low) {
+      const dir = cur.close >= cur.open ? "bull" : "bear";
+      signals.push({ date: cur.time.substring(0, 10), direction: dir, label: "OB", strength: "strong" });
+    }
+  }
+
+  // ── Gap Up / Gap Down (open > prev close + threshold) ────────────────────────
+  for (let i = windowStart + 1; i < n; i++) {
+    const gapPct = ((bars[i].open - bars[i - 1].close) / bars[i - 1].close) * 100;
+    if (gapPct > 2) {
+      signals.push({ date: bars[i].time.substring(0, 10), direction: "bull", label: `GAP+${gapPct.toFixed(1)}%`, strength: gapPct > 5 ? "strong" : "moderate" });
+    } else if (gapPct < -2) {
+      signals.push({ date: bars[i].time.substring(0, 10), direction: "bear", label: `GAP${gapPct.toFixed(1)}%`, strength: gapPct < -5 ? "strong" : "moderate" });
+    }
+  }
+
+  // ── RSI threshold crossings ───────────────────────────────────────────────────
   const rsiArr = RSI.calculate({ values: closes, period: 14 });
-  const rsiOffset = n - rsiArr.length;
+  const rsiOff = n - rsiArr.length;
   for (let i = 1; i < rsiArr.length; i++) {
-    const barIdx = rsiOffset + i;
-    if (barIdx < windowStart) continue;
-    const prev = rsiArr[i - 1];
-    const curr = rsiArr[i];
-    // Entering oversold (strong bear confirmation)
-    if (prev >= 30 && curr < 30) {
-      signals.push({ date: bars[barIdx].time.substring(0, 10), direction: "bear", label: "OS", strength: "strong" });
-    }
-    // Bouncing back above 30 — actionable bull signal
-    if (prev < 30 && curr >= 30) {
-      signals.push({ date: bars[barIdx].time.substring(0, 10), direction: "bull", label: "RSI↑", strength: "strong" });
-    }
-    // Entering overbought
-    if (prev <= 70 && curr > 70) {
-      signals.push({ date: bars[barIdx].time.substring(0, 10), direction: "bull", label: "OB", strength: "moderate" });
-    }
-    // Rolling over from overbought — bear caution
-    if (prev > 70 && curr <= 70) {
-      signals.push({ date: bars[barIdx].time.substring(0, 10), direction: "bear", label: "RSI↓", strength: "moderate" });
-    }
+    const bi = rsiOff + i;
+    if (bi < windowStart) continue;
+    const prev = rsiArr[i - 1], curr = rsiArr[i];
+    if (prev >= 30 && curr < 30)  signals.push({ date: bars[bi].time.substring(0, 10), direction: "bear", label: "OS",    strength: "strong"   });
+    if (prev < 30  && curr >= 30) signals.push({ date: bars[bi].time.substring(0, 10), direction: "bull", label: "RSI↑",  strength: "strong"   });
+    if (prev <= 70 && curr > 70)  signals.push({ date: bars[bi].time.substring(0, 10), direction: "bull", label: "OB",    strength: "moderate" });
+    if (prev > 70  && curr <= 70) signals.push({ date: bars[bi].time.substring(0, 10), direction: "bear", label: "RSI↓",  strength: "moderate" });
   }
 
-  // Bollinger Band breakouts and mean-reversion returns — last 20 bars only (reduces noise)
-  const bbWindowStart = Math.max(0, n - 20);
+  // ── Bollinger Band events (last 20 bars) ─────────────────────────────────────
   const bbArr = BollingerBands.calculate({ values: closes, period: 20, stdDev: 2 });
-  const bbOffset = n - bbArr.length;
+  const bbOff = n - bbArr.length;
   for (let i = 1; i < bbArr.length; i++) {
-    const barIdx = bbOffset + i;
-    if (barIdx < bbWindowStart) continue;
-    const bb = bbArr[i];
-    const prevBb = bbArr[i - 1];
-    if (!bb || !prevBb) continue;
-    const price = closes[barIdx];
-    const prevPrice = closes[barIdx - 1];
-    // Breakout above upper band
-    if (prevPrice <= prevBb.upper && price > bb.upper) {
-      signals.push({ date: bars[barIdx].time.substring(0, 10), direction: "bull", label: "BB↑", strength: "moderate" });
-    }
-    // Breakdown below lower band
-    if (prevPrice >= prevBb.lower && price < bb.lower) {
-      signals.push({ date: bars[barIdx].time.substring(0, 10), direction: "bear", label: "BB↓", strength: "moderate" });
-    }
-    // Return inside from below (mean reversion bounce)
-    if (prevPrice < prevBb.lower && price >= bb.lower) {
-      signals.push({ date: bars[barIdx].time.substring(0, 10), direction: "bull", label: "BB↪", strength: "strong" });
-    }
-    // Return inside from above (rejection off upper band)
-    if (prevPrice > prevBb.upper && price <= bb.upper) {
-      signals.push({ date: bars[barIdx].time.substring(0, 10), direction: "bear", label: "BB↩", strength: "moderate" });
-    }
+    const bi = bbOff + i;
+    if (bi < recentStart) continue;
+    const bb = bbArr[i], pbB = bbArr[i - 1];
+    if (!bb || !pbB) continue;
+    const price = closes[bi], prevPrice = closes[bi - 1];
+    if (prevPrice <= pbB.upper && price > bb.upper)  signals.push({ date: bars[bi].time.substring(0, 10), direction: "bull", label: "BB↑",  strength: "moderate" });
+    if (prevPrice >= pbB.lower && price < bb.lower)  signals.push({ date: bars[bi].time.substring(0, 10), direction: "bear", label: "BB↓",  strength: "moderate" });
+    if (prevPrice < pbB.lower  && price >= bb.lower) signals.push({ date: bars[bi].time.substring(0, 10), direction: "bull", label: "BB↪",  strength: "strong"   });
+    if (prevPrice > pbB.upper  && price <= bb.upper) signals.push({ date: bars[bi].time.substring(0, 10), direction: "bear", label: "BB↩",  strength: "moderate" });
   }
 
-  // High volume spikes (>2.5x rolling 20-bar average)
+  // ── MACD crossovers ───────────────────────────────────────────────────────────
+  const macdArr = MACD.calculate({ values: closes, fastPeriod: 12, slowPeriod: 26, signalPeriod: 9, SimpleMAOscillator: false, SimpleMASignal: false });
+  const macdOff = n - macdArr.length;
+  for (let i = 1; i < macdArr.length; i++) {
+    const bi = macdOff + i;
+    if (bi < windowStart) continue;
+    const prev = macdArr[i - 1], curr = macdArr[i];
+    if (!prev?.histogram || !curr?.histogram) continue;
+    if (prev.histogram < 0 && curr.histogram >= 0) signals.push({ date: bars[bi].time.substring(0, 10), direction: "bull", label: "MACD↑", strength: "moderate" });
+    if (prev.histogram > 0 && curr.histogram <= 0) signals.push({ date: bars[bi].time.substring(0, 10), direction: "bear", label: "MACD↓", strength: "moderate" });
+  }
+
+  // ── Volume spikes (>2.5× 20-bar avg) ─────────────────────────────────────────
   for (let i = windowStart + 20; i < n; i++) {
     const avgVol = volumes.slice(i - 20, i).reduce((a, b) => a + b, 0) / 20;
     if (avgVol > 0 && volumes[i] > avgVol * 2.5) {
@@ -582,18 +842,15 @@ export function calcChartSignals(bars: OHLCVBar[]): ChartSignal[] {
     }
   }
 
-  // Sort descending by date, deduplicate same-date same-label events, cap at 20
+  // ── Sort, deduplicate, cap ────────────────────────────────────────────────────
   signals.sort((a, b) => b.date.localeCompare(a.date));
   const seen = new Set<string>();
   const deduped: ChartSignal[] = [];
   for (const s of signals) {
     const key = `${s.date}:${s.direction}:${s.label}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      deduped.push(s);
-    }
+    if (!seen.has(key)) { seen.add(key); deduped.push(s); }
   }
-  return deduped.slice(0, 20);
+  return deduped.slice(0, 30);
 }
 
 export interface RegimeIndicators {
