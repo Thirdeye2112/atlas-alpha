@@ -12,7 +12,7 @@ import ScoreGauge from "@/components/charts/ScoreGauge";
 import MiniGauge from "@/components/charts/MiniGauge";
 import RsiMiniChart from "@/components/charts/RsiMiniChart";
 import { formatCurrency, formatPercent, formatNumber, getColorForScore, getColorForDirection } from "@/lib/formatters";
-import { Search, Info, TrendingUp, TrendingDown, Minus, Clock, X, ChevronDown, ChevronRight, FlaskConical, RotateCcw } from "lucide-react";
+import { Search, Info, TrendingUp, TrendingDown, Minus, Clock, X, ChevronDown, ChevronRight, FlaskConical, RotateCcw, GitBranch } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -494,6 +494,188 @@ function BacktestPanel({ ticker, currentScore }: { ticker: string; currentScore?
 
               <p className="text-[10px] text-muted-foreground/40 font-mono leading-relaxed pt-1">
                 Walk-forward: scored daily using only prior data. IC {'>'} 0.05 = signal. |t| {'>'} 2 = statistically significant.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Retracement Forecast Panel ────────────────────────────────────────────────
+
+interface RetracementTarget {
+  level: 50 | 75 | 100;
+  price: number;
+  hitRate: number | null;
+  medianBars: number | null;
+  expectedDate: string | null;
+  comparableN: number;
+}
+
+interface RetracementForecast {
+  ticker: string;
+  interval: string;
+  currentMove: {
+    direction: "up" | "down";
+    pivotDate: string;
+    pivotPrice: number;
+    currentPrice: number;
+    movePct: number;
+    moveBars: number;
+  };
+  targets: RetracementTarget[];
+  comparableMovesN: number;
+  analyzedBars: number;
+  note: string | null;
+  cachedAt: string;
+}
+
+const RETRACE_INTERVALS = ["1h", "1d", "1wk"] as const;
+type RetraceInterval = (typeof RETRACE_INTERVALS)[number];
+
+function RetracementPanel({ ticker }: { ticker: string }) {
+  const [open, setOpen]       = useState(false);
+  const [interval, setInterval] = useState<RetraceInterval>("1d");
+  const [data, setData]       = useState<RetracementForecast | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const load = useCallback(async (iv: RetraceInterval) => {
+    if (abortRef.current) abortRef.current.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    setLoading(true); setError(null); setData(null);
+    try {
+      const r = await fetch(
+        `/api/stock/${encodeURIComponent(ticker)}/retracement?interval=${iv}`,
+        { signal: ctrl.signal },
+      );
+      if (!r.ok) { const e = await r.json(); throw new Error(e.error ?? `HTTP ${r.status}`); }
+      setData(await r.json());
+    } catch (e: unknown) {
+      if (e instanceof Error && e.name !== "AbortError") setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [ticker]);
+
+  // Reset when ticker changes so stale data doesn't linger
+  useEffect(() => { setData(null); setError(null); }, [ticker]);
+  useEffect(() => { if (open) load(interval); }, [open, ticker]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const m = data?.currentMove;
+
+  return (
+    <div className="border-t border-border mt-2">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between py-3 text-xs font-bold tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <span className="flex items-center gap-2">
+          <GitBranch className="w-3 h-3" />
+          RETRACEMENT FORECAST
+        </span>
+        {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+      </button>
+
+      {open && (
+        <div className="space-y-3 pb-4">
+          {/* Interval selector */}
+          <div className="flex items-center gap-1">
+            {RETRACE_INTERVALS.map(iv => (
+              <button key={iv} onClick={() => { setInterval(iv); load(iv); }}
+                className={cn("px-2 py-0.5 text-xs font-mono border rounded transition-colors",
+                  interval === iv
+                    ? "border-primary text-primary bg-primary/10"
+                    : "border-border text-muted-foreground hover:border-foreground"
+                )}
+              >{iv.toUpperCase()}</button>
+            ))}
+            <span className="ml-auto text-xs text-muted-foreground font-mono">bar size</span>
+          </div>
+
+          {loading && (
+            <div className="text-xs text-muted-foreground font-mono animate-pulse py-4 text-center">
+              SCANNING {data ? 0 : "5Y"} OF HISTORY…
+            </div>
+          )}
+          {error && <div className="text-xs text-destructive font-mono">{error}</div>}
+
+          {data && !loading && (
+            <div className="space-y-3">
+              {/* ── Current move summary ─────────────────── */}
+              {m && (
+                <div className="flex items-center gap-2 text-xs font-mono">
+                  <span className={cn(
+                    "px-1.5 py-0.5 rounded font-bold text-[9px]",
+                    m.direction === "up"
+                      ? "bg-emerald-500/20 text-emerald-400"
+                      : "bg-red-500/20 text-red-400",
+                  )}>
+                    {m.direction === "up" ? "▲" : "▼"} {m.direction.toUpperCase()}
+                  </span>
+                  <span className={m.direction === "up" ? "text-emerald-400 font-bold" : "text-red-400 font-bold"}>
+                    +{m.movePct.toFixed(2)}%
+                  </span>
+                  <span className="text-muted-foreground">
+                    from {formatCurrency(m.pivotPrice)} · {m.moveBars}d ago
+                  </span>
+                </div>
+              )}
+
+              {data.note && (
+                <div className="text-[10px] text-warning/80 font-mono leading-relaxed border border-warning/20 rounded px-2 py-1.5 bg-warning/5">
+                  {data.note}
+                </div>
+              )}
+
+              {/* ── Retrace target rows ──────────────────── */}
+              <div className="space-y-2">
+                {data.targets.map(tgt => {
+                  const barColor =
+                    tgt.level === 50  ? "bg-amber-500/70" :
+                    tgt.level === 75  ? "bg-orange-500/70" :
+                                        "bg-red-500/70";
+                  const hitPct = tgt.hitRate ?? 0;
+                  return (
+                    <div key={tgt.level} className="space-y-0.5">
+                      <div className="flex items-center justify-between text-xs font-mono">
+                        <span className="text-muted-foreground w-8">{tgt.level}%</span>
+                        <span className="font-bold text-foreground">{formatCurrency(tgt.price)}</span>
+                        <span className={cn("font-bold",
+                          hitPct >= 70 ? "text-emerald-400" :
+                          hitPct >= 50 ? "text-amber-400" : "text-muted-foreground"
+                        )}>
+                          {tgt.hitRate !== null ? `${tgt.hitRate}%` : "—"}
+                        </span>
+                        <span className="text-muted-foreground/60 text-[10px]">
+                          {tgt.medianBars !== null
+                            ? `~${tgt.medianBars}${interval === "1h" ? "h" : interval === "1wk" ? "wk" : "d"}`
+                            : "—"}
+                        </span>
+                        {tgt.expectedDate && (
+                          <span className="text-muted-foreground/50 text-[10px]">{tgt.expectedDate.slice(5)}</span>
+                        )}
+                      </div>
+                      {/* Hit-rate bar */}
+                      <div className="h-1 w-full bg-zinc-800 rounded-full overflow-hidden">
+                        <div
+                          className={cn("h-full rounded-full transition-all", barColor)}
+                          style={{ width: `${hitPct}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <p className="text-[10px] text-muted-foreground/40 font-mono leading-relaxed pt-1">
+                {data.comparableMovesN >= 5
+                  ? `Based on ${data.comparableMovesN} comparable ${m?.direction} moves · hit rate = % that retraced to target within 50 bars`
+                  : `Only ${data.comparableMovesN} comparable moves found — rates may be unreliable`}
               </p>
             </div>
           )}
@@ -1000,6 +1182,8 @@ export default function Dashboard() {
               </div>
 
               {!isHistoricalMode && <BacktestPanel ticker={ticker} currentScore={displayAnalysis.atlasScore.overall} />}
+
+              {!isHistoricalMode && <RetracementPanel ticker={ticker} />}
 
               {!isHistoricalMode && (
                 <p className="mt-4 text-xs text-muted-foreground font-mono border-t border-border pt-4">

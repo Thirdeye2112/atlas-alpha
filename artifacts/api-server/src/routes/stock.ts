@@ -5,6 +5,7 @@ import { calibrationStore } from "../lib/calibrationStore.js";
 import { GetStockQuoteParams, GetStockAnalysisParams, GetStockOhlcvParams } from "@workspace/api-zod";
 import { checkAlertsForTicker } from "./alerts.js";
 import { generateNarrative } from "../lib/narrative.js";
+import { computeRetracementForecast } from "../lib/retracementEngine.js";
 
 const router: IRouter = Router();
 
@@ -134,6 +135,25 @@ router.get("/stock/:ticker/narrative", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.warn({ err, ticker }, "Narrative generation failed");
     res.status(500).json({ error: "Narrative generation failed" });
+  }
+});
+
+// ── Retracement Forecast ──────────────────────────────────────────────────────
+router.get("/stock/:ticker/retracement", async (req, res): Promise<void> => {
+  const ticker   = (req.params.ticker as string).toUpperCase();
+  const interval = typeof req.query.interval === "string" ? req.query.interval : "1d";
+  const allowed  = ["1h", "1d", "1wk"];
+  if (!allowed.includes(interval)) {
+    res.status(400).json({ error: `interval must be one of: ${allowed.join(", ")}` });
+    return;
+  }
+  try {
+    const forecast = await computeRetracementForecast(ticker, interval);
+    req.log.info({ ticker, interval, movePct: forecast.currentMove.movePct }, "retracement: served");
+    res.json(forecast);
+  } catch (err) {
+    req.log.warn({ err, ticker, interval }, "Retracement forecast failed");
+    res.status(500).json({ error: "Retracement forecast failed" });
   }
 });
 
