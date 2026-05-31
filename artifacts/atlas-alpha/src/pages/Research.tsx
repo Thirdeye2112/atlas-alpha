@@ -1,9 +1,12 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import { FlaskConical, TrendingUp, TrendingDown, RefreshCw, AlertCircle, ChevronUp, ChevronDown, Target } from "lucide-react";
+import {
+  FlaskConical, TrendingUp, TrendingDown, RefreshCw, AlertCircle,
+  ChevronUp, ChevronDown, Target, Activity, Search,
+} from "lucide-react";
 
-// ─── Types matching the server response ───────────────────────────────────────
+// ─── Gap Analysis Types ────────────────────────────────────────────────────────
 
 interface PreGapFeatures {
   rsi: number;
@@ -91,24 +94,75 @@ interface GapAnalysisResult {
   setupBacktest?: SetupBacktest;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Run Dynamics Types ───────────────────────────────────────────────────────
+
+interface Run {
+  startTime:     string;
+  direction:     "up" | "down";
+  startPrice:    number;
+  peakPrice:     number;
+  totalMovePct:  number;
+  totalBars:     number;
+  durationMin:   number;
+  vel3BarAvg:    number;
+  firstBarPct:   number;
+  retrace50Bars: number | null;
+  retrace50Min:  number | null;
+  rvolAtStart:   number;
+}
+
+interface RunCorrelations {
+  velocityVsRetrace50:  number | null;
+  distanceVsRetrace50:  number | null;
+  durationVsRetrace50:  number | null;
+  n: number;
+}
+
+interface RunDynamicsResult {
+  ticker:    string;
+  interval:  string;
+  period:    string;
+  totalBars: number;
+  runs:      Run[];
+  correlations: {
+    up:   RunCorrelations;
+    down: RunCorrelations;
+    all:  RunCorrelations;
+  };
+  stats: {
+    totalRuns:          number;
+    upCount:            number;
+    downCount:          number;
+    avgMovePct:         number;
+    avgDurationMin:     number;
+    medianRetrace50Min: number | null;
+    pctWithRetrace:     number;
+  };
+  insight: {
+    behavior:   "momentum" | "mean-reversion" | "noisy";
+    confidence: "high" | "moderate" | "low";
+    summary:    string;
+    keyFinding: string;
+  };
+  analyzedAt: string;
+}
+
+// ─── Gap Analysis Helpers ─────────────────────────────────────────────────────
 
 function fmtVal(val: number, unit: string): string {
   if (!isFinite(val)) return "—";
-  if (unit === "0-1") return val.toFixed(2);
-  if (unit === "%") return val.toFixed(1) + "%";
-  if (unit === "x") return val.toFixed(2) + "x";
-  if (unit === "days") return (val > 0 ? "+" : "") + val.toFixed(1);
+  if (unit === "0-1")   return val.toFixed(2);
+  if (unit === "%")     return val.toFixed(1) + "%";
+  if (unit === "x")     return val.toFixed(2) + "x";
+  if (unit === "days")  return (val > 0 ? "+" : "") + val.toFixed(1);
   if (unit === "0-100") return val.toFixed(1);
-  if (unit === "pts") return (val > 0 ? "+" : "") + val.toFixed(1);
+  if (unit === "pts")   return (val > 0 ? "+" : "") + val.toFixed(1);
   return val.toFixed(2);
 }
 
 function effectColor(effect: number, forGapType: "up" | "down"): string {
   const abs = Math.abs(effect);
   if (abs < 0.15) return "text-muted-foreground";
-  // For gap-up: negative effect (stock was depressed) is bullish predictor → green
-  // For gap-down: positive effect (stock was extended) is bearish → also "matches" the gap
   const aligned = forGapType === "up" ? effect < 0 : effect > 0;
   if (abs >= 0.5) return aligned ? "text-success" : "text-destructive";
   return aligned ? "text-success/70" : "text-destructive/70";
@@ -118,50 +172,29 @@ function effectBarWidth(effect: number): number {
   return Math.min(100, Math.abs(effect) * 50);
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// ─── Gap Analysis Sub-components ─────────────────────────────────────────────
 
-function FactorRow({
-  stat,
-  direction,
-}: {
-  stat: FactorStat;
-  direction: "up" | "down";
-}) {
-  const effect = direction === "up" ? stat.gapUpEffect : stat.gapDownEffect;
+function FactorRow({ stat, direction }: { stat: FactorStat; direction: "up" | "down" }) {
+  const effect     = direction === "up" ? stat.gapUpEffect : stat.gapDownEffect;
   const cohortMean = direction === "up" ? stat.gapUpMean : stat.gapDownMean;
-  const n = direction === "up" ? stat.gapUpN : stat.gapDownN;
   const abs = Math.abs(effect);
   const barColor =
     abs >= 0.5
       ? direction === "up"
-        ? effect < 0
-          ? "bg-success"
-          : "bg-destructive"
-        : effect > 0
-        ? "bg-destructive"
-        : "bg-success"
+        ? effect < 0 ? "bg-success" : "bg-destructive"
+        : effect > 0 ? "bg-destructive" : "bg-success"
       : "bg-muted-foreground/40";
 
   return (
     <div className="grid grid-cols-[180px_70px_70px_1fr_48px] items-center gap-1 py-1 border-b border-border/30 hover:bg-muted/20 group">
-      <div className="text-xs font-medium truncate pr-1" title={stat.description}>
-        {stat.label}
-      </div>
-      <div className="text-xs font-mono text-muted-foreground text-right">
-        {fmtVal(stat.baselineMean, stat.unit)}
-      </div>
-      <div className={cn("text-xs font-mono text-right font-semibold", effectColor(effect, direction))}>
-        {fmtVal(cohortMean, stat.unit)}
-      </div>
+      <div className="text-xs font-medium truncate pr-1" title={stat.description}>{stat.label}</div>
+      <div className="text-xs font-mono text-muted-foreground text-right">{fmtVal(stat.baselineMean, stat.unit)}</div>
+      <div className={cn("text-xs font-mono text-right font-semibold", effectColor(effect, direction))}>{fmtVal(cohortMean, stat.unit)}</div>
       <div className="flex items-center gap-1 px-1">
         <div className="flex-1 h-1.5 bg-border/50 rounded-full overflow-hidden relative">
           <div
             className={cn("absolute top-0 h-full rounded-full transition-all", barColor)}
-            style={{
-              width: `${effectBarWidth(effect)}%`,
-              left: effect >= 0 ? "50%" : "auto",
-              right: effect < 0 ? "50%" : "auto",
-            }}
+            style={{ width: `${effectBarWidth(effect)}%`, left: effect >= 0 ? "50%" : "auto", right: effect < 0 ? "50%" : "auto" }}
           />
         </div>
       </div>
@@ -172,23 +205,14 @@ function FactorRow({
   );
 }
 
-function FactorTable({
-  title,
-  icon,
-  stats,
-  direction,
-}: {
-  title: string;
-  icon: React.ReactNode;
-  stats: FactorStat[];
-  direction: "up" | "down";
+function FactorTable({ title, icon, stats, direction }: {
+  title: string; icon: React.ReactNode; stats: FactorStat[]; direction: "up" | "down";
 }) {
   const sorted = [...stats].sort((a, b) => {
     const ae = direction === "up" ? a.gapUpEffect : a.gapDownEffect;
     const be = direction === "up" ? b.gapUpEffect : b.gapDownEffect;
     return Math.abs(be) - Math.abs(ae);
   });
-
   return (
     <div className="rounded-lg border border-border bg-card">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
@@ -197,7 +221,6 @@ function FactorTable({
         <span className="text-xs text-muted-foreground ml-auto">{sorted[0]?.gapUpN ?? sorted[0]?.gapDownN ?? 0} events</span>
       </div>
       <div className="px-3 py-1">
-        {/* Column headers */}
         <div className="grid grid-cols-[180px_70px_70px_1fr_48px] gap-1 py-1 border-b border-border/50">
           <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Factor</div>
           <div className="text-[10px] text-muted-foreground uppercase tracking-wide text-right">Baseline</div>
@@ -205,29 +228,18 @@ function FactorTable({
           <div className="text-[10px] text-muted-foreground uppercase tracking-wide px-1">Deviation</div>
           <div className="text-[10px] text-muted-foreground uppercase tracking-wide text-right">Effect</div>
         </div>
-        {sorted.map(s => (
-          <FactorRow key={s.factor} stat={s} direction={direction} />
-        ))}
+        {sorted.map(s => <FactorRow key={s.factor} stat={s} direction={direction} />)}
       </div>
     </div>
   );
 }
 
-function FollowThroughCard({
-  title,
-  icon,
-  data,
-  direction,
-}: {
-  title: string;
-  icon: React.ReactNode;
-  data: FollowThroughStats;
-  direction: "up" | "down";
+function FollowThroughCard({ title, icon, data, direction }: {
+  title: string; icon: React.ReactNode; data: FollowThroughStats; direction: "up" | "down";
 }) {
   const extendedColor = direction === "up"
     ? data.sameDayMean > 0 ? "text-success" : "text-destructive"
     : data.sameDayMean < 0 ? "text-destructive" : "text-success";
-
   return (
     <div className="rounded-lg border border-border bg-card p-4 space-y-3">
       <div className="flex items-center gap-2">
@@ -246,16 +258,13 @@ function FollowThroughCard({
           <div className={cn("text-xl font-mono font-bold",
             data.day5Mean === null ? "text-muted-foreground" :
             direction === "up" ? (data.day5Mean > 0 ? "text-success" : "text-destructive") :
-            (data.day5Mean < 0 ? "text-destructive" : "text-success")
-          )}>
+            (data.day5Mean < 0 ? "text-destructive" : "text-success"))}>
             {data.day5Mean === null ? "—" : `${data.day5Mean >= 0 ? "+" : ""}${data.day5Mean}%`}
           </div>
           <div className="text-[10px] text-muted-foreground mt-0.5">5-Day Return</div>
         </div>
         <div className="text-center">
-          <div className="text-xl font-mono font-bold text-warning">
-            {data.gapFillRate5d}%
-          </div>
+          <div className="text-xl font-mono font-bold text-warning">{data.gapFillRate5d}%</div>
           <div className="text-[10px] text-muted-foreground mt-0.5">5-Day Gap Fill Rate</div>
         </div>
       </div>
@@ -266,7 +275,6 @@ function FollowThroughCard({
 function RecentGapsTable({ gaps }: { gaps: GapEventItem[] }) {
   const [showAll, setShowAll] = useState(false);
   const visible = showAll ? gaps : gaps.slice(0, 20);
-
   return (
     <div className="rounded-lg border border-border bg-card">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
@@ -296,8 +304,7 @@ function RecentGapsTable({ gaps }: { gaps: GapEventItem[] }) {
                   <div className="flex items-center gap-1.5">
                     {g.direction === "up"
                       ? <ChevronUp className="w-3 h-3 text-success shrink-0" />
-                      : <ChevronDown className="w-3 h-3 text-destructive shrink-0" />
-                    }
+                      : <ChevronDown className="w-3 h-3 text-destructive shrink-0" />}
                     <span className="font-semibold font-mono">{g.ticker}</span>
                   </div>
                 </td>
@@ -306,9 +313,7 @@ function RecentGapsTable({ gaps }: { gaps: GapEventItem[] }) {
                   g.direction === "up" ? "text-success" : "text-destructive")}>
                   {g.gapPct >= 0 ? "+" : ""}{g.gapPct}%
                 </td>
-                <td className="py-1 px-2 text-right font-mono tabular-nums text-muted-foreground">
-                  {g.volumeX.toFixed(1)}x
-                </td>
+                <td className="py-1 px-2 text-right font-mono tabular-nums text-muted-foreground">{g.volumeX.toFixed(1)}x</td>
                 <td className={cn("py-1 px-2 text-right font-mono tabular-nums",
                   g.features.rsi < 30 ? "text-success" : g.features.rsi > 70 ? "text-destructive" : "text-foreground")}>
                   {g.features.rsi.toFixed(0)}
@@ -343,10 +348,7 @@ function RecentGapsTable({ gaps }: { gaps: GapEventItem[] }) {
       </div>
       {gaps.length > 20 && (
         <div className="px-3 py-2 border-t border-border/30">
-          <button
-            onClick={() => setShowAll(!showAll)}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
+          <button onClick={() => setShowAll(!showAll)} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
             {showAll ? "Show fewer" : `Show all ${gaps.length} gaps`}
           </button>
         </div>
@@ -355,15 +357,11 @@ function RecentGapsTable({ gaps }: { gaps: GapEventItem[] }) {
   );
 }
 
-// ─── Setup Backtest Card ───────────────────────────────────────────────────────
-
 function SetupBacktestCard({ bt }: { bt: SetupBacktest }) {
   const lift = bt.liftRatio3d;
   const liftColor = lift >= 2.5 ? "text-success" : lift >= 1.5 ? "text-warning" : "text-muted-foreground";
-
   function HitBar({ rate, baseline, label }: { rate: number; baseline: number; label: string }) {
-    const pct = rate * 100;
-    const basePct = baseline * 100;
+    const pct = rate * 100; const basePct = baseline * 100;
     return (
       <div className="space-y-0.5">
         <div className="flex justify-between text-[10px] text-muted-foreground">
@@ -378,7 +376,6 @@ function SetupBacktestCard({ bt }: { bt: SetupBacktest }) {
       </div>
     );
   }
-
   return (
     <div className="rounded-lg border border-border bg-card">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
@@ -388,7 +385,6 @@ function SetupBacktestCard({ bt }: { bt: SetupBacktest }) {
         <span className="ml-auto text-xs text-muted-foreground">{bt.setupDays} setup days identified</span>
       </div>
       <div className="p-4 grid grid-cols-2 gap-6">
-        {/* Left: hit rate bars */}
         <div className="space-y-4">
           <HitBar rate={bt.hitRate1d} baseline={bt.randomBaseline1d} label="Gap within 1 trading day" />
           <HitBar rate={bt.hitRate2d} baseline={bt.randomBaseline1d} label="Gap within 2 trading days" />
@@ -400,33 +396,24 @@ function SetupBacktestCard({ bt }: { bt: SetupBacktest }) {
             <span>base rate (no filter)</span>
           </div>
         </div>
-        {/* Right: summary stats */}
         <div className="grid grid-cols-2 gap-3 content-start">
           <div className="rounded border border-border/60 bg-muted/30 p-3 text-center">
-            <div className={cn("text-2xl font-mono font-bold tabular-nums", liftColor)}>
-              {lift.toFixed(1)}×
-            </div>
+            <div className={cn("text-2xl font-mono font-bold tabular-nums", liftColor)}>{lift.toFixed(1)}×</div>
             <div className="text-[10px] text-muted-foreground mt-0.5">Lift Ratio (3d)</div>
             <div className="text-[9px] text-muted-foreground/50 mt-0.5">vs random baseline</div>
           </div>
           <div className="rounded border border-border/60 bg-muted/30 p-3 text-center">
-            <div className="text-2xl font-mono font-bold tabular-nums text-primary">
-              {(bt.avgGapMagnitude).toFixed(1)}%
-            </div>
+            <div className="text-2xl font-mono font-bold tabular-nums text-primary">{bt.avgGapMagnitude.toFixed(1)}%</div>
             <div className="text-[10px] text-muted-foreground mt-0.5">Avg Gap Magnitude</div>
             <div className="text-[9px] text-muted-foreground/50 mt-0.5">after setup day</div>
           </div>
           <div className="rounded border border-border/60 bg-muted/30 p-3 text-center">
-            <div className="text-2xl font-mono font-bold tabular-nums text-foreground">
-              {bt.gapWithin3d}
-            </div>
+            <div className="text-2xl font-mono font-bold tabular-nums text-foreground">{bt.gapWithin3d}</div>
             <div className="text-[10px] text-muted-foreground mt-0.5">Gaps within 3d</div>
             <div className="text-[9px] text-muted-foreground/50 mt-0.5">of {bt.setupDays} setup days</div>
           </div>
           <div className="rounded border border-border/60 bg-muted/30 p-3 text-center">
-            <div className="text-2xl font-mono font-bold tabular-nums text-foreground">
-              {(bt.randomBaseline1d * 100).toFixed(1)}%
-            </div>
+            <div className="text-2xl font-mono font-bold tabular-nums text-foreground">{(bt.randomBaseline1d * 100).toFixed(1)}%</div>
             <div className="text-[10px] text-muted-foreground mt-0.5">Base Gap Rate</div>
             <div className="text-[9px] text-muted-foreground/50 mt-0.5">any day, no filter</div>
           </div>
@@ -435,8 +422,6 @@ function SetupBacktestCard({ bt }: { bt: SetupBacktest }) {
     </div>
   );
 }
-
-// ─── Legend ────────────────────────────────────────────────────────────────────
 
 function EffectLegend() {
   return (
@@ -450,10 +435,475 @@ function EffectLegend() {
   );
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
+// ─── Run Dynamics Sub-components ─────────────────────────────────────────────
 
-export default function Research() {
-  const [threshold, setThreshold] = useState<number>(5);
+function corrColor(r: number | null): string {
+  if (r === null) return "text-muted-foreground";
+  const abs = Math.abs(r);
+  if (abs >= 0.60) return r > 0 ? "text-success" : "text-destructive";
+  if (abs >= 0.35) return r > 0 ? "text-success/70" : "text-destructive/70";
+  return "text-muted-foreground";
+}
+
+function corrLabel(r: number | null): string {
+  if (r === null) return "insufficient data";
+  const abs = Math.abs(r);
+  const dir = r > 0 ? "positive" : "negative";
+  if (abs >= 0.70) return `strong ${dir}`;
+  if (abs >= 0.45) return `moderate ${dir}`;
+  if (abs >= 0.25) return `weak ${dir}`;
+  return "noise";
+}
+
+function behaviorBadge(behavior: RunDynamicsResult["insight"]["behavior"]) {
+  if (behavior === "momentum")
+    return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-success/15 text-success border border-success/30 uppercase tracking-wider">MOMENTUM</span>;
+  if (behavior === "mean-reversion")
+    return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-destructive/15 text-destructive border border-destructive/30 uppercase tracking-wider">MEAN-REVERSION</span>;
+  return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border uppercase tracking-wider">NOISY</span>;
+}
+
+function confidenceBadge(confidence: RunDynamicsResult["insight"]["confidence"]) {
+  const colors = { high: "text-success", moderate: "text-warning", low: "text-muted-foreground" };
+  return <span className={cn("text-[10px] font-semibold uppercase tracking-wider", colors[confidence])}>{confidence} confidence</span>;
+}
+
+/** SVG scatter plot: X = total move %, Y = time to 50% retrace (min) */
+function RunScatter({ runs }: { runs: Run[] }) {
+  const withRetrace = runs.filter(r => r.retrace50Min !== null);
+  if (withRetrace.length < 3) {
+    return (
+      <div className="flex items-center justify-center h-48 text-xs text-muted-foreground">
+        Not enough runs with confirmed retraces to plot ({withRetrace.length} of {runs.length})
+      </div>
+    );
+  }
+
+  const W = 360, H = 200, PAD = { l: 44, r: 12, t: 12, b: 36 };
+  const xs = withRetrace.map(r => r.totalMovePct);
+  const ys = withRetrace.map(r => r.retrace50Min as number);
+
+  const xMin = Math.min(...xs), xMax = Math.max(...xs);
+  const yMin = 0, yMax = Math.max(...ys) * 1.1;
+
+  const toSvgX = (v: number) => PAD.l + ((v - xMin) / (xMax - xMin || 1)) * (W - PAD.l - PAD.r);
+  const toSvgY = (v: number) => H - PAD.b - ((v - yMin) / (yMax - yMin || 1)) * (H - PAD.t - PAD.b);
+
+  // Velocity quartile for dot color
+  const vels = withRetrace.map(r => r.vel3BarAvg).sort((a, b) => a - b);
+  const velQ1 = vels[Math.floor(vels.length * 0.33)];
+  const velQ2 = vels[Math.floor(vels.length * 0.67)];
+  const velColor = (r: Run) =>
+    r.vel3BarAvg >= velQ2 ? "#22c55e" : r.vel3BarAvg >= velQ1 ? "#f59e0b" : "#ef4444";
+
+  // Trend line (simple linear regression)
+  const n = withRetrace.length;
+  const mx = xs.reduce((a, b) => a + b) / n;
+  const my = ys.reduce((a, b) => a + b) / n;
+  const slope = xs.map((x, i) => (x - mx) * (ys[i] - my)).reduce((a, b) => a + b) /
+                xs.map(x => (x - mx) ** 2).reduce((a, b) => a + b);
+  const intercept = my - slope * mx;
+  const trendY1 = intercept + slope * xMin;
+  const trendY2 = intercept + slope * xMax;
+
+  // Axis tick helpers
+  const xTicks = 4;
+  const yTicks = 4;
+
+  return (
+    <svg width="100%" viewBox={`0 0 ${W} ${H}`} className="overflow-visible">
+      {/* Grid lines */}
+      {Array.from({ length: yTicks + 1 }).map((_, i) => {
+        const v = yMin + (yMax - yMin) * (i / yTicks);
+        const sy = toSvgY(v);
+        return (
+          <g key={i}>
+            <line x1={PAD.l} y1={sy} x2={W - PAD.r} y2={sy} stroke="currentColor" strokeOpacity={0.08} strokeDasharray="3,3" />
+            <text x={PAD.l - 4} y={sy + 4} textAnchor="end" fontSize={8} fill="currentColor" fillOpacity={0.5}>
+              {v.toFixed(0)}m
+            </text>
+          </g>
+        );
+      })}
+      {Array.from({ length: xTicks + 1 }).map((_, i) => {
+        const v = xMin + (xMax - xMin) * (i / xTicks);
+        const sx = toSvgX(v);
+        return (
+          <g key={i}>
+            <line x1={sx} y1={PAD.t} x2={sx} y2={H - PAD.b} stroke="currentColor" strokeOpacity={0.08} strokeDasharray="3,3" />
+            <text x={sx} y={H - PAD.b + 12} textAnchor="middle" fontSize={8} fill="currentColor" fillOpacity={0.5}>
+              {v.toFixed(2)}%
+            </text>
+          </g>
+        );
+      })}
+
+      {/* Trend line */}
+      <line
+        x1={toSvgX(xMin)} y1={Math.max(PAD.t, Math.min(H - PAD.b, toSvgY(trendY1)))}
+        x2={toSvgX(xMax)} y2={Math.max(PAD.t, Math.min(H - PAD.b, toSvgY(trendY2)))}
+        stroke="white" strokeOpacity={0.2} strokeWidth={1} strokeDasharray="4,2"
+      />
+
+      {/* Dots */}
+      {withRetrace.map((r, i) => (
+        <circle
+          key={i}
+          cx={toSvgX(r.totalMovePct)}
+          cy={toSvgY(r.retrace50Min as number)}
+          r={3.5}
+          fill={velColor(r)}
+          fillOpacity={0.80}
+          stroke="black"
+          strokeWidth={0.5}
+        />
+      ))}
+
+      {/* Axis labels */}
+      <text x={(PAD.l + W - PAD.r) / 2} y={H - 2} textAnchor="middle" fontSize={9} fill="currentColor" fillOpacity={0.5}>
+        Run Distance (%)
+      </text>
+      <text
+        x={8} y={(PAD.t + H - PAD.b) / 2}
+        textAnchor="middle" fontSize={9} fill="currentColor" fillOpacity={0.5}
+        transform={`rotate(-90 8 ${(PAD.t + H - PAD.b) / 2})`}
+      >
+        Time to 50% Retrace (min)
+      </text>
+
+      {/* Legend */}
+      <g transform={`translate(${PAD.l + 4}, ${PAD.t + 4})`}>
+        <rect x={0} y={0} width={96} height={32} rx={3} fill="black" fillOpacity={0.4} />
+        {[["#22c55e", "Fast velocity"], ["#f59e0b", "Mid velocity"], ["#ef4444", "Slow velocity"]].map(([c, label], i) => (
+          <g key={i} transform={`translate(6, ${i * 9 + 7})`}>
+            <circle cx={4} cy={0} r={3} fill={c as string} />
+            <text x={10} y={3.5} fontSize={7} fill="currentColor" fillOpacity={0.7}>{label as string}</text>
+          </g>
+        ))}
+      </g>
+    </svg>
+  );
+}
+
+function CorrRow({ label, r, description }: { label: string; r: number | null; description: string }) {
+  const abs = r !== null ? Math.abs(r) : 0;
+  const barW = Math.min(100, abs * 100);
+  const positive = r !== null && r > 0;
+  return (
+    <div className="grid grid-cols-[160px_60px_1fr_120px] items-center gap-2 py-1.5 border-b border-border/30 last:border-0">
+      <div className="text-xs font-medium text-foreground">{label}</div>
+      <div className={cn("text-xs font-mono font-bold text-right tabular-nums", corrColor(r))}>
+        {r === null ? "—" : (r >= 0 ? "+" : "") + r.toFixed(3)}
+      </div>
+      <div className="flex items-center gap-1">
+        <div className="flex-1 h-1.5 bg-border/40 rounded-full overflow-hidden relative">
+          <div
+            className={cn("absolute top-0 h-full rounded-full", abs >= 0.45 ? (positive ? "bg-success" : "bg-destructive") : "bg-muted-foreground/50")}
+            style={{ width: `${barW}%`, left: positive ? "50%" : "auto", right: positive ? "auto" : `${50 - barW}%` }}
+          />
+        </div>
+      </div>
+      <div className={cn("text-[10px] text-right", corrColor(r))}>{corrLabel(r)}</div>
+    </div>
+  );
+}
+
+function RunsTable({ runs }: { runs: Run[] }) {
+  const [showAll, setShowAll] = useState(false);
+  const sorted = [...runs].sort((a, b) => b.totalMovePct - a.totalMovePct);
+  const visible = showAll ? sorted : sorted.slice(0, 15);
+  return (
+    <div className="rounded-lg border border-border bg-card">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
+        <span className="text-sm font-semibold font-display">All Detected Runs</span>
+        <span className="text-xs text-muted-foreground ml-auto">{runs.length} total · sorted by magnitude</span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-border/50 text-muted-foreground">
+              <th className="text-left py-1.5 px-3 font-medium">Dir</th>
+              <th className="text-right py-1.5 px-2 font-medium">Move%</th>
+              <th className="text-right py-1.5 px-2 font-medium">Duration</th>
+              <th className="text-right py-1.5 px-2 font-medium">Init Vel</th>
+              <th className="text-right py-1.5 px-2 font-medium">RVOL</th>
+              <th className="text-right py-1.5 px-2 font-medium">Retrace50</th>
+              <th className="text-left py-1.5 px-2 font-medium">Start</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visible.map((r, i) => {
+              const isUp = r.direction === "up";
+              return (
+                <tr key={i} className="border-b border-border/20 hover:bg-muted/20">
+                  <td className="py-1 px-3">
+                    {isUp
+                      ? <ChevronUp className="w-3.5 h-3.5 text-success" />
+                      : <ChevronDown className="w-3.5 h-3.5 text-destructive" />}
+                  </td>
+                  <td className={cn("py-1 px-2 text-right font-mono font-bold tabular-nums", isUp ? "text-success" : "text-destructive")}>
+                    {isUp ? "+" : "−"}{r.totalMovePct.toFixed(3)}%
+                  </td>
+                  <td className="py-1 px-2 text-right font-mono tabular-nums text-muted-foreground">{r.durationMin}m</td>
+                  <td className="py-1 px-2 text-right font-mono tabular-nums text-muted-foreground">{(r.vel3BarAvg * 100).toFixed(2)}bps/bar</td>
+                  <td className={cn("py-1 px-2 text-right font-mono tabular-nums",
+                    r.rvolAtStart >= 2 ? "text-warning" : "text-muted-foreground")}>
+                    {r.rvolAtStart.toFixed(1)}x
+                  </td>
+                  <td className={cn("py-1 px-2 text-right font-mono tabular-nums",
+                    r.retrace50Min === null ? "text-muted-foreground" : "text-foreground")}>
+                    {r.retrace50Min === null ? "still running" : `${r.retrace50Min}m`}
+                  </td>
+                  <td className="py-1 px-2 text-muted-foreground font-mono text-[10px]">
+                    {new Date(r.startTime).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {runs.length > 15 && (
+        <div className="px-3 py-2 border-t border-border/30">
+          <button onClick={() => setShowAll(!showAll)} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+            {showAll ? "Show fewer" : `Show all ${runs.length} runs`}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Run Dynamics Panel ───────────────────────────────────────────────────────
+
+const PRESET_TICKERS = ["NVDA", "JPM", "GLD", "AAPL", "TSLA", "SPY", "QQQ", "BTC-USD"];
+
+function RunDynamicsPanel() {
+  const [ticker, setTicker]   = useState("NVDA");
+  const [input, setInput]     = useState("NVDA");
+  const [period, setPeriod]   = useState("5d");
+  const [enabled, setEnabled] = useState(false);
+
+  const { data, isLoading, isFetching, error } = useQuery<RunDynamicsResult>({
+    queryKey: ["run-dynamics", ticker, period],
+    queryFn: async () => {
+      const res = await fetch(`/api/research/run-dynamics?ticker=${encodeURIComponent(ticker)}&period=${period}&interval=5m`);
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    enabled,
+    staleTime: 15 * 60 * 1000,
+    retry: false,
+  });
+
+  function handleRun() {
+    const t = input.trim().toUpperCase();
+    if (!t) return;
+    setTicker(t);
+    setEnabled(true);
+  }
+
+  const loading = isLoading || isFetching;
+  const corr = data?.correlations;
+
+  return (
+    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      {/* Controls */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1 bg-muted rounded border border-border overflow-hidden">
+          <Search className="w-3.5 h-3.5 ml-2 text-muted-foreground shrink-0" />
+          <input
+            type="text"
+            value={input}
+            onChange={e => setInput(e.target.value.toUpperCase())}
+            onKeyDown={e => e.key === "Enter" && handleRun()}
+            placeholder="Ticker…"
+            className="bg-transparent text-sm px-2 py-1.5 w-24 focus:outline-none font-mono"
+          />
+        </div>
+
+        <div className="flex items-center gap-1">
+          {PRESET_TICKERS.map(t => (
+            <button
+              key={t}
+              onClick={() => { setInput(t); setTicker(t); setEnabled(true); }}
+              className={cn(
+                "text-xs px-2 py-1 rounded border transition-colors font-mono",
+                ticker === t && data
+                  ? "bg-primary/20 border-primary/50 text-primary"
+                  : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
+              )}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+
+        <select
+          value={period}
+          onChange={e => setPeriod(e.target.value)}
+          className="text-xs bg-muted border border-border rounded px-2 py-1.5 text-foreground focus:outline-none ml-auto"
+        >
+          <option value="1d">1 day (today)</option>
+          <option value="5d">5 days</option>
+          <option value="1mo">1 month</option>
+        </select>
+
+        <button
+          onClick={handleRun}
+          disabled={loading}
+          className={cn(
+            "flex items-center gap-1.5 text-xs px-3 py-1.5 rounded font-medium transition-colors",
+            loading ? "bg-muted text-muted-foreground cursor-not-allowed" : "bg-primary text-primary-foreground hover:bg-primary/90"
+          )}
+        >
+          <Activity className={cn("w-3.5 h-3.5", loading && "animate-pulse")} />
+          {loading ? "Analyzing…" : "Analyze"}
+        </button>
+      </div>
+
+      {/* Empty state */}
+      {!enabled && !data && (
+        <div className="flex flex-col items-center justify-center h-64 text-center gap-4">
+          <Activity className="w-12 h-12 text-muted-foreground/30" />
+          <div>
+            <p className="text-sm font-semibold text-muted-foreground">Intraday Run Dynamics</p>
+            <p className="text-xs text-muted-foreground/70 mt-1 max-w-lg">
+              Detects all directional price runs on a 5-min chart, then measures velocity, distance,
+              and time-to-50%-retrace for each. Computes Pearson correlations to determine whether
+              this asset is momentum-driven (bigger moves sustain longer) or mean-reversion-driven
+              (fast spikes get faded). Select a ticker above to begin.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            {["NVDA", "JPM", "GLD"].map(t => (
+              <button
+                key={t}
+                onClick={() => { setInput(t); setTicker(t); setEnabled(true); }}
+                className="text-sm px-4 py-2 rounded bg-muted border border-border text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors font-mono"
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Loading */}
+      {loading && !data && (
+        <div className="flex flex-col items-center justify-center h-48 gap-3">
+          <RefreshCw className="w-7 h-7 text-primary animate-spin" />
+          <p className="text-sm text-muted-foreground">Fetching 5-min bars and detecting runs…</p>
+        </div>
+      )}
+
+      {/* Error */}
+      {error && (
+        <div className="flex items-center gap-3 p-4 rounded-lg border border-destructive/30 bg-destructive/10">
+          <AlertCircle className="w-5 h-5 text-destructive shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-destructive">Analysis failed</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{String(error)}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Results */}
+      {data && (
+        <>
+          {/* Insight banner */}
+          <div className={cn(
+            "rounded-lg border p-4 space-y-1",
+            data.insight.behavior === "momentum"
+              ? "border-success/30 bg-success/5"
+              : data.insight.behavior === "mean-reversion"
+              ? "border-destructive/30 bg-destructive/5"
+              : "border-border bg-muted/20"
+          )}>
+            <div className="flex items-center gap-2">
+              {behaviorBadge(data.insight.behavior)}
+              {confidenceBadge(data.insight.confidence)}
+              <span className="text-xs text-muted-foreground ml-auto">
+                {data.totalBars} bars · {data.stats.totalRuns} runs · {data.period} @ 5m ·
+                analyzed {new Date(data.analyzedAt).toLocaleTimeString()}
+              </span>
+            </div>
+            <p className="text-sm font-semibold">{data.insight.summary}</p>
+            <p className="text-xs text-muted-foreground">{data.insight.keyFinding}</p>
+          </div>
+
+          {/* Stats pills */}
+          <div className="flex items-center gap-3 flex-wrap">
+            {[
+              { label: "Avg Run", value: `${data.stats.avgMovePct}%` },
+              { label: "Avg Duration", value: `${data.stats.avgDurationMin}m` },
+              { label: "Median Retrace50", value: data.stats.medianRetrace50Min !== null ? `${data.stats.medianRetrace50Min}m` : "—" },
+              { label: "% w/ Retrace", value: `${data.stats.pctWithRetrace}%` },
+              { label: "Up / Down", value: `${data.stats.upCount} / ${data.stats.downCount}` },
+            ].map(s => (
+              <div key={s.label} className="flex items-center gap-1.5 bg-muted/50 border border-border rounded px-2.5 py-1 text-xs">
+                <span className="text-muted-foreground">{s.label}</span>
+                <span className="font-mono font-semibold">{s.value}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Scatter + Correlations */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* Scatter */}
+            <div className="rounded-lg border border-border bg-card">
+              <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
+                <span className="text-sm font-semibold font-display">Distance vs Retrace Time</span>
+                <span className="text-xs text-muted-foreground ml-auto">UP runs · dot color = velocity</span>
+              </div>
+              <div className="p-3">
+                <RunScatter runs={data.runs.filter(r => r.direction === "up")} />
+              </div>
+            </div>
+
+            {/* Correlations */}
+            <div className="rounded-lg border border-border bg-card">
+              <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
+                <span className="text-sm font-semibold font-display">Pearson Correlations</span>
+                <span className="text-xs text-muted-foreground ml-auto">X vs time-to-50%-retrace</span>
+              </div>
+              <div className="px-3 pt-1 pb-2 space-y-0">
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground py-1 font-semibold">Up Runs (n={corr?.up.n})</div>
+                <CorrRow label="Init velocity" r={corr?.up.velocityVsRetrace50 ?? null} description="Faster entry → quicker retrace?" />
+                <CorrRow label="Total distance %" r={corr?.up.distanceVsRetrace50 ?? null} description="Bigger move → longer run?" />
+                <CorrRow label="Run duration" r={corr?.up.durationVsRetrace50 ?? null} description="Longer run → longer retrace?" />
+
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground pt-3 pb-1 font-semibold">Down Runs (n={corr?.down.n})</div>
+                <CorrRow label="Init velocity" r={corr?.down.velocityVsRetrace50 ?? null} description="" />
+                <CorrRow label="Total distance %" r={corr?.down.distanceVsRetrace50 ?? null} description="" />
+                <CorrRow label="Run duration" r={corr?.down.durationVsRetrace50 ?? null} description="" />
+
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground pt-3 pb-1 font-semibold">All Runs (n={corr?.all.n})</div>
+                <CorrRow label="Init velocity" r={corr?.all.velocityVsRetrace50 ?? null} description="" />
+                <CorrRow label="Total distance %" r={corr?.all.distanceVsRetrace50 ?? null} description="" />
+                <CorrRow label="Run duration" r={corr?.all.durationVsRetrace50 ?? null} description="" />
+              </div>
+
+              {/* Interpretation guide */}
+              <div className="px-3 py-2 border-t border-border/30 text-[10px] text-muted-foreground space-y-0.5">
+                <div><span className="text-success font-semibold">Positive r</span> = factor predicts longer time before retracing (momentum)</div>
+                <div><span className="text-destructive font-semibold">Negative r</span> = factor predicts faster retracing (mean-reversion)</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Run table */}
+          <RunsTable runs={data.runs} />
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Gap Analysis Panel ───────────────────────────────────────────────────────
+
+function GapAnalysisPanel() {
+  const [threshold, setThreshold]         = useState<number>(5);
   const [pendingThreshold, setPendingThreshold] = useState<number>(5);
 
   const { data, isLoading, isFetching, error, refetch } = useQuery<GapAnalysisResult>({
@@ -467,28 +917,20 @@ export default function Research() {
     retry: false,
   });
 
-  function handleRun() {
-    setThreshold(pendingThreshold);
-  }
-
+  function handleRun() { setThreshold(pendingThreshold); }
   const loading = isLoading || isFetching;
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-background">
-      {/* Header bar */}
-      <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-border bg-card">
-        <div className="flex items-center gap-2">
-          <FlaskConical className="w-4 h-4 text-primary" />
-          <span className="font-display text-sm font-semibold tracking-wide">GAP PRECURSOR ANALYSIS</span>
-          {data && (
-            <span className="text-xs text-muted-foreground ml-2">
-              {data.metadata.tickers} tickers · {data.metadata.totalGaps} gaps found ·
-              ≥{data.metadata.threshold}% threshold · 1-year lookback ·
-              computed {new Date(data.metadata.analyzedAt).toLocaleString()}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
+    <>
+      {/* Controls */}
+      <div className="shrink-0 flex items-center gap-2 px-4 py-2 border-b border-border">
+        {data && (
+          <span className="text-xs text-muted-foreground">
+            {data.metadata.tickers} tickers · {data.metadata.totalGaps} gaps · ≥{data.metadata.threshold}% ·
+            computed {new Date(data.metadata.analyzedAt).toLocaleString()}
+          </span>
+        )}
+        <div className="flex items-center gap-2 ml-auto">
           <span className="text-xs text-muted-foreground">Min gap:</span>
           <select
             value={pendingThreshold}
@@ -505,9 +947,7 @@ export default function Research() {
             disabled={loading}
             className={cn(
               "flex items-center gap-1.5 text-xs px-3 py-1.5 rounded font-medium transition-colors",
-              loading
-                ? "bg-muted text-muted-foreground cursor-not-allowed"
-                : "bg-primary text-primary-foreground hover:bg-primary/90"
+              loading ? "bg-muted text-muted-foreground cursor-not-allowed" : "bg-primary text-primary-foreground hover:bg-primary/90"
             )}
           >
             <RefreshCw className={cn("w-3 h-3", loading && "animate-spin")} />
@@ -516,9 +956,7 @@ export default function Research() {
         </div>
       </div>
 
-      {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Initial state */}
         {!data && !loading && !error && (
           <div className="flex flex-col items-center justify-center h-64 text-center gap-4">
             <FlaskConical className="w-12 h-12 text-muted-foreground/40" />
@@ -526,35 +964,28 @@ export default function Research() {
               <p className="text-sm font-semibold text-muted-foreground">Gap Precursor Analysis</p>
               <p className="text-xs text-muted-foreground/70 mt-1 max-w-md">
                 Analyzes ~{80} tickers over 1 year, detects all significant gaps, then correlates
-                pre-gap technical conditions to find which factors consistently precede gaps.
-                First run takes ~20–60s; results are cached for 6 hours.
+                pre-gap technical conditions. First run takes ~20–60s; cached 6 hours.
               </p>
             </div>
             <button
               onClick={handleRun}
               className="flex items-center gap-2 text-sm px-4 py-2 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
             >
-              <FlaskConical className="w-4 h-4" />
-              Run Analysis
+              <FlaskConical className="w-4 h-4" />Run Analysis
             </button>
           </div>
         )}
 
-        {/* Loading */}
         {loading && !data && (
           <div className="flex flex-col items-center justify-center h-64 gap-4">
             <RefreshCw className="w-8 h-8 text-primary animate-spin" />
             <div className="text-center">
               <p className="text-sm font-semibold">Analyzing gap precursors…</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Fetching 1 year of data across {80}+ tickers and computing indicators.
-                This may take 20–60 seconds on first run.
-              </p>
+              <p className="text-xs text-muted-foreground mt-1">Fetching 1 year across 80+ tickers. May take 20–60s.</p>
             </div>
           </div>
         )}
 
-        {/* Error */}
         {error && (
           <div className="flex items-center gap-3 p-4 rounded-lg border border-destructive/30 bg-destructive/10">
             <AlertCircle className="w-5 h-5 text-destructive shrink-0" />
@@ -565,10 +996,8 @@ export default function Research() {
           </div>
         )}
 
-        {/* Results */}
         {data && (
           <>
-            {/* Stats pills */}
             <div className="flex items-center gap-3 flex-wrap">
               <div className="flex items-center gap-1.5 bg-success/10 border border-success/20 rounded px-2.5 py-1 text-xs">
                 <ChevronUp className="w-3 h-3 text-success" />
@@ -582,48 +1011,66 @@ export default function Research() {
               </div>
               <EffectLegend />
             </div>
-
-            {/* Follow-through */}
             <div className="grid grid-cols-2 gap-4">
-              <FollowThroughCard
-                title="Gap-Up Follow-Through"
-                icon={<TrendingUp className="w-4 h-4 text-success" />}
-                data={data.followThrough.gapUp}
-                direction="up"
-              />
-              <FollowThroughCard
-                title="Gap-Down Follow-Through"
-                icon={<TrendingDown className="w-4 h-4 text-destructive" />}
-                data={data.followThrough.gapDown}
-                direction="down"
-              />
+              <FollowThroughCard title="Gap-Up Follow-Through" icon={<TrendingUp className="w-4 h-4 text-success" />} data={data.followThrough.gapUp} direction="up" />
+              <FollowThroughCard title="Gap-Down Follow-Through" icon={<TrendingDown className="w-4 h-4 text-destructive" />} data={data.followThrough.gapDown} direction="down" />
             </div>
-
-            {/* Factor rankings */}
             <div className="grid grid-cols-2 gap-4">
-              <FactorTable
-                title="Gap-Up Precursors"
-                icon={<TrendingUp className="w-4 h-4 text-success" />}
-                stats={data.factorRanking}
-                direction="up"
-              />
-              <FactorTable
-                title="Gap-Down Precursors"
-                icon={<TrendingDown className="w-4 h-4 text-destructive" />}
-                stats={data.factorRanking}
-                direction="down"
-              />
+              <FactorTable title="Gap-Up Precursors" icon={<TrendingUp className="w-4 h-4 text-success" />} stats={data.factorRanking} direction="up" />
+              <FactorTable title="Gap-Down Precursors" icon={<TrendingDown className="w-4 h-4 text-destructive" />} stats={data.factorRanking} direction="down" />
             </div>
-
-            {/* Setup filter backtest */}
-            {data.setupBacktest && (
-              <SetupBacktestCard bt={data.setupBacktest} />
-            )}
-
-            {/* Recent gaps */}
+            {data.setupBacktest && <SetupBacktestCard bt={data.setupBacktest} />}
             <RecentGapsTable gaps={data.recentGaps} />
           </>
         )}
+      </div>
+    </>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
+type Tab = "gap-analysis" | "run-dynamics";
+
+export default function Research() {
+  const [activeTab, setActiveTab] = useState<Tab>("gap-analysis");
+
+  const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
+    { id: "gap-analysis",  label: "Gap Precursor Analysis", icon: <FlaskConical className="w-3.5 h-3.5" /> },
+    { id: "run-dynamics",  label: "Run Dynamics",           icon: <Activity className="w-3.5 h-3.5" /> },
+  ];
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden bg-background">
+      {/* Header + Tab bar */}
+      <div className="shrink-0 border-b border-border bg-card">
+        <div className="flex items-center gap-2 px-4 py-2.5">
+          <FlaskConical className="w-4 h-4 text-primary" />
+          <span className="font-display text-sm font-semibold tracking-wide">RESEARCH LAB</span>
+        </div>
+        <div className="flex items-center gap-0 px-4">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                "flex items-center gap-1.5 text-xs px-4 py-2 border-b-2 transition-colors font-medium",
+                activeTab === tab.id
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Panel */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {activeTab === "gap-analysis"  && <GapAnalysisPanel />}
+        {activeTab === "run-dynamics"  && <RunDynamicsPanel />}
       </div>
     </div>
   );
