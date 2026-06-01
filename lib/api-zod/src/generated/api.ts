@@ -129,6 +129,7 @@ export const GetStockAnalysisResponse = zod.object({
   "rsi": zod.number(),
   "rsiSignal": zod.enum(['overbought', 'neutral', 'oversold']),
   "rsiDivergence": zod.enum(['bullish', 'bearish', 'null']).nullable(),
+  "rsiDivergenceStrength": zod.enum(['strong', 'weak', 'null']).nullish(),
   "macd": zod.number(),
   "macdSignal": zod.number(),
   "macdHistogram": zod.number(),
@@ -172,7 +173,9 @@ export const GetStockAnalysisResponse = zod.object({
   "putWall": zod.number().nullable(),
   "gammaFlipLevel": zod.number().nullable(),
   "unusualActivity": zod.boolean(),
-  "optionsScore": zod.number()
+  "optionsScore": zod.number(),
+  "ivRankProxy": zod.number().describe('0–100 realized-vol percentile rank (IV Rank proxy)'),
+  "realizedSkew": zod.number().describe('-1 to +1 skew proxy: positive = more up-days (call demand), negative = more down-days (put demand)')
 }),
   "patterns": zod.object({
   "patterns": zod.array(zod.string()),
@@ -224,6 +227,34 @@ export const GetStockAnalysisResponse = zod.object({
   "rankIC": zod.number().nullish(),
   "icRating": zod.string().nullish(),
   "fittedAt": zod.string().nullish()
+}),zod.null()]).optional(),
+  "fibLevels": zod.union([zod.object({
+  "swingHigh": zod.number(),
+  "swingLow": zod.number(),
+  "trend": zod.enum(['up', 'down']),
+  "levels": zod.array(zod.object({
+  "ratio": zod.number(),
+  "price": zod.number(),
+  "label": zod.string()
+}))
+}),zod.null()]).optional(),
+  "volumeProfile": zod.union([zod.object({
+  "poc": zod.number().describe('Point of Control — highest-volume price level'),
+  "vah": zod.number().describe('Value Area High — upper bound of 70% volume zone'),
+  "val": zod.number().describe('Value Area Low — lower bound of 70% volume zone'),
+  "bins": zod.array(zod.object({
+  "priceLevel": zod.number(),
+  "volume": zod.number(),
+  "pct": zod.number()
+}))
+}),zod.null()]).optional(),
+  "weeklyContext": zod.union([zod.object({
+  "weeklyTrend": zod.enum(['strong_up', 'up', 'neutral', 'down', 'strong_down']),
+  "weeklyRsi": zod.number(),
+  "weeklyMacdBullish": zod.boolean(),
+  "weeklyAboveSma20": zod.boolean(),
+  "weeklyAboveSma50": zod.boolean(),
+  "weeklyAlignment": zod.enum(['bullish', 'bearish', 'neutral'])
 }),zod.null()]).optional(),
   "cachedAt": zod.string()
 })

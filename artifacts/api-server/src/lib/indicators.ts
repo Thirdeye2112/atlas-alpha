@@ -68,6 +68,7 @@ export interface MomentumResult {
   rsi: number;
   rsiSignal: "overbought" | "neutral" | "oversold";
   rsiDivergence: "bullish" | "bearish" | null;
+  rsiDivergenceStrength: "strong" | "weak" | null;
   macd: number;
   macdSignal: number;
   macdHistogram: number;
@@ -115,6 +116,10 @@ export interface OptionsResult {
   gammaFlipLevel: number | null;
   unusualActivity: boolean;
   optionsScore: number;
+  /** 0–100 realized-vol percentile rank over trailing 52 weeks (IV Rank proxy) */
+  ivRankProxy: number;
+  /** -1 to +1: positive = more up-days (call pressure), negative = more down-days (put pressure) */
+  realizedSkew: number;
 }
 
 export interface PatternResult {
@@ -214,6 +219,32 @@ export function calcTrend(bars: OHLCVBar[], price: number): TrendResult {
   };
 }
 
+/** Returns indices of local minima (pivot lows) within the given window. */
+function findPivotLows(values: number[], window = 3): { idx: number; value: number }[] {
+  const pivots: { idx: number; value: number }[] = [];
+  for (let i = window; i < values.length - window; i++) {
+    let isPivot = true;
+    for (let j = i - window; j <= i + window; j++) {
+      if (j !== i && values[j] <= values[i]) { isPivot = false; break; }
+    }
+    if (isPivot) pivots.push({ idx: i, value: values[i] });
+  }
+  return pivots;
+}
+
+/** Returns indices of local maxima (pivot highs) within the given window. */
+function findPivotHighs(values: number[], window = 3): { idx: number; value: number }[] {
+  const pivots: { idx: number; value: number }[] = [];
+  for (let i = window; i < values.length - window; i++) {
+    let isPivot = true;
+    for (let j = i - window; j <= i + window; j++) {
+      if (j !== i && values[j] >= values[i]) { isPivot = false; break; }
+    }
+    if (isPivot) pivots.push({ idx: i, value: values[i] });
+  }
+  return pivots;
+}
+
 export function calcMomentum(bars: OHLCVBar[]): MomentumResult {
   const closes = bars.map(b => b.close);
   const highs = bars.map(b => b.high);
@@ -252,17 +283,49 @@ export function calcMomentum(bars: OHLCVBar[]): MomentumResult {
   const rocArr = ROC.calculate({ values: closes, period: 12 });
   const roc = last(rocArr) ?? 0;
 
-  // RSI divergence: check if price making new highs/lows but RSI not confirming
+  // True pivot-based RSI divergence — compares price swing lows/highs to RSI at those pivots
   let rsiDivergence: MomentumResult["rsiDivergence"] = null;
-  if (bars.length >= 20) {
-    const recentPrices = closes.slice(-10);
-    const recentRsi = rsiArr.slice(-10);
-    const priceDown = last(recentPrices) < recentPrices[0];
-    const rsiUp = last(recentRsi) > recentRsi[0];
-    const priceUp = last(recentPrices) > recentPrices[0];
-    const rsiDown = last(recentRsi) < recentRsi[0];
-    if (priceDown && rsiUp && rsi < 45) rsiDivergence = "bullish";
-    if (priceUp && rsiDown && rsi > 55) rsiDivergence = "bearish";
+  let rsiDivergenceStrength: MomentumResult["rsiDivergenceStrength"] = null;
+  if (bars.length >= 30 && rsiArr.length >= 10) {
+    const lookback    = Math.min(closes.length, 60);
+    const sliceCloses = closes.slice(-lookback);
+    const rsiOffset   = closes.length - rsiArr.length; // rsiArr[i] corresponds to closes[i + rsiOffset]
+    const toRsiIdx    = (sliceIdx: number) => (closes.length - lookback + sliceIdx) - rsiOffset;
+
+    const priceLows  = findPivotLows(sliceCloses,  3);
+    const priceHighs = findPivotHighs(sliceCloses, 3);
+
+    // Bullish divergence: lower price low + higher RSI low (hidden buying pressure)
+    if (priceLows.length >= 2) {
+      const p1 = priceLows[priceLows.length - 2];
+      const p2 = priceLows[priceLows.length - 1];
+      const r1i = toRsiIdx(p1.idx), r2i = toRsiIdx(p2.idx);
+      if (r1i >= 0 && r2i > r1i && r2i < rsiArr.length) {
+        const r1 = rsiArr[r1i], r2 = rsiArr[r2i];
+        if (p2.value < p1.value && r2 > r1 && rsi < 52) {
+          rsiDivergence = "bullish";
+          const pDrop = (p1.value - p2.value) / p1.value * 100;
+          const rRise = r2 - r1;
+          rsiDivergenceStrength = pDrop > 4 && rRise > 6 ? "strong" : "weak";
+        }
+      }
+    }
+
+    // Bearish divergence: higher price high + lower RSI high (hidden selling pressure)
+    if (!rsiDivergence && priceHighs.length >= 2) {
+      const p1 = priceHighs[priceHighs.length - 2];
+      const p2 = priceHighs[priceHighs.length - 1];
+      const r1i = toRsiIdx(p1.idx), r2i = toRsiIdx(p2.idx);
+      if (r1i >= 0 && r2i > r1i && r2i < rsiArr.length) {
+        const r1 = rsiArr[r1i], r2 = rsiArr[r2i];
+        if (p2.value > p1.value && r2 < r1 && rsi > 48) {
+          rsiDivergence = "bearish";
+          const pRise = (p2.value - p1.value) / p1.value * 100;
+          const rDrop = r1 - r2;
+          rsiDivergenceStrength = pRise > 4 && rDrop > 6 ? "strong" : "weak";
+        }
+      }
+    }
   }
 
   let rsiSignal: MomentumResult["rsiSignal"] = "neutral";
@@ -308,6 +371,7 @@ export function calcMomentum(bars: OHLCVBar[]): MomentumResult {
     rsi,
     rsiSignal,
     rsiDivergence,
+    rsiDivergenceStrength,
     macd,
     macdSignal,
     macdHistogram,
@@ -423,6 +487,28 @@ export function calcVolatility(bars: OHLCVBar[], price: number): VolatilityResul
   const expectedMovePercent = sigma * Math.sqrt(30 / 252) * 100;
   const expectedMove = price * expectedMovePercent / 100;
 
+  // IV Rank proxy: where does current 20-day realized vol sit in its 52-week distribution?
+  // High rank = expensive vol (premium-selling environment), low = cheap vol (breakout setup)
+  const logReturns: number[] = [];
+  for (let i = 1; i < closes.length; i++) logReturns.push(Math.log(closes[i] / closes[i - 1]));
+
+  const cur20 = logReturns.slice(-20);
+  const mean20 = cur20.length > 0 ? cur20.reduce((a, b) => a + b, 0) / cur20.length : 0;
+  const var20 = cur20.length > 1 ? cur20.reduce((a, r) => a + (r - mean20) ** 2, 0) / (cur20.length - 1) : 0;
+  const currentRealizedVol = Math.sqrt(var20 * 252) * 100;
+
+  const rollingVols252: number[] = [];
+  for (let i = 20; i <= logReturns.length; i++) {
+    const slice = logReturns.slice(i - 20, i);
+    const m = slice.reduce((a, b) => a + b, 0) / 20;
+    const v = slice.reduce((a, r) => a + (r - m) ** 2, 0) / Math.max(slice.length - 1, 1);
+    rollingVols252.push(Math.sqrt(v * 252) * 100);
+  }
+  const ivRank = rollingVols252.length > 0
+    ? Math.round(rollingVols252.filter(v => v < currentRealizedVol).length / rollingVols252.length * 100)
+    : null;
+  const ivPercentile = ivRank;
+
   return {
     atr,
     atrPercent,
@@ -434,37 +520,87 @@ export function calcVolatility(bars: OHLCVBar[], price: number): VolatilityResul
     keltnerUpper,
     keltnerLower,
     volatilitySqueeze,
-    ivRank: null,
-    ivPercentile: null,
+    ivRank,
+    ivPercentile,
     expectedMove,
     expectedMovePercent,
   };
 }
 
-export function calcOptions(momentum: MomentumResult, volume: VolumeResult, volatility: VolatilityResult, price: number): OptionsResult {
-  // Derive proxy options metrics from price/volume/momentum data
-  // In production these would come from options chain data
+export function calcOptions(
+  momentum: MomentumResult,
+  volume: VolumeResult,
+  volatility: VolatilityResult,
+  price: number,
+  bars?: OHLCVBar[],
+): OptionsResult {
+  // ── IV Rank proxy (realized-vol percentile from calcVolatility) ───────────────
+  // Low rank = cheap vol (pre-expansion setup), high rank = expensive vol (fade extremes)
+  const ivRankProxy = volatility.ivRank ?? 50;
+
+  // ── Realized skew proxy ───────────────────────────────────────────────────────
+  // Asymmetry of recent daily returns: positive = more up-days (call demand proxy),
+  // negative = more down-days (put demand proxy)
+  let realizedSkew = 0;
+  if (bars && bars.length >= 21) {
+    const recentCloses = bars.slice(-21).map(b => b.close);
+    let upDays = 0, dnDays = 0;
+    for (let i = 1; i < recentCloses.length; i++) {
+      const r = (recentCloses[i] - recentCloses[i - 1]) / recentCloses[i - 1] * 100;
+      if (r >  0.1) upDays++;
+      else if (r < -0.1) dnDays++;
+    }
+    const total = upDays + dnDays;
+    realizedSkew = total > 0 ? (upDays - dnDays) / total : 0;
+  }
+
+  // ── Unusual activity ──────────────────────────────────────────────────────────
   const unusualActivity = volume.relativeVolume > 2.5 && Math.abs(momentum.rsi - 50) > 15;
 
+  // ── Composite score ───────────────────────────────────────────────────────────
   let optionsScore = 50;
-  optionsScore += momentum.rsiSignal === "oversold" ? 15 : momentum.rsiSignal === "overbought" ? -10 : 0;
-  optionsScore += volume.chaikinMoneyFlow > 0.1 ? 15 : volume.chaikinMoneyFlow < -0.1 ? -15 : 0;
-  optionsScore += volatility.volatilitySqueeze ? 10 : 0;
-  optionsScore += unusualActivity ? 8 : 0;
 
-  // Proxy levels based on Bollinger/Keltner
-  const callWall = volatility.bollingerUpper;
-  const putWall = volatility.bollingerLower;
+  // IV Rank signal: low IV = setup for expansion (bullish for directional plays)
+  //                high IV = elevated risk premium, fade extremes
+  if      (ivRankProxy < 20) optionsScore += 15;  // very low vol → expansion likely
+  else if (ivRankProxy < 35) optionsScore +=  8;  // below-avg vol → mild bullish
+  else if (ivRankProxy > 75) optionsScore -= 10;  // high IV → risk premium elevated
+  else if (ivRankProxy > 60) optionsScore -=  5;  // above-avg vol → slight headwind
+
+  // Vol squeeze: strongest single predictor of near-term expansion
+  if (volatility.volatilitySqueeze) optionsScore += 12;
+
+  // CMF order-flow directional proxy (money flow, not just raw volume)
+  optionsScore += volume.chaikinMoneyFlow > 0.15 ? 12
+                : volume.chaikinMoneyFlow < -0.15 ? -12
+                : Math.round(volume.chaikinMoneyFlow * 60);
+
+  // Realized skew: positive (more up-days) = bullish sentiment proxy
+  optionsScore += Math.round(realizedSkew * 10);
+
+  // RSI extremes modulated by IV rank
+  if      (momentum.rsiSignal === "oversold"   && ivRankProxy < 40) optionsScore += 12;
+  else if (momentum.rsiSignal === "oversold")                        optionsScore +=  6;
+  else if (momentum.rsiSignal === "overbought" && ivRankProxy > 60) optionsScore -= 10;
+  else if (momentum.rsiSignal === "overbought")                      optionsScore -=  5;
+
+  if (unusualActivity) optionsScore += 5;
+
+  // Proxy levels (best available without real options data)
+  const callWall       = volatility.bollingerUpper;
+  const putWall        = volatility.bollingerLower;
   const gammaFlipLevel = volatility.bollingerMiddle;
 
   return {
-    putCallRatio: null,
-    maxPain: null,
+    putCallRatio:   null,
+    maxPain:        null,
     callWall,
     putWall,
     gammaFlipLevel,
     unusualActivity,
-    optionsScore: clamp(optionsScore),
+    optionsScore:   clamp(optionsScore),
+    ivRankProxy,
+    realizedSkew:   Math.round(realizedSkew * 100) / 100,
   };
 }
 
@@ -1206,4 +1342,227 @@ export function calcRelativeStrength(
   const rsScore = clamp(50 + weightedVsSpy * 2);
 
   return { vsSpy, vsQqq, vsIwm, vsSector, rsScore, sectorName };
+}
+
+// ── Feature: Fibonacci Retracement Levels ────────────────────────────────────
+
+export interface FibLevel {
+  ratio: number;
+  price: number;
+  label: string;
+}
+
+export interface FibLevelsResult {
+  swingHigh: number;
+  swingLow: number;
+  /** Whether price is retracing from a high (down) or recovering from a low (up) */
+  trend: "up" | "down";
+  levels: FibLevel[];
+}
+
+/**
+ * Compute Fibonacci retracement levels from the 100-bar swing high/low.
+ * For an uptrend: standard retracements from high down (23.6%–78.6%).
+ * For a downtrend: standard retracements from low up.
+ */
+export function calcFibLevels(bars: OHLCVBar[]): FibLevelsResult {
+  const lookback    = Math.min(bars.length, 100);
+  const recentBars  = bars.slice(-lookback);
+  const highs = recentBars.map(b => b.high);
+  const lows  = recentBars.map(b => b.low);
+
+  const swingHigh = Math.max(...highs);
+  const swingLow  = Math.min(...lows);
+  const range     = swingHigh - swingLow;
+
+  const highIdx   = highs.indexOf(swingHigh);
+  const lowIdx    = lows.indexOf(swingLow);
+  const trend: FibLevelsResult["trend"] = lowIdx < highIdx ? "up" : "down";
+
+  const FIB_RATIOS: { ratio: number; label: string }[] = [
+    { ratio: 0,     label: "0%"     },
+    { ratio: 0.236, label: "23.6%"  },
+    { ratio: 0.382, label: "38.2%"  },
+    { ratio: 0.500, label: "50%"    },
+    { ratio: 0.618, label: "61.8%"  },
+    { ratio: 0.786, label: "78.6%"  },
+    { ratio: 1,     label: "100%"   },
+    { ratio: 1.272, label: "127.2%" },
+    { ratio: 1.618, label: "161.8%" },
+  ];
+
+  const levels: FibLevel[] = FIB_RATIOS.map(({ ratio, label }) => {
+    const price = trend === "up"
+      ? swingHigh - ratio * range          // retracing down from high
+      : swingLow  + ratio * range;         // recovering up from low
+    return { ratio, price: Math.round(price * 100) / 100, label };
+  });
+
+  return {
+    swingHigh: Math.round(swingHigh * 100) / 100,
+    swingLow:  Math.round(swingLow  * 100) / 100,
+    trend,
+    levels,
+  };
+}
+
+// ── Feature: Volume Profile (VAP / POC / VAH / VAL) ──────────────────────────
+
+export interface VolumeBin {
+  priceLevel: number;
+  volume: number;
+  /** % of total profile volume in this bucket */
+  pct: number;
+}
+
+export interface VolumeProfileResult {
+  /** Point of Control — price level with highest traded volume */
+  poc: number;
+  /** Value Area High — upper boundary of 70% volume zone */
+  vah: number;
+  /** Value Area Low — lower boundary of 70% volume zone */
+  val: number;
+  bins: VolumeBin[];
+}
+
+/**
+ * Compute a price×volume histogram (Volume at Price) over the last `lookbackBars`.
+ * The Value Area is the contiguous price range around the POC that contains ≥70%
+ * of total volume — the institutional "fair value" zone.
+ */
+export function calcVolumeProfile(bars: OHLCVBar[], numBuckets = 24, lookbackBars = 60): VolumeProfileResult {
+  const recentBars = bars.slice(-Math.min(bars.length, lookbackBars));
+  const allHighs   = recentBars.map(b => b.high);
+  const allLows    = recentBars.map(b => b.low);
+  const rangeHigh  = Math.max(...allHighs);
+  const rangeLow   = Math.min(...allLows);
+  const bucketSize = (rangeHigh - rangeLow) / numBuckets;
+
+  if (bucketSize <= 0 || !isFinite(bucketSize)) {
+    const price = recentBars[recentBars.length - 1]?.close ?? 0;
+    return { poc: price, vah: price, val: price, bins: [] };
+  }
+
+  // Distribute each bar's volume proportionally across the price buckets it spans
+  const bucketVolumes = new Float64Array(numBuckets);
+  for (const bar of recentBars) {
+    const barRange = bar.high - bar.low;
+    for (let b = 0; b < numBuckets; b++) {
+      const bLow  = rangeLow + b * bucketSize;
+      const bHigh = bLow + bucketSize;
+      const overlap = Math.max(0, Math.min(bar.high, bHigh) - Math.max(bar.low, bLow));
+      const fraction = barRange > 0 ? overlap / barRange : 1 / numBuckets;
+      bucketVolumes[b] += bar.volume * fraction;
+    }
+  }
+
+  const totalVol = bucketVolumes.reduce((a, b) => a + b, 0);
+
+  // POC — highest-volume bucket
+  let pocBucket = 0;
+  for (let i = 1; i < numBuckets; i++) {
+    if (bucketVolumes[i] > bucketVolumes[pocBucket]) pocBucket = i;
+  }
+  const poc = rangeLow + (pocBucket + 0.5) * bucketSize;
+
+  // Value Area expansion from POC outward until 70% of volume is captured
+  let vaVol = bucketVolumes[pocBucket];
+  const vaTarget = totalVol * 0.70;
+  let vaLow = pocBucket, vaHigh = pocBucket;
+
+  while (vaVol < vaTarget && (vaLow > 0 || vaHigh < numBuckets - 1)) {
+    const nextLow  = vaLow  > 0             ? bucketVolumes[vaLow  - 1] : -1;
+    const nextHigh = vaHigh < numBuckets - 1 ? bucketVolumes[vaHigh + 1] : -1;
+    if (nextHigh >= nextLow && nextHigh >= 0) { vaHigh++; vaVol += bucketVolumes[vaHigh]; }
+    else if (nextLow  >= 0)                   { vaLow--;  vaVol += bucketVolumes[vaLow];  }
+    else break;
+  }
+
+  const vah = rangeLow + (vaHigh + 1) * bucketSize;
+  const val = rangeLow +  vaLow       * bucketSize;
+
+  const bins: VolumeBin[] = Array.from(bucketVolumes).map((vol, i) => ({
+    priceLevel: Math.round((rangeLow + (i + 0.5) * bucketSize) * 100) / 100,
+    volume:     Math.round(vol),
+    pct:        totalVol > 0 ? Math.round(vol / totalVol * 1000) / 10 : 0,
+  }));
+
+  return {
+    poc: Math.round(poc * 100) / 100,
+    vah: Math.round(vah * 100) / 100,
+    val: Math.round(val * 100) / 100,
+    bins,
+  };
+}
+
+// ── Feature: Multi-Timeframe Weekly Context ───────────────────────────────────
+
+export interface WeeklyContextResult {
+  weeklyTrend: "strong_up" | "up" | "neutral" | "down" | "strong_down";
+  weeklyRsi: number;
+  weeklyMacdBullish: boolean;
+  weeklyAboveSma20: boolean;
+  weeklyAboveSma50: boolean;
+  /** Synthesized alignment of the 4 weekly signals (bullish / bearish / neutral) */
+  weeklyAlignment: "bullish" | "bearish" | "neutral";
+}
+
+/**
+ * Derive weekly-timeframe trend/momentum context from weekly OHLCV bars.
+ * Returns a WeeklyContextResult for the MTF alignment badge in the Dashboard.
+ */
+export function calcWeeklyContext(weeklyBars: OHLCVBar[]): WeeklyContextResult | null {
+  if (weeklyBars.length < 10) return null;
+
+  const closes = weeklyBars.map(b => b.close);
+  const price  = closes[closes.length - 1];
+
+  const sma20Period = Math.min(20, closes.length - 1);
+  const sma50Period = Math.min(50, closes.length - 1);
+
+  const wSma20Arr = SMA.calculate({ values: closes, period: sma20Period });
+  const wSma50Arr = SMA.calculate({ values: closes, period: sma50Period });
+  const wSma20    = last(wSma20Arr) ?? price;
+  const wSma50    = last(wSma50Arr) ?? price;
+
+  const rsiPeriod = Math.min(14, closes.length - 2);
+  const rsiArr    = RSI.calculate({ values: closes, period: rsiPeriod });
+  const weeklyRsi = Math.round((last(rsiArr) ?? 50) * 10) / 10;
+
+  let weeklyMacdBullish = false;
+  if (closes.length >= 30) {
+    const macdArr = MACD.calculate({
+      values: closes,
+      fastPeriod: 12, slowPeriod: 26, signalPeriod: 9,
+      SimpleMAOscillator: false, SimpleMASignal: false,
+    });
+    const mv = last(macdArr);
+    weeklyMacdBullish = mv ? (mv.MACD ?? 0) > (mv.signal ?? 0) : false;
+  }
+
+  const weeklyAboveSma20 = price > wSma20;
+  const weeklyAboveSma50 = price > wSma50;
+
+  // Composite: count how many weekly signals agree
+  const bullCount =
+    (weeklyAboveSma20 ? 1 : 0) +
+    (weeklyAboveSma50 ? 1 : 0) +
+    (weeklyRsi > 50   ? 1 : 0) +
+    (weeklyMacdBullish ? 1 : 0);
+
+  let weeklyTrend: WeeklyContextResult["weeklyTrend"] = "neutral";
+  if      (weeklyAboveSma20 && weeklyAboveSma50 && weeklyRsi > 55) weeklyTrend = weeklyRsi > 65 ? "strong_up"   : "up";
+  else if (!weeklyAboveSma20 && !weeklyAboveSma50 && weeklyRsi < 45) weeklyTrend = weeklyRsi < 35 ? "strong_down" : "down";
+
+  const weeklyAlignment: WeeklyContextResult["weeklyAlignment"] =
+    bullCount >= 3 ? "bullish" : bullCount <= 1 ? "bearish" : "neutral";
+
+  return {
+    weeklyTrend,
+    weeklyRsi,
+    weeklyMacdBullish,
+    weeklyAboveSma20,
+    weeklyAboveSma50,
+    weeklyAlignment,
+  };
 }

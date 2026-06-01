@@ -19,4 +19,8 @@ export interface OptionsAnalysis {
   gammaFlipLevel: number | null;
   unusualActivity: boolean;
   optionsScore: number;
+  /** 0–100 realized-vol percentile rank (IV Rank proxy) */
+  ivRankProxy: number;
+  /** -1 to +1 skew proxy: positive = more up-days (call demand), negative = more down-days (put demand) */
+  realizedSkew: number;
 }

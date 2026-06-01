@@ -116,6 +116,18 @@ export const MomentumIndicatorsRsiDivergence = {
 /**
  * @nullable
  */
+export type MomentumIndicatorsRsiDivergenceStrength = typeof MomentumIndicatorsRsiDivergenceStrength[keyof typeof MomentumIndicatorsRsiDivergenceStrength] | null;
+
+
+export const MomentumIndicatorsRsiDivergenceStrength = {
+  strong: 'strong',
+  weak: 'weak',
+  null: 'null',
+} as const;
+
+/**
+ * @nullable
+ */
 export type MomentumIndicatorsMacdCrossover = typeof MomentumIndicatorsMacdCrossover[keyof typeof MomentumIndicatorsMacdCrossover] | null;
 
 
@@ -130,6 +142,8 @@ export interface MomentumIndicators {
   rsiSignal: MomentumIndicatorsRsiSignal;
   /** @nullable */
   rsiDivergence: MomentumIndicatorsRsiDivergence;
+  /** @nullable */
+  rsiDivergenceStrength?: MomentumIndicatorsRsiDivergenceStrength;
   macd: number;
   macdSignal: number;
   macdHistogram: number;
@@ -194,6 +208,10 @@ export interface OptionsAnalysis {
   gammaFlipLevel: number | null;
   unusualActivity: boolean;
   optionsScore: number;
+  /** 0–100 realized-vol percentile rank (IV Rank proxy) */
+  ivRankProxy: number;
+  /** -1 to +1 skew proxy: positive = more up-days (call demand), negative = more down-days (put demand) */
+  realizedSkew: number;
 }
 
 export type PatternDetectionMarketStructure = typeof PatternDetectionMarketStructure[keyof typeof PatternDetectionMarketStructure];
@@ -398,6 +416,72 @@ export interface PatternOverlay {
   targets: PatternTarget[];
 }
 
+export type FibLevelsResultTrend = typeof FibLevelsResultTrend[keyof typeof FibLevelsResultTrend];
+
+
+export const FibLevelsResultTrend = {
+  up: 'up',
+  down: 'down',
+} as const;
+
+export interface FibLevel {
+  ratio: number;
+  price: number;
+  label: string;
+}
+
+export interface FibLevelsResult {
+  swingHigh: number;
+  swingLow: number;
+  trend: FibLevelsResultTrend;
+  levels: FibLevel[];
+}
+
+export interface VolumeBin {
+  priceLevel: number;
+  volume: number;
+  pct: number;
+}
+
+export interface VolumeProfileResult {
+  /** Point of Control — highest-volume price level */
+  poc: number;
+  /** Value Area High — upper bound of 70% volume zone */
+  vah: number;
+  /** Value Area Low — lower bound of 70% volume zone */
+  val: number;
+  bins: VolumeBin[];
+}
+
+export type WeeklyContextResultWeeklyTrend = typeof WeeklyContextResultWeeklyTrend[keyof typeof WeeklyContextResultWeeklyTrend];
+
+
+export const WeeklyContextResultWeeklyTrend = {
+  strong_up: 'strong_up',
+  up: 'up',
+  neutral: 'neutral',
+  down: 'down',
+  strong_down: 'strong_down',
+} as const;
+
+export type WeeklyContextResultWeeklyAlignment = typeof WeeklyContextResultWeeklyAlignment[keyof typeof WeeklyContextResultWeeklyAlignment];
+
+
+export const WeeklyContextResultWeeklyAlignment = {
+  bullish: 'bullish',
+  bearish: 'bearish',
+  neutral: 'neutral',
+} as const;
+
+export interface WeeklyContextResult {
+  weeklyTrend: WeeklyContextResultWeeklyTrend;
+  weeklyRsi: number;
+  weeklyMacdBullish: boolean;
+  weeklyAboveSma20: boolean;
+  weeklyAboveSma50: boolean;
+  weeklyAlignment: WeeklyContextResultWeeklyAlignment;
+}
+
 export interface StockAnalysis {
   quote: StockQuote;
   atlasScore: AtlasAlphaScore;
@@ -411,6 +495,9 @@ export interface StockAnalysis {
   chartSignals: ChartSignal[];
   patternOverlays: PatternOverlay[];
   calibration?: CalibrationInfo | null;
+  fibLevels?: FibLevelsResult | null;
+  volumeProfile?: VolumeProfileResult | null;
+  weeklyContext?: WeeklyContextResult | null;
   cachedAt: string;
 }
 

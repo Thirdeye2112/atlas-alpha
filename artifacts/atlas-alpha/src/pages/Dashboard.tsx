@@ -7,7 +7,7 @@ import {
   OHLCVBar,
 } from "@workspace/api-client-react";
 import WatchlistSidebar from "@/components/layout/WatchlistSidebar";
-import LightweightChart, { ChartPriceLine, ChartSignalMarker, ExtendedHoursPoint, PatternOverlay } from "@/components/charts/LightweightChart";
+import LightweightChart, { ChartPriceLine, ChartLineSeries, ChartSignalMarker, ExtendedHoursPoint, PatternOverlay } from "@/components/charts/LightweightChart";
 import ScoreGauge from "@/components/charts/ScoreGauge";
 import MiniGauge from "@/components/charts/MiniGauge";
 import RsiMiniChart from "@/components/charts/RsiMiniChart";
@@ -727,16 +727,43 @@ function RetracementPanel({ ticker }: { ticker: string }) {
   );
 }
 
-function buildPriceLines(data: {
+interface AnalysisForPriceLines {
   volatility: { bollingerUpper: number; bollingerLower: number };
   patterns: { supportLevel: number | null; resistanceLevel: number | null };
-}): ChartPriceLine[] {
+  fibLevels?: { trend: string; levels: { ratio: number; price: number; label: string }[] } | null;
+  volumeProfile?: { poc: number; vah: number; val: number } | null;
+}
+
+function buildPriceLines(data: AnalysisForPriceLines): ChartPriceLine[] {
   const lines: ChartPriceLine[] = [
-    { price: data.volatility.bollingerUpper, label: "BB+", color: "rgba(156,163,175,0.5)", lineStyle: "dotted" },
-    { price: data.volatility.bollingerLower, label: "BB-", color: "rgba(156,163,175,0.5)", lineStyle: "dotted" },
+    { price: data.volatility.bollingerUpper, label: "BB+", color: "rgba(156,163,175,0.45)", lineStyle: "dotted" },
+    { price: data.volatility.bollingerLower, label: "BB-", color: "rgba(156,163,175,0.45)", lineStyle: "dotted" },
   ];
-  if (data.patterns.supportLevel)    lines.push({ price: data.patterns.supportLevel,    label: "SUP", color: "rgba(34,197,94,0.6)", lineStyle: "dashed" });
-  if (data.patterns.resistanceLevel) lines.push({ price: data.patterns.resistanceLevel, label: "RES", color: "rgba(239,68,68,0.6)", lineStyle: "dashed" });
+  if (data.patterns.supportLevel)    lines.push({ price: data.patterns.supportLevel,    label: "SUP", color: "rgba(34,197,94,0.6)",  lineStyle: "dashed" });
+  if (data.patterns.resistanceLevel) lines.push({ price: data.patterns.resistanceLevel, label: "RES", color: "rgba(239,68,68,0.6)",  lineStyle: "dashed" });
+
+  // ── Fibonacci retracement levels ──────────────────────────────────────────
+  if (data.fibLevels?.levels) {
+    const isBull = data.fibLevels.trend === "up";
+    for (const fib of data.fibLevels.levels) {
+      if (fib.ratio === 0 || fib.ratio === 1) {
+        lines.push({ price: fib.price, label: `F${fib.label}`, color: "rgba(148,163,184,0.30)", lineStyle: "dotted" });
+      } else if (fib.ratio === 0.382 || fib.ratio === 0.500 || fib.ratio === 0.618) {
+        lines.push({ price: fib.price, label: `F${fib.label}`, color: isBull ? "rgba(251,191,36,0.55)" : "rgba(167,139,250,0.55)", lineStyle: "dashed" });
+      } else if (fib.ratio === 0.236 || fib.ratio === 0.786) {
+        lines.push({ price: fib.price, label: `F${fib.label}`, color: isBull ? "rgba(251,191,36,0.35)" : "rgba(167,139,250,0.35)", lineStyle: "dotted" });
+      }
+      // Skip 127.2% and 161.8% extensions — too far from price for the stub view
+    }
+  }
+
+  // ── Volume Profile: POC / VAH / VAL ───────────────────────────────────────
+  if (data.volumeProfile) {
+    lines.push({ price: data.volumeProfile.poc, label: "POC", color: "rgba(234,179,8,0.80)",  lineStyle: "dashed" });
+    lines.push({ price: data.volumeProfile.vah, label: "VAH", color: "rgba(249,115,22,0.60)", lineStyle: "dotted" });
+    lines.push({ price: data.volumeProfile.val, label: "VAL", color: "rgba(249,115,22,0.60)", lineStyle: "dotted" });
+  }
+
   return lines.filter(l => l.price > 0 && isFinite(l.price));
 }
 
@@ -824,6 +851,8 @@ export default function Dashboard() {
   }, [urlTicker]);
   const [timeframe, setTimeframe] = useState<Timeframe>(DEFAULT_TF);
   const [selectedBar, setSelectedBar] = useState<{ date: string; close: number } | null>(null);
+  const [showVwap, setShowVwap] = useState(false);
+  const [vwapAnchor, setVwapAnchor] = useState<"3M" | "6M" | "1Y">("3M");
 
   // Live analysis — staleTime matches server cache TTL (5 min) to avoid re-fetching fresh data
   const { data: analysis, isLoading: analysisLoading } = useGetStockAnalysis(ticker, {
@@ -880,6 +909,26 @@ export default function Dashboard() {
   }, []);
 
   const clearHistorical = () => setSelectedBar(null);
+
+  // Anchored VWAP: cumulative (typical-price × volume) / cumulative volume
+  // Computed client-side from the chart's OHLCV bars; only works on daily/weekly bars.
+  const anchoredVwapSeries = useMemo((): ChartLineSeries[] => {
+    if (!showVwap || !ohlcv || ohlcv.length < 10) return [];
+    const dailyBars = ohlcv.filter(b => b.time.length === 10); // skip intraday timestamps
+    if (dailyBars.length < 5) return [];
+    const ANCHOR_BARS: Record<string, number> = { "3M": 65, "6M": 130, "1Y": 252 };
+    const bars = dailyBars.slice(-Math.min(dailyBars.length, ANCHOR_BARS[vwapAnchor]));
+    let cumTPV = 0, cumVol = 0;
+    const points: { time: string; value: number }[] = [];
+    for (const bar of bars) {
+      const tp = (bar.high + bar.low + bar.close) / 3;
+      cumTPV += tp * bar.volume;
+      cumVol += bar.volume;
+      if (cumVol > 0) points.push({ time: bar.time, value: Math.round(cumTPV / cumVol * 100) / 100 });
+    }
+    if (points.length < 2) return [];
+    return [{ label: `AVWAP·${vwapAnchor}`, color: "rgba(99,102,241,0.90)", lineStyle: "solid", lineWidth: 1, data: points }];
+  }, [showVwap, vwapAnchor, ohlcv]);
 
   // Which analysis to display (historical takes priority when selected)
   const isHistoricalMode = !!selectedBar;
@@ -980,6 +1029,34 @@ export default function Dashboard() {
                   </button>
                 ))}
               </div>
+              {/* Anchored VWAP toggle — only useful on daily bars */}
+              {["3mo","6mo","1y","2y","5y","max"].includes(timeframe.period) && (
+                <div className="flex items-center gap-0.5 border-l border-border pl-2 ml-1">
+                  <button
+                    onClick={() => setShowVwap(v => !v)}
+                    className={cn(
+                      "px-2 py-0.5 text-[10px] font-mono font-bold rounded transition-colors",
+                      showVwap ? "bg-indigo-500/20 text-indigo-400 border border-indigo-500/40" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                    )}
+                  >
+                    AVWAP
+                  </button>
+                  {showVwap && (["3M","6M","1Y"] as const).map(a => (
+                    <button
+                      key={a}
+                      onClick={() => setVwapAnchor(a)}
+                      className={cn(
+                        "px-1.5 py-0.5 text-[10px] font-mono rounded transition-colors",
+                        vwapAnchor === a
+                          ? "bg-indigo-500/30 text-indigo-300"
+                          : "text-muted-foreground/60 hover:text-muted-foreground"
+                      )}
+                    >
+                      {a}
+                    </button>
+                  ))}
+                </div>
+              )}
               <span className="text-xs text-muted-foreground font-mono shrink-0">{ohlcv?.length || 0} BARS</span>
             </div>
             <ChartBacktestStrip
@@ -995,6 +1072,7 @@ export default function Dashboard() {
                   height={378}
                   onCandleClick={timeframe.interval === "1d" || timeframe.interval === "1wk" || timeframe.interval === "1mo" ? handleCandleClick : undefined}
                   priceLines={analysis ? buildPriceLines(analysis) : []}
+                  lineSeries={anchoredVwapSeries}
                   signals={
                     // Only show candle-level signal pins on 3M and shorter (daily bars only)
                     timeframe.period === "3mo" && displayAnalysis?.chartSignals
@@ -1257,6 +1335,29 @@ export default function Dashboard() {
                         IC NOISE
                       </span>
                     )}
+                  </div>
+                );
+              })()}
+
+              {/* Weekly multi-timeframe alignment badge */}
+              {!isHistoricalMode && (() => {
+                const wc = (displayAnalysis as unknown as { weeklyContext?: { weeklyAlignment: string; weeklyRsi: number; weeklyTrend: string } | null })?.weeklyContext;
+                if (!wc) return null;
+                const colorClass =
+                  wc.weeklyAlignment === "bullish"  ? "bg-success/10 text-success border-success/25" :
+                  wc.weeklyAlignment === "bearish"  ? "bg-destructive/10 text-destructive border-destructive/25" :
+                                                      "bg-zinc-700/20 text-muted-foreground border-border";
+                const trendArrow =
+                  wc.weeklyTrend === "strong_up"   ? "↑↑" :
+                  wc.weeklyTrend === "up"           ? "↑"  :
+                  wc.weeklyTrend === "down"         ? "↓"  :
+                  wc.weeklyTrend === "strong_down"  ? "↓↓" : "→";
+                return (
+                  <div className="flex items-center justify-center mt-1.5">
+                    <span className={cn("px-2 py-0.5 text-[9px] font-bold tracking-wider rounded border font-mono", colorClass)}
+                      title={`Weekly trend: ${wc.weeklyTrend.replace("_", " ")}`}>
+                      WK {trendArrow} {wc.weeklyAlignment.toUpperCase()} · RSI {wc.weeklyRsi}
+                    </span>
                   </div>
                 );
               })()}

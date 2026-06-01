@@ -8,6 +8,7 @@
 import type { AtlasAlphaScore } from './atlasAlphaScore';
 import type { CalibrationInfo } from './calibrationInfo';
 import type { ChartSignal } from './chartSignal';
+import type { FibLevelsResult } from './fibLevelsResult';
 import type { MomentumIndicators } from './momentumIndicators';
 import type { OptionsAnalysis } from './optionsAnalysis';
 import type { PatternDetection } from './patternDetection';
@@ -17,6 +18,8 @@ import type { StockQuote } from './stockQuote';
 import type { TrendIndicators } from './trendIndicators';
 import type { VolatilityIndicators } from './volatilityIndicators';
 import type { VolumeIndicators } from './volumeIndicators';
+import type { VolumeProfileResult } from './volumeProfileResult';
+import type { WeeklyContextResult } from './weeklyContextResult';
 
 export interface StockAnalysis {
   quote: StockQuote;
@@ -31,5 +34,8 @@ export interface StockAnalysis {
   chartSignals: ChartSignal[];
   patternOverlays: PatternOverlay[];
   calibration?: CalibrationInfo | null;
+  fibLevels?: FibLevelsResult | null;
+  volumeProfile?: VolumeProfileResult | null;
+  weeklyContext?: WeeklyContextResult | null;
   cachedAt: string;
 }

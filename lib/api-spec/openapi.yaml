@@ -852,6 +852,9 @@ components:
         rsiDivergence:
           type: ["string", "null"]
           enum: [bullish, bearish, "null"]
+        rsiDivergenceStrength:
+          type: ["string", "null"]
+          enum: [strong, weak, "null"]
         macd:
           type: number
         macdSignal:
@@ -979,6 +982,12 @@ components:
           type: boolean
         optionsScore:
           type: number
+        ivRankProxy:
+          type: number
+          description: "0–100 realized-vol percentile rank (IV Rank proxy)"
+        realizedSkew:
+          type: number
+          description: "-1 to +1 skew proxy: positive = more up-days (call demand), negative = more down-days (put demand)"
       required:
         - putCallRatio
         - maxPain
@@ -987,6 +996,8 @@ components:
         - gammaFlipLevel
         - unusualActivity
         - optionsScore
+        - ivRankProxy
+        - realizedSkew
 
     PatternDetection:
       type: object
@@ -1156,6 +1167,18 @@ components:
           oneOf:
             - $ref: "#/components/schemas/CalibrationInfo"
             - type: "null"
+        fibLevels:
+          oneOf:
+            - $ref: "#/components/schemas/FibLevelsResult"
+            - type: "null"
+        volumeProfile:
+          oneOf:
+            - $ref: "#/components/schemas/VolumeProfileResult"
+            - type: "null"
+        weeklyContext:
+          oneOf:
+            - $ref: "#/components/schemas/WeeklyContextResult"
+            - type: "null"
         cachedAt:
           type: string
       required:
@@ -1227,6 +1250,81 @@ components:
           type: string
           enum: [breakout, target, stop]
       required: [price, label, role]
+
+    FibLevel:
+      type: object
+      properties:
+        ratio:
+          type: number
+        price:
+          type: number
+        label:
+          type: string
+      required: [ratio, price, label]
+
+    FibLevelsResult:
+      type: object
+      properties:
+        swingHigh:
+          type: number
+        swingLow:
+          type: number
+        trend:
+          type: string
+          enum: [up, down]
+        levels:
+          type: array
+          items:
+            $ref: "#/components/schemas/FibLevel"
+      required: [swingHigh, swingLow, trend, levels]
+
+    VolumeBin:
+      type: object
+      properties:
+        priceLevel:
+          type: number
+        volume:
+          type: number
+        pct:
+          type: number
+      required: [priceLevel, volume, pct]
+
+    VolumeProfileResult:
+      type: object
+      properties:
+        poc:
+          type: number
+          description: "Point of Control — highest-volume price level"
+        vah:
+          type: number
+          description: "Value Area High — upper bound of 70% volume zone"
+        val:
+          type: number
+          description: "Value Area Low — lower bound of 70% volume zone"
+        bins:
+          type: array
+          items:
+            $ref: "#/components/schemas/VolumeBin"
+      required: [poc, vah, val, bins]
+
+    WeeklyContextResult:
+      type: object
+      properties:
+        weeklyTrend:
+          type: string
+          enum: [strong_up, up, neutral, down, strong_down]
+        weeklyRsi:
+          type: number
+        weeklyMacdBullish:
+          type: boolean
+        weeklyAboveSma20:
+          type: boolean
+        weeklyAboveSma50:
+          type: boolean
+        weeklyAlignment:
+          type: string
+          enum: [bullish, bearish, neutral]
+      required: [weeklyTrend, weeklyRsi, weeklyMacdBullish, weeklyAboveSma20, weeklyAboveSma50, weeklyAlignment]
 
     PatternOverlay:
       type: object

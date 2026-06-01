@@ -2,11 +2,12 @@ import { fetchQuote, fetchOHLCV, type OHLCVBar } from "./marketData.js";
 import {
   calcTrend, calcMomentum, calcVolume, calcVolatility, calcOptions,
   calcPatterns, calcRelativeStrength, calcChartSignals, calcRegimeIndicators,
-  calcExhaustion,
+  calcExhaustion, calcFibLevels, calcVolumeProfile, calcWeeklyContext,
   type TrendResult, type MomentumResult, type VolumeResult,
   type VolatilityResult, type OptionsResult, type PatternResult,
   type RelativeStrengthResult, type ChartSignal, type RegimeIndicators,
-  type ExhaustionResult,
+  type ExhaustionResult, type FibLevelsResult, type VolumeProfileResult,
+  type WeeklyContextResult,
 } from "./indicators.js";
 import { calcAtlasScore, type AtlasAlphaScore } from "./scoring.js";
 import { calcPatternOverlays, type PatternOverlay } from "./patternOverlays.js";
@@ -30,6 +31,9 @@ export interface AnalysisResult {
   exhaustion: ExhaustionResult;
   chartSignals: ChartSignal[];
   patternOverlays: PatternOverlay[];
+  fibLevels: FibLevelsResult | null;
+  volumeProfile: VolumeProfileResult | null;
+  weeklyContext: WeeklyContextResult | null;
   historicalDate?: string;
   cachedAt: string;
 }
@@ -45,12 +49,13 @@ function buildResult(
   historicalDate?: string,
   /** Skip display-only signals (chart pins, structural patterns) — for scanner/warmup paths */
   lightMode = false,
+  weeklyBars: OHLCVBar[] = [],
 ): AnalysisResult {
   const trend          = calcTrend(bars, price);
   const momentum       = calcMomentum(bars);
   const volume         = calcVolume(bars, (quoteOverride.avgVolume as number) ?? 0);
   const volatility     = calcVolatility(bars, price);
-  const options        = calcOptions(momentum, volume, volatility, price);
+  const options        = calcOptions(momentum, volume, volatility, price, bars);
   const rs             = calcRelativeStrength(sym, bars, spyBars, qqqBars, iwmBars, (quoteOverride.sector as string | null) ?? null);
   const spyTrend       = calcTrend(spyBars, spyBars[spyBars.length - 1]?.close ?? 500);
   const regimeIndicators = calcRegimeIndicators(spyBars, spyTrend);
@@ -69,6 +74,11 @@ function buildResult(
   const chartSignals     = lightMode ? [] : calcChartSignals(bars);
   const patternOverlays  = lightMode ? [] : calcPatternOverlays(bars);
 
+  // TA overlays — always computed (fast, ≤1ms each); omitted from scanner light-mode paths
+  const fibLevels     = lightMode ? null : calcFibLevels(bars);
+  const volumeProfile = lightMode ? null : calcVolumeProfile(bars);
+  const weeklyContext = lightMode ? null : calcWeeklyContext(weeklyBars);
+
   return {
     quote: quoteOverride,
     atlasScore,
@@ -83,6 +93,9 @@ function buildResult(
     exhaustion,
     chartSignals,
     patternOverlays,
+    fibLevels,
+    volumeProfile,
+    weeklyContext,
     ...(historicalDate ? { historicalDate } : {}),
     cachedAt: new Date().toISOString(),
   };
@@ -120,17 +133,18 @@ export async function runFullAnalysis(ticker: string, lightMode = false): Promis
     return cached;
   }
 
-  const [quote, bars, spyBars, qqqBars, iwmBars] = await Promise.all([
+  const [quote, bars, spyBars, qqqBars, iwmBars, weeklyBars] = await Promise.all([
     fetchQuote(sym),
     fetchOHLCV(sym, "1y", "1d"),
     fetchOHLCV("SPY", "1y", "1d"),
     fetchOHLCV("QQQ", "1y", "1d"),
     fetchOHLCV("IWM", "1y", "1d"),
+    lightMode ? Promise.resolve([]) : fetchOHLCV(sym, "2y", "1wk"),
   ]);
 
   if (bars.length < 30) throw new Error(`Insufficient historical data for ${sym}`);
 
-  const result = buildResult(sym, quote.price, bars, spyBars, qqqBars, iwmBars, quote as unknown as Record<string, unknown>, undefined, lightMode);
+  const result = buildResult(sym, quote.price, bars, spyBars, qqqBars, iwmBars, quote as unknown as Record<string, unknown>, undefined, lightMode, weeklyBars);
 
   analysisCache.set(cacheKey, result);
   logger.info({ ticker: sym, atlasScore: result.atlasScore.overall }, "Analysis complete");

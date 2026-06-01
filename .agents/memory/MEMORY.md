@@ -8,3 +8,4 @@
 - [Adaptive scoring architecture](adaptive-scoring.md) — optimalWeights stored in CalibrationEntry; calcAtlasScore accepts ScoreOpts; IC quality caps confidence; contrarian flag propagates to narrative and Dashboard badge
 - [Pattern overlays architecture](pattern-overlays.md) — multi-scale bull/bear flag detection; use poleNetMove (not H-L range) for target projection; 3M signals, 6M+ swing points
 - [OHLCV cache architecture](ohlcv-cache-architecture.md) — weekly/monthly must go direct to Yahoo (not DB store); blob cache needs coverage validation or stale 2Y data serves for 5Y/ALL
+- [TA overlays v2](ta-overlays-v2.md) — Fib/VolumeProfile/WeeklyContext added to AnalysisResult; calcOptions now takes optional bars param; pivot RSI divergence uses findPivotLows/Highs helpers; LightweightChart lineSeries prop for full-width time-series

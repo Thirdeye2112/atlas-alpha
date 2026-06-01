@@ -7,6 +7,7 @@
  */
 import type { MomentumIndicatorsMacdCrossover } from './momentumIndicatorsMacdCrossover';
 import type { MomentumIndicatorsRsiDivergence } from './momentumIndicatorsRsiDivergence';
+import type { MomentumIndicatorsRsiDivergenceStrength } from './momentumIndicatorsRsiDivergenceStrength';
 import type { MomentumIndicatorsRsiSignal } from './momentumIndicatorsRsiSignal';
 
 export interface MomentumIndicators {
@@ -14,6 +15,8 @@ export interface MomentumIndicators {
   rsiSignal: MomentumIndicatorsRsiSignal;
   /** @nullable */
   rsiDivergence: MomentumIndicatorsRsiDivergence;
+  /** @nullable */
+  rsiDivergenceStrength?: MomentumIndicatorsRsiDivergenceStrength;
   macd: number;
   macdSignal: number;
   macdHistogram: number;

@@ -24,6 +24,15 @@ export interface ChartPriceLine {
   lineStyle: "solid" | "dashed" | "dotted";
 }
 
+/** A full-width time series line (e.g. anchored VWAP) rendered over the chart. */
+export interface ChartLineSeries {
+  label: string;
+  color: string;
+  lineStyle: "solid" | "dashed" | "dotted";
+  lineWidth?: 1 | 2 | 3 | 4;
+  data: { time: string; value: number }[];
+}
+
 export interface ChartSignalMarker {
   date: string;
   direction: "bull" | "bear";
@@ -42,6 +51,8 @@ interface Props {
   height?: number;
   onCandleClick?: (date: string, close: number) => void;
   priceLines?: ChartPriceLine[];
+  /** Full-width time-series lines (e.g. anchored VWAP, custom indicators) */
+  lineSeries?: ChartLineSeries[];
   signals?: ChartSignalMarker[];
   /** When true: suppress candle signals, render pivot swing highs/lows instead */
   showSwingPoints?: boolean;
@@ -153,6 +164,7 @@ export default function LightweightChart({
   height = 400,
   onCandleClick,
   priceLines = [],
+  lineSeries = [],
   signals = [],
   showSwingPoints = false,
   swingLookback = 3,
@@ -263,6 +275,24 @@ export default function LightweightChart({
         title,
       });
       maSeries.setData(maData);
+    }
+
+    // Custom full-width line series (anchored VWAP, Fibonacci extensions, etc.)
+    if (lineSeries.length > 0) {
+      for (const ls of lineSeries) {
+        const validData = ls.data.filter(d => d.value > 0 && isFinite(d.value));
+        if (validData.length < 2) continue;
+        const customSeries = chart.addSeries(LineSeries, {
+          color: ls.color,
+          lineWidth: ls.lineWidth ?? 1,
+          lineStyle: LS_MAP[ls.lineStyle] ?? LineStyle.Solid,
+          priceLineVisible: false,
+          lastValueVisible: true,
+          crosshairMarkerVisible: false,
+          title: ls.label,
+        });
+        customSeries.setData(validData);
+      }
     }
 
     // Short right-side stubs for BB+/−, VWAP, SUP, RES — last 2 bars only
