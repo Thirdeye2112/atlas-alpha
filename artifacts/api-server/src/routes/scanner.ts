@@ -280,7 +280,10 @@ router.get("/scanner/gap-setup-long", (req, res): void => {
           gap > -5.0       &&   // not in a big gap-down right now
           rsi < 70         &&   // not overbought
           vs200 < 30       &&   // not massively extended above SMA200 (gap-down risk)
-          a.atlasScore.direction !== "bearish"  // not in confirmed downtrend
+          a.atlasScore.direction !== "bearish"  &&  // not in confirmed downtrend
+          a.atlasScore.exhaustionScore < 45         // exclude distribution-top / exhausted-buyer setups
+                                                    // (retroactive analysis: only fader on 2026-05-31 had exh=58;
+                                                    //  all gappers had exh ≤ 31)
         );
       },
       // Sort: composite of ATR% × relative volume — most "primed" stocks first
@@ -314,7 +317,10 @@ router.get("/scanner/gap-setup-short", (req, res): void => {
           gap < 5.0        &&   // not in a big gap-up right now
           vs200 > 5        &&   // extended above SMA200 (research strongest directional predictor)
           rsi > 45         &&   // not already sold off
-          a.atlasScore.direction !== "bullish"  // not in confirmed uptrend
+          a.atlasScore.direction !== "bullish"  &&  // not in confirmed uptrend
+          a.atlasScore.exhaustionScore < 50         // exclude capitulation-bottom stocks that may reverse UP
+                                                    // (retroactive analysis: both flat shorts on 2026-05-31
+                                                    //  had exh=59 and exh=60 — exhausted sellers, not fresh)
         );
       },
       // Sort: most extended above SMA200 with highest ATR (most vulnerable to down-gap)
