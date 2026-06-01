@@ -13,6 +13,9 @@ import {
   createSeriesMarkers,
 } from "lightweight-charts";
 import { OHLCVBar } from "@workspace/api-client-react";
+import type { PatternOverlay } from "@workspace/api-client-react";
+
+export type { PatternOverlay };
 
 export interface ChartPriceLine {
   price: number;
@@ -40,6 +43,11 @@ interface Props {
   onCandleClick?: (date: string, close: number) => void;
   priceLines?: ChartPriceLine[];
   signals?: ChartSignalMarker[];
+  /** When true: suppress candle signals, render pivot swing highs/lows instead */
+  showSwingPoints?: boolean;
+  /** Number of surrounding bars a swing point must dominate. Higher = sparser marks. */
+  swingLookback?: number;
+  patternOverlays?: PatternOverlay[];
   extendedHours?: ExtendedHoursPoint;
 }
 
@@ -103,12 +111,52 @@ function describeSignal(label: string): string {
   return MAP[label] ?? "";
 }
 
+interface FormattedBar {
+  time: UTCTimestamp;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+interface SwingPoint {
+  time: UTCTimestamp | string;
+  direction: "high" | "low";
+  price: number;
+}
+
+/**
+ * Detect pivot swing highs and lows.
+ * A pivot high at bar[i] if its high is the local maximum over [i-N, i+N].
+ * A pivot low at bar[i] if its low is the local minimum over [i-N, i+N].
+ */
+function computeSwingPoints(data: FormattedBar[], lookback: number): SwingPoint[] {
+  const points: SwingPoint[] = [];
+  const n = data.length;
+  for (let i = lookback; i < n - lookback; i++) {
+    const bar = data[i];
+    let isHigh = true, isLow = true;
+    for (let j = i - lookback; j <= i + lookback; j++) {
+      if (j === i) continue;
+      if (data[j].high >= bar.high) isHigh = false;
+      if (data[j].low  <= bar.low)  isLow  = false;
+    }
+    if (isHigh) points.push({ time: bar.time, direction: "high", price: bar.high });
+    if (isLow)  points.push({ time: bar.time, direction: "low",  price: bar.low  });
+  }
+  return points;
+}
+
 export default function LightweightChart({
   data,
   height = 400,
   onCandleClick,
   priceLines = [],
   signals = [],
+  showSwingPoints = false,
+  swingLookback = 3,
+  patternOverlays = [],
   extendedHours,
 }: Props) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -240,21 +288,16 @@ export default function LightweightChart({
     }
 
     // ── Extended hours candle ─────────────────────────────────────────────────
-    // Plot a projected candle at the next trading day's slot.
-    // open = last regular-session close, close = extended hours price.
-    // This shows the implied gap clearly without overlapping real bars.
     if (extendedHours && formattedData.length > 0) {
       const lastBar = formattedData[formattedData.length - 1];
       const lastDateStr = toDateString(lastBar.time);
-      // Only render on daily-interval charts where bars are YYYY-MM-DD strings
       if (typeof lastBar.time === "string") {
         const nextDay = nextTradingDay(lastDateStr);
         const isPost = extendedHours.type === "post";
-        const baseColor = isPost ? "#f59e0b" : "#818cf8"; // amber = AH, indigo = PM
+        const baseColor = isPost ? "#f59e0b" : "#818cf8";
         const prevClose = lastBar.close;
         const ehPrice   = extendedHours.price;
         const isUp      = ehPrice >= prevClose;
-        // Color the candle green/red for direction clarity, border in theme color
         const bodyColor = isUp ? "hsl(142 71% 45%)" : "hsl(0 84% 60%)";
 
         const ehSeries = chart.addSeries(CandlestickSeries, {
@@ -280,7 +323,63 @@ export default function LightweightChart({
       }
     }
 
-    // Signal markers — only meaningful on daily bars (date strings)
+    // ── Pattern overlay lines (diagonal trendlines for flags, triangles, etc.) ──
+    if (patternOverlays.length > 0 && formattedData.length >= 2) {
+      const lastBar  = formattedData[formattedData.length - 1];
+      const stub5Bar = formattedData[Math.max(0, formattedData.length - 6)];
+
+      for (const overlay of patternOverlays) {
+        // Draw each trendline segment
+        for (const line of overlay.lines) {
+          const validPts = line.points.filter(p => p.price > 0 && isFinite(p.price));
+          if (validPts.length < 2) continue;
+          const ls = chart.addSeries(LineSeries, {
+            color: line.color,
+            lineWidth: (line.style === "dotted") ? 1 : 2,
+            lineStyle: LS_MAP[line.style] ?? LineStyle.Solid,
+            priceLineVisible: false,
+            lastValueVisible: false,
+            crosshairMarkerVisible: false,
+            title: line.label ?? "",
+          });
+          ls.setData(validPts.map(p => ({ time: p.date, value: p.price })));
+        }
+
+        // Draw horizontal stubs for key price targets (breakout / target / stop)
+        const isBullish = overlay.type === "bull-flag" || overlay.type === "ascending-triangle";
+        for (const target of overlay.targets) {
+          if (!target.price || !isFinite(target.price) || target.price <= 0) continue;
+          let color: string;
+          let lineStyle: LineStyle;
+          if (target.role === "stop") {
+            color = "rgba(239,68,68,0.65)";
+            lineStyle = LineStyle.Dotted;
+          } else if (target.role === "target") {
+            color = isBullish ? "rgba(34,197,94,0.75)" : "rgba(239,68,68,0.75)";
+            lineStyle = LineStyle.Dashed;
+          } else {
+            // breakout
+            color = "rgba(251,191,36,0.80)";
+            lineStyle = LineStyle.Dotted;
+          }
+          const ts = chart.addSeries(LineSeries, {
+            color,
+            lineWidth: 1,
+            lineStyle,
+            priceLineVisible: false,
+            lastValueVisible: true,
+            crosshairMarkerVisible: false,
+            title: target.label,
+          });
+          ts.setData([
+            { time: stub5Bar.time, value: target.price },
+            { time: lastBar.time,  value: target.price },
+          ]);
+        }
+      }
+    }
+
+    // ── Signal markers (candle-level — short timeframes only) ─────────────────
     if (signals.length > 0) {
       const dataTimeSet = new Set(formattedData.map(d => String(d.time)));
       const markers = signals
@@ -299,6 +398,26 @@ export default function LightweightChart({
 
       if (markers.length > 0) {
         createSeriesMarkers(candlestickSeries, markers);
+      }
+    }
+
+    // ── Swing point markers (longer timeframes — no text labels) ──────────────
+    if (showSwingPoints && formattedData.length > swingLookback * 2 + 1) {
+      const swings = computeSwingPoints(formattedData, swingLookback);
+      const swingMarkers = swings.map(s => ({
+        time: typeof s.time === "number"
+          ? new Date((s.time as number) * 1000).toISOString().split("T")[0]
+          : String(s.time),
+        position: s.direction === "high" ? ("aboveBar" as const) : ("belowBar" as const),
+        color: s.direction === "high"
+          ? "rgba(239,68,68,0.60)"
+          : "rgba(34,197,94,0.60)",
+        shape: "circle" as const,
+        text: "",
+        size: 0.8,
+      }));
+      if (swingMarkers.length > 0) {
+        createSeriesMarkers(candlestickSeries, swingMarkers);
       }
     }
 
@@ -362,7 +481,7 @@ export default function LightweightChart({
       chartRef.current = null;
       seriesRef.current = null;
     };
-  }, [data, height, onCandleClick, priceLines, signals, extendedHours]);
+  }, [data, height, onCandleClick, priceLines, signals, showSwingPoints, swingLookback, patternOverlays, extendedHours]);
 
   return (
     <div

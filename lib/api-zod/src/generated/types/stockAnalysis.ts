@@ -11,6 +11,7 @@ import type { ChartSignal } from './chartSignal';
 import type { MomentumIndicators } from './momentumIndicators';
 import type { OptionsAnalysis } from './optionsAnalysis';
 import type { PatternDetection } from './patternDetection';
+import type { PatternOverlay } from './patternOverlay';
 import type { RelativeStrength } from './relativeStrength';
 import type { StockQuote } from './stockQuote';
 import type { TrendIndicators } from './trendIndicators';
@@ -28,6 +29,7 @@ export interface StockAnalysis {
   patterns: PatternDetection;
   relativeStrength: RelativeStrength;
   chartSignals: ChartSignal[];
+  patternOverlays: PatternOverlay[];
   calibration?: CalibrationInfo | null;
   cachedAt: string;
 }

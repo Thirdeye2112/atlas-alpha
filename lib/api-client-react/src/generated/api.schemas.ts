@@ -332,6 +332,72 @@ export interface ChartSignal {
   strength: ChartSignalStrength;
 }
 
+export type PatternOverlayType = typeof PatternOverlayType[keyof typeof PatternOverlayType];
+
+
+export const PatternOverlayType = {
+  'bull-flag': 'bull-flag',
+  'bear-flag': 'bear-flag',
+  'ascending-triangle': 'ascending-triangle',
+  'descending-triangle': 'descending-triangle',
+  'double-bottom': 'double-bottom',
+  'head-and-shoulders': 'head-and-shoulders',
+} as const;
+
+export type PatternOverlayConfidence = typeof PatternOverlayConfidence[keyof typeof PatternOverlayConfidence];
+
+
+export const PatternOverlayConfidence = {
+  high: 'high',
+  medium: 'medium',
+  low: 'low',
+} as const;
+
+export interface PatternLinePoint {
+  date: string;
+  price: number;
+}
+
+export type PatternLineStyle = typeof PatternLineStyle[keyof typeof PatternLineStyle];
+
+
+export const PatternLineStyle = {
+  solid: 'solid',
+  dashed: 'dashed',
+  dotted: 'dotted',
+} as const;
+
+export interface PatternLine {
+  points: PatternLinePoint[];
+  style: PatternLineStyle;
+  color: string;
+  label?: string;
+}
+
+export type PatternTargetRole = typeof PatternTargetRole[keyof typeof PatternTargetRole];
+
+
+export const PatternTargetRole = {
+  breakout: 'breakout',
+  target: 'target',
+  stop: 'stop',
+} as const;
+
+export interface PatternTarget {
+  price: number;
+  label: string;
+  role: PatternTargetRole;
+}
+
+export interface PatternOverlay {
+  type: PatternOverlayType;
+  label: string;
+  description: string;
+  confidence: PatternOverlayConfidence;
+  lines: PatternLine[];
+  targets: PatternTarget[];
+}
+
 export interface StockAnalysis {
   quote: StockQuote;
   atlasScore: AtlasAlphaScore;
@@ -343,6 +409,7 @@ export interface StockAnalysis {
   patterns: PatternDetection;
   relativeStrength: RelativeStrength;
   chartSignals: ChartSignal[];
+  patternOverlays: PatternOverlay[];
   calibration?: CalibrationInfo | null;
   cachedAt: string;
 }

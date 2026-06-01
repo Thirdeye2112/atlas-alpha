@@ -7,7 +7,7 @@ import {
   OHLCVBar,
 } from "@workspace/api-client-react";
 import WatchlistSidebar from "@/components/layout/WatchlistSidebar";
-import LightweightChart, { ChartPriceLine, ChartSignalMarker, ExtendedHoursPoint } from "@/components/charts/LightweightChart";
+import LightweightChart, { ChartPriceLine, ChartSignalMarker, ExtendedHoursPoint, PatternOverlay } from "@/components/charts/LightweightChart";
 import ScoreGauge from "@/components/charts/ScoreGauge";
 import MiniGauge from "@/components/charts/MiniGauge";
 import RsiMiniChart from "@/components/charts/RsiMiniChart";
@@ -995,7 +995,15 @@ export default function Dashboard() {
                   height={378}
                   onCandleClick={timeframe.interval === "1d" || timeframe.interval === "1wk" || timeframe.interval === "1mo" ? handleCandleClick : undefined}
                   priceLines={analysis ? buildPriceLines(analysis) : []}
-                  signals={(timeframe.interval === "1d" || timeframe.interval === "1wk" || timeframe.interval === "1mo") && displayAnalysis?.chartSignals ? displayAnalysis.chartSignals as ChartSignalMarker[] : []}
+                  signals={
+                    // Only show candle-level signal pins on 3M and shorter (daily bars only)
+                    timeframe.period === "3mo" && displayAnalysis?.chartSignals
+                      ? displayAnalysis.chartSignals as ChartSignalMarker[]
+                      : []
+                  }
+                  showSwingPoints={["6mo", "1y", "2y", "5y", "max"].includes(timeframe.period)}
+                  swingLookback={timeframe.period === "6mo" ? 3 : timeframe.period === "1y" ? 4 : 5}
+                  patternOverlays={displayAnalysis?.patternOverlays as PatternOverlay[] ?? []}
                   extendedHours={(() => {
                     if (!displayAnalysis || timeframe.interval !== "1d") return undefined;
                     const q = displayAnalysis.quote;
@@ -1013,9 +1021,9 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Signal key legend */}
+          {/* Signal key — only shown on 3M (candle-level signal view) */}
           {displayAnalysis?.chartSignals && displayAnalysis.chartSignals.length > 0 &&
-            (timeframe.interval === "1d" || timeframe.interval === "1wk" || timeframe.interval === "1mo") && (
+            timeframe.period === "3mo" && (
             <div className="bg-card border border-border rounded-md p-2.5">
               <div className="text-[9px] font-mono text-muted-foreground/50 tracking-widest font-bold mb-1.5">SIGNAL KEY — hover any candle to see details</div>
               <div className="flex flex-wrap gap-x-5 gap-y-1 text-[10px] font-mono">
@@ -1043,6 +1051,56 @@ export default function Dashboard() {
               </div>
             </div>
           )}
+
+          {/* Pattern overlay legend — shown when structure overlays are active */}
+          {(() => {
+            const overlays = displayAnalysis?.patternOverlays as PatternOverlay[] | undefined;
+            if (!overlays?.length) return null;
+            return (
+              <div className="space-y-2">
+                {overlays.map((ov, i) => {
+                  const isBull = ov.type === "bull-flag" || ov.type === "ascending-triangle";
+                  const confColor = ov.confidence === "high"
+                    ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/8"
+                    : ov.confidence === "medium"
+                    ? "text-amber-400 border-amber-500/30 bg-amber-500/8"
+                    : "text-muted-foreground border-border bg-card";
+                  const typeColor = isBull ? "text-emerald-400 bg-emerald-500/12 border-emerald-500/25" : "text-red-400 bg-red-500/12 border-red-500/25";
+                  const brkTgt = ov.targets.find(t => t.role === "breakout");
+                  const t1Tgt  = ov.targets.find(t => t.role === "target");
+                  const slTgt  = ov.targets.find(t => t.role === "stop");
+                  return (
+                    <div key={i} className="bg-card border border-border rounded-md p-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                      <span className={cn("text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border tracking-wider", typeColor)}>
+                        {isBull ? "▲" : "▼"} {ov.label.toUpperCase()}
+                      </span>
+                      <span className={cn("text-[9px] font-mono px-1.5 py-0.5 rounded border tracking-widest", confColor)}>
+                        {ov.confidence.toUpperCase()}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground/70 font-mono flex-1 min-w-0 truncate">{ov.description}</span>
+                      <span className="flex gap-3 text-[10px] font-mono ml-auto">
+                        {brkTgt && (
+                          <span className="text-amber-400/90">
+                            <span className="text-muted-foreground/40 mr-1">B/O</span>{brkTgt.price.toFixed(2)}
+                          </span>
+                        )}
+                        {t1Tgt && (
+                          <span className={isBull ? "text-emerald-400" : "text-red-400"}>
+                            <span className="text-muted-foreground/40 mr-1">T1</span>{t1Tgt.price.toFixed(2)}
+                          </span>
+                        )}
+                        {slTgt && (
+                          <span className="text-red-400/80">
+                            <span className="text-muted-foreground/40 mr-1">SL</span>{slTgt.price.toFixed(2)}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
 
           {/* Core Analytics */}
           {displayLoading ? (

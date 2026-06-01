@@ -9,6 +9,7 @@ import {
   type ExhaustionResult,
 } from "./indicators.js";
 import { calcAtlasScore, type AtlasAlphaScore } from "./scoring.js";
+import { calcPatternOverlays, type PatternOverlay } from "./patternOverlays.js";
 import { analysisCache } from "./cache.js";
 import { SCANNER_UNIVERSE } from "./scannerUniverse.js";
 import { calibrationStore } from "./calibrationStore.js";
@@ -28,6 +29,7 @@ export interface AnalysisResult {
   regimeIndicators: RegimeIndicators;
   exhaustion: ExhaustionResult;
   chartSignals: ChartSignal[];
+  patternOverlays: PatternOverlay[];
   historicalDate?: string;
   cachedAt: string;
 }
@@ -61,10 +63,11 @@ function buildResult(
   );
 
   // Display-only signals — skipped in scanner/warmup light-mode paths to reduce CPU per cycle
-  const patterns     = lightMode
+  const patterns         = lightMode
     ? { patterns: [], marketStructure: "ranging" as const, supportLevel: 0, resistanceLevel: 0 }
     : calcPatterns(bars, trend, volatility);
-  const chartSignals = lightMode ? [] : calcChartSignals(bars);
+  const chartSignals     = lightMode ? [] : calcChartSignals(bars);
+  const patternOverlays  = lightMode ? [] : calcPatternOverlays(bars);
 
   return {
     quote: quoteOverride,
@@ -79,6 +82,7 @@ function buildResult(
     regimeIndicators,
     exhaustion,
     chartSignals,
+    patternOverlays,
     ...(historicalDate ? { historicalDate } : {}),
     cachedAt: new Date().toISOString(),
   };

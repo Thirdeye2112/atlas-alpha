@@ -944,6 +944,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ChartSignal"
+        patternOverlays:
+          type: array
+          items:
+            $ref: "#/components/schemas/PatternOverlay"
         calibration:
           oneOf:
             - $ref: "#/components/schemas/CalibrationInfo"
@@ -961,6 +965,7 @@ components:
         - patterns
         - relativeStrength
         - chartSignals
+        - patternOverlays
         - cachedAt
 
     ChartSignal:
@@ -981,6 +986,66 @@ components:
         - direction
         - label
         - strength
+
+    PatternLinePoint:
+      type: object
+      properties:
+        date:
+          type: string
+        price:
+          type: number
+      required: [date, price]
+
+    PatternLine:
+      type: object
+      properties:
+        points:
+          type: array
+          items:
+            $ref: "#/components/schemas/PatternLinePoint"
+        style:
+          type: string
+          enum: [solid, dashed, dotted]
+        color:
+          type: string
+        label:
+          type: string
+      required: [points, style, color]
+
+    PatternTarget:
+      type: object
+      properties:
+        price:
+          type: number
+        label:
+          type: string
+        role:
+          type: string
+          enum: [breakout, target, stop]
+      required: [price, label, role]
+
+    PatternOverlay:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [bull-flag, bear-flag, ascending-triangle, descending-triangle, double-bottom, head-and-shoulders]
+        label:
+          type: string
+        description:
+          type: string
+        confidence:
+          type: string
+          enum: [high, medium, low]
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/PatternLine"
+        targets:
+          type: array
+          items:
+            $ref: "#/components/schemas/PatternTarget"
+      required: [type, label, description, confidence, lines, targets]
 
     ScannerResponse:
       type: object

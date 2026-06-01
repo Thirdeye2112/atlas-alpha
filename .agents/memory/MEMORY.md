@@ -6,3 +6,4 @@
 - [Backtest cost model](backtest-cost-model.md) — SLIPPAGE_BPS=5 baked in; hitRateNet = direction-aware net hit rate per bucket; brierScore persisted to calibration_models
 - [Platform upgrades v1.3](platform-upgrades-v1.3.md) — regime v1.3 field names, IS/OOS split design, alert DB schema, AI narrative toggle, and AnalysisResult field gotchas.
 - [Adaptive scoring architecture](adaptive-scoring.md) — optimalWeights stored in CalibrationEntry; calcAtlasScore accepts ScoreOpts; IC quality caps confidence; contrarian flag propagates to narrative and Dashboard badge
+- [Pattern overlays architecture](pattern-overlays.md) — multi-scale bull/bear flag detection; use poleNetMove (not H-L range) for target projection; 3M signals, 6M+ swing points

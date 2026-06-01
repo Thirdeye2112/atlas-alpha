@@ -194,6 +194,26 @@ export const GetStockAnalysisResponse = zod.object({
   "label": zod.string(),
   "strength": zod.enum(['strong', 'moderate'])
 })),
+  "patternOverlays": zod.array(zod.object({
+  "type": zod.enum(['bull-flag', 'bear-flag', 'ascending-triangle', 'descending-triangle', 'double-bottom', 'head-and-shoulders']),
+  "label": zod.string(),
+  "description": zod.string(),
+  "confidence": zod.enum(['high', 'medium', 'low']),
+  "lines": zod.array(zod.object({
+  "points": zod.array(zod.object({
+  "date": zod.string(),
+  "price": zod.number()
+})),
+  "style": zod.enum(['solid', 'dashed', 'dotted']),
+  "color": zod.string(),
+  "label": zod.string().optional()
+})),
+  "targets": zod.array(zod.object({
+  "price": zod.number(),
+  "label": zod.string(),
+  "role": zod.enum(['breakout', 'target', 'stop'])
+}))
+})),
   "calibration": zod.union([zod.object({
   "status": zod.enum(['none', 'pending', 'fitted', 'error']),
   "calibratedProbability": zod.number().nullish().describe('Fitted logistic probability at the current score (null until calibration completes)'),
