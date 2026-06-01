@@ -200,7 +200,7 @@ export default function LightweightChart({
         borderVisible: false,
       },
       crosshair: {
-        mode: 1,
+        mode: 0,
         vertLine: {
           color: "hsl(210 100% 56%)",
           labelBackgroundColor: "hsl(222 18% 11%)",
