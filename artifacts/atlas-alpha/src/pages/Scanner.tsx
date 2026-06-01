@@ -17,6 +17,9 @@ import {
   useGetStockOhlcv,                  getGetStockOhlcvQueryKey,
   type ScannerResponse,
   type ScannerResult,
+  useRunCustomScan,
+  type CustomScanInput,
+  CustomScanCriterionOperator,
 } from "@workspace/api-client-react";
 import LightweightChart from "@/components/charts/LightweightChart";
 import { formatCurrency, formatPercent, getBgColorForScore } from "@/lib/formatters";
@@ -573,6 +576,403 @@ function ScannerTable({
   );
 }
 
+// ── Custom Scan ───────────────────────────────────────────────────────────────
+
+type CsFieldType = "number" | "enum" | "string" | "array";
+interface CsFieldConfig { key: string; label: string; type: CsFieldType; options?: string[]; hint?: string }
+
+const CS_FIELDS: CsFieldConfig[] = [
+  { key: "score",             label: "Score",               type: "number", hint: "0–100" },
+  { key: "trendScore",        label: "Trend Score",         type: "number", hint: "0–100" },
+  { key: "momentumScore",     label: "Momentum Score",      type: "number", hint: "0–100" },
+  { key: "volumeScore",       label: "Volume Score",        type: "number", hint: "0–100" },
+  { key: "relStrengthScore",  label: "Rel Strength Score",  type: "number", hint: "0–100" },
+  { key: "exhaustionScore",   label: "Exhaustion Score",    type: "number", hint: "0–100" },
+  { key: "bullishProbability",label: "Bull Probability %",  type: "number", hint: "0–100" },
+  { key: "rsi",               label: "RSI",                 type: "number", hint: "0–100" },
+  { key: "stochK",            label: "Stoch K",             type: "number", hint: "0–100" },
+  { key: "macd",              label: "MACD",                type: "number" },
+  { key: "relativeVolume",    label: "Rel. Volume (×)",     type: "number", hint: "e.g. 1.5" },
+  { key: "atrPercent",        label: "ATR %",               type: "number", hint: "e.g. 3.0" },
+  { key: "bbWidthPct",        label: "BB Width %",          type: "number", hint: "e.g. 15" },
+  { key: "priceVsSma50",      label: "vs SMA50 %",          type: "number", hint: "e.g. 5.0" },
+  { key: "priceVsSma200",     label: "vs SMA200 %",         type: "number", hint: "e.g. 10.0" },
+  { key: "changePercent",     label: "Day Change %",        type: "number", hint: "e.g. -2.0" },
+  { key: "price",             label: "Price ($)",           type: "number" },
+  { key: "gapPercent",        label: "Gap %",               type: "number" },
+  { key: "direction",         label: "Direction",           type: "enum",   options: ["bullish", "neutral", "bearish"] },
+  { key: "signalStrength",    label: "Signal Strength",     type: "enum",   options: ["strong", "moderate", "weak"] },
+  { key: "exhaustion",        label: "Exhaustion Signal",   type: "enum",   options: ["none", "distribution_top", "capitulation"] },
+  { key: "pullbackClass",     label: "Setup Type",          type: "enum",   options: ["pullback", "reversal", "ambiguous", "extended"] },
+  { key: "patterns",          label: "Pattern",             type: "array",  hint: "e.g. Bull Flag" },
+];
+
+const CS_OPS: Record<CsFieldType, { value: string; label: string }[]> = {
+  number: [
+    { value: "gte",     label: "≥" },
+    { value: "lte",     label: "≤" },
+    { value: "gt",      label: ">" },
+    { value: "lt",      label: "<" },
+    { value: "eq",      label: "=" },
+    { value: "neq",     label: "≠" },
+    { value: "between", label: "between" },
+  ],
+  enum:   [{ value: "eq", label: "is" }, { value: "neq", label: "is not" }],
+  string: [{ value: "eq", label: "is" }, { value: "contains", label: "contains" }, { value: "notContains", label: "not contains" }],
+  array:  [{ value: "contains", label: "contains" }, { value: "notContains", label: "not contains" }],
+};
+
+interface CsPreset {
+  label: string;
+  color: string;
+  criteria: { field: string; operator: string; value: string; value2?: string }[];
+}
+
+const CS_PRESETS: CsPreset[] = [
+  {
+    label: "BULL PULLBACK",
+    color: "border-primary/50 text-primary hover:bg-primary/10",
+    criteria: [
+      { field: "score",     operator: "gte",     value: "70" },
+      { field: "direction", operator: "eq",      value: "bullish" },
+      { field: "rsi",       operator: "between", value: "40", value2: "65" },
+    ],
+  },
+  {
+    label: "RSI OVERSOLD",
+    color: "border-success/50 text-success hover:bg-success/10",
+    criteria: [
+      { field: "rsi",       operator: "lte",     value: "35" },
+      { field: "direction", operator: "neq",     value: "bearish" },
+    ],
+  },
+  {
+    label: "VOL BREAKOUT",
+    color: "border-warning/50 text-warning hover:bg-warning/10",
+    criteria: [
+      { field: "score",          operator: "gte",     value: "72" },
+      { field: "relativeVolume", operator: "gte",     value: "2.0" },
+      { field: "rsi",            operator: "between", value: "55", value2: "80" },
+    ],
+  },
+  {
+    label: "MOMENTUM SURGE",
+    color: "border-warning/50 text-warning hover:bg-warning/10",
+    criteria: [
+      { field: "momentumScore",  operator: "gte", value: "80" },
+      { field: "relativeVolume", operator: "gte", value: "1.5" },
+    ],
+  },
+  {
+    label: "VOLATILITY SQUEEZE",
+    color: "border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10",
+    criteria: [
+      { field: "atrPercent", operator: "lte", value: "2.5" },
+      { field: "bbWidthPct", operator: "lte", value: "12" },
+      { field: "score",      operator: "gte", value: "60" },
+    ],
+  },
+  {
+    label: "DIST TOP FADE",
+    color: "border-destructive/50 text-destructive hover:bg-destructive/10",
+    criteria: [
+      { field: "exhaustion", operator: "eq",  value: "distribution_top" },
+      { field: "rsi",        operator: "gte", value: "65" },
+    ],
+  },
+  {
+    label: "DEEP OVERSOLD",
+    color: "border-success/50 text-success hover:bg-success/10",
+    criteria: [
+      { field: "rsi",           operator: "lte", value: "30" },
+      { field: "priceVsSma50",  operator: "lte", value: "-10" },
+    ],
+  },
+  {
+    label: "STRONG BULL",
+    color: "border-primary/50 text-primary hover:bg-primary/10",
+    criteria: [
+      { field: "score",              operator: "gte", value: "80" },
+      { field: "direction",          operator: "eq",  value: "bullish" },
+      { field: "bullishProbability", operator: "gte", value: "70" },
+    ],
+  },
+];
+
+const CS_SORT_FIELDS = CS_FIELDS.filter(f => f.type === "number" || f.key === "direction").map(f => ({ key: f.key, label: f.label }));
+
+let _csRowId = 0;
+function csNewRow(field = "score", op?: string, val = "", val2 = ""): { id: number; field: string; operator: string; value: string; value2: string } {
+  const fc = CS_FIELDS.find(f => f.key === field) ?? CS_FIELDS[0];
+  const defaultOp = op ?? CS_OPS[fc.type][0].value;
+  return { id: ++_csRowId, field, operator: defaultOp, value: val, value2: val2 };
+}
+
+function CustomScanTab({ onTickerClick }: { onTickerClick?: (ticker: string) => void }) {
+  const [rows, setRows] = useState(() => [csNewRow()]);
+  const [sortBy,  setSortBy]  = useState("score");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [result, setResult]   = useState<ScannerResponse | undefined>();
+  const [matchCount, setMatchCount] = useState<number | undefined>();
+  const [ranOnce,    setRanOnce]    = useState(false);
+
+  const { mutate, isPending, isError } = useRunCustomScan({
+    mutation: {
+      onSuccess: (data) => {
+        setResult(data as ScannerResponse);
+        setMatchCount((data as unknown as { matchCount?: number }).matchCount);
+        setRanOnce(true);
+      },
+    },
+  });
+
+  function buildCriteria(): CustomScanInput["criteria"] {
+    return rows
+      .filter(r => r.value.trim() !== "" || r.operator === "contains" || r.operator === "notContains")
+      .map(r => {
+        const num = parseFloat(r.value);
+        const parsed: CustomScanInput["criteria"][number] = {
+          field: r.field,
+          operator: r.operator as CustomScanCriterionOperator,
+          value: isNaN(num) ? r.value : num,
+        };
+        if (r.operator === "between" && r.value2.trim()) {
+          (parsed as unknown as Record<string, unknown>).value2 = parseFloat(r.value2);
+        }
+        return parsed;
+      });
+  }
+
+  function runScan() {
+    const criteria = buildCriteria();
+    if (criteria.length === 0) return;
+    mutate({ data: { criteria, limit: 50, sortBy, sortDir } });
+  }
+
+  function applyPreset(p: CsPreset) {
+    setRows(p.criteria.map(c => csNewRow(c.field, c.operator, c.value, c.value2 ?? "")));
+    setResult(undefined);
+    setMatchCount(undefined);
+    setRanOnce(false);
+  }
+
+  function updateRow(id: number, patch: Partial<typeof rows[number]>) {
+    setRows(prev => prev.map(r => {
+      if (r.id !== id) return r;
+      const updated = { ...r, ...patch };
+      // If field changed, reset operator to the first for the new type
+      if (patch.field && patch.field !== r.field) {
+        const fc = CS_FIELDS.find(f => f.key === patch.field) ?? CS_FIELDS[0];
+        updated.operator = CS_OPS[fc.type][0].value;
+        updated.value    = "";
+        updated.value2   = "";
+      }
+      return updated;
+    }));
+  }
+
+  function removeRow(id: number) {
+    setRows(prev => prev.filter(r => r.id !== id));
+  }
+
+  const criteriaReady = buildCriteria().length > 0;
+
+  return (
+    <div className="flex flex-col gap-4 h-full">
+      {/* Quick Presets */}
+      <div className="flex flex-wrap gap-1.5 items-center">
+        <span className="text-xs font-mono text-muted-foreground mr-1">QUICK START:</span>
+        {CS_PRESETS.map(p => (
+          <button
+            key={p.label}
+            onClick={() => applyPreset(p)}
+            className={cn(
+              "px-2.5 py-1 rounded border text-xs font-mono transition-colors",
+              p.color
+            )}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Filter builder */}
+      <div className="bg-card border border-border rounded-md p-3 flex flex-col gap-2">
+        <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-1">Filter Criteria</div>
+
+        {rows.length === 0 && (
+          <div className="text-xs font-mono text-muted-foreground/50 italic py-2">
+            No filters — add at least one criterion to run a scan.
+          </div>
+        )}
+
+        {rows.map((row) => {
+          const fc       = CS_FIELDS.find(f => f.key === row.field) ?? CS_FIELDS[0];
+          const ops      = CS_OPS[fc.type];
+          const isBetw   = row.operator === "between";
+          const isEnum   = fc.type === "enum";
+
+          return (
+            <div key={row.id} className="flex items-center gap-1.5 flex-wrap">
+              {/* Field selector */}
+              <select
+                value={row.field}
+                onChange={e => updateRow(row.id, { field: e.target.value })}
+                className="bg-background border border-border rounded px-2 py-1 text-xs font-mono text-foreground focus:outline-none focus:border-primary min-w-[160px]"
+              >
+                {CS_FIELDS.map(f => (
+                  <option key={f.key} value={f.key}>{f.label}</option>
+                ))}
+              </select>
+
+              {/* Operator selector */}
+              <select
+                value={row.operator}
+                onChange={e => updateRow(row.id, { operator: e.target.value })}
+                className="bg-background border border-border rounded px-2 py-1 text-xs font-mono text-foreground focus:outline-none focus:border-primary w-[110px]"
+              >
+                {ops.map(op => (
+                  <option key={op.value} value={op.value}>{op.label}</option>
+                ))}
+              </select>
+
+              {/* Value input(s) */}
+              {isEnum ? (
+                <select
+                  value={row.value}
+                  onChange={e => updateRow(row.id, { value: e.target.value })}
+                  className="bg-background border border-border rounded px-2 py-1 text-xs font-mono text-foreground focus:outline-none focus:border-primary min-w-[120px]"
+                >
+                  <option value="">— select —</option>
+                  {fc.options?.map(o => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
+              ) : (
+                <>
+                  <input
+                    type={fc.type === "array" ? "text" : "number"}
+                    placeholder={isBetw ? "min" : (fc.hint ?? "value")}
+                    value={row.value}
+                    onChange={e => updateRow(row.id, { value: e.target.value })}
+                    className="bg-background border border-border rounded px-2 py-1 text-xs font-mono text-foreground focus:outline-none focus:border-primary w-[90px] placeholder:text-muted-foreground/40"
+                  />
+                  {isBetw && (
+                    <>
+                      <span className="text-xs text-muted-foreground font-mono">—</span>
+                      <input
+                        type="number"
+                        placeholder="max"
+                        value={row.value2}
+                        onChange={e => updateRow(row.id, { value2: e.target.value })}
+                        className="bg-background border border-border rounded px-2 py-1 text-xs font-mono text-foreground focus:outline-none focus:border-primary w-[90px] placeholder:text-muted-foreground/40"
+                      />
+                    </>
+                  )}
+                </>
+              )}
+
+              {/* Remove */}
+              <button
+                onClick={() => removeRow(row.id)}
+                className="ml-0.5 p-1 rounded text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          );
+        })}
+
+        <div className="flex items-center gap-2 mt-1 pt-2 border-t border-border/50">
+          <button
+            onClick={() => setRows(prev => [...prev, csNewRow()])}
+            className="text-xs font-mono text-primary/70 hover:text-primary border border-primary/30 hover:border-primary/60 rounded px-2.5 py-1 transition-colors"
+          >
+            + ADD FILTER
+          </button>
+
+          {rows.length > 1 && (
+            <button
+              onClick={() => setRows([csNewRow()])}
+              className="text-xs font-mono text-muted-foreground/50 hover:text-muted-foreground border border-border/40 hover:border-border rounded px-2.5 py-1 transition-colors"
+            >
+              CLEAR ALL
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Run controls */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <button
+          onClick={runScan}
+          disabled={!criteriaReady || isPending}
+          className={cn(
+            "px-4 py-1.5 rounded font-mono text-xs font-bold tracking-wider transition-colors",
+            criteriaReady && !isPending
+              ? "bg-primary text-primary-foreground hover:bg-primary/90"
+              : "bg-muted text-muted-foreground cursor-not-allowed"
+          )}
+        >
+          {isPending ? "SCANNING…" : "▶ RUN SCAN"}
+        </button>
+
+        <div className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground">
+          <span>SORT BY</span>
+          <select
+            value={sortBy}
+            onChange={e => setSortBy(e.target.value)}
+            className="bg-background border border-border rounded px-2 py-0.5 text-xs font-mono text-foreground focus:outline-none focus:border-primary"
+          >
+            {CS_SORT_FIELDS.map(f => (
+              <option key={f.key} value={f.key}>{f.label}</option>
+            ))}
+          </select>
+          <select
+            value={sortDir}
+            onChange={e => setSortDir(e.target.value as "asc" | "desc")}
+            className="bg-background border border-border rounded px-2 py-0.5 text-xs font-mono text-foreground focus:outline-none focus:border-primary"
+          >
+            <option value="desc">↓ DESC</option>
+            <option value="asc">↑ ASC</option>
+          </select>
+        </div>
+
+        {ranOnce && !isPending && (
+          <span className={cn(
+            "text-xs font-mono",
+            matchCount === 0 ? "text-muted-foreground" : "text-success"
+          )}>
+            {matchCount === undefined
+              ? `${result?.results.length ?? 0} results`
+              : `${matchCount} match${matchCount !== 1 ? "es" : ""} · showing top ${result?.results.length ?? 0}`
+            }
+          </span>
+        )}
+
+        {isError && (
+          <span className="text-xs font-mono text-destructive">Scan failed — check criteria</span>
+        )}
+      </div>
+
+      {/* Results */}
+      <div className="flex-1 overflow-auto min-h-0">
+        {!ranOnce && !isPending && (
+          <div className="flex items-center justify-center h-40 text-xs font-mono text-muted-foreground/50 border border-border/30 rounded-md">
+            Configure filters above and press RUN SCAN
+          </div>
+        )}
+        {(ranOnce || isPending) && (
+          <ScannerTable
+            response={result}
+            isLoading={isPending}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function Scanner() {
@@ -648,6 +1048,7 @@ export default function Scanner() {
           <TabsTrigger value="inst"       className="font-mono text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">INST ACCUM</TabsTrigger>
           <TabsTrigger value="mean"       className="font-mono text-xs data-[state=active]:bg-muted-foreground data-[state=active]:text-background">MEAN REVERSION</TabsTrigger>
           <TabsTrigger value="key-levels" className="font-mono text-xs data-[state=active]:bg-cyan-700 data-[state=active]:text-white">KEY LEVELS</TabsTrigger>
+          <TabsTrigger value="custom" className="font-mono text-xs data-[state=active]:bg-violet-700 data-[state=active]:text-white">✦ CUSTOM SCAN</TabsTrigger>
         </TabsList>
 
         <div className="flex-1 overflow-auto mt-4">
@@ -689,6 +1090,14 @@ export default function Scanner() {
               DIST% column shows distance to the nearest level — <span className="text-warning">amber ≤ 0.5%</span>, <span className="text-primary">blue ≤ 1%</span>.
             </div>
             <ScannerTable response={keyLevels} isLoading={klLoading} showKeyLevel />
+          </TabsContent>
+          <TabsContent value="custom" className="m-0 h-full flex flex-col gap-4">
+            <div className="border border-violet-700/30 rounded-md bg-violet-700/5 px-4 py-2.5 text-xs font-mono text-muted-foreground leading-relaxed shrink-0">
+              <span className="text-violet-400 font-bold mr-2">✦ CUSTOM SCAN</span>
+              Stack any combination of filters across all 590 tickers — score, RSI, RVOL, ATR%, direction, patterns, and more.
+              All criteria are <span className="text-foreground">ANDed</span> together. Use presets to get started quickly.
+            </div>
+            <CustomScanTab />
           </TabsContent>
         </div>
       </Tabs>

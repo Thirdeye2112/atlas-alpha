@@ -483,4 +483,167 @@ router.get("/scanner/gap-down", (req, res): void => {
   }
 });
 
+// ── Custom Scan ───────────────────────────────────────────────────────────────
+
+type FieldValue = number | string | string[];
+
+/** Extracts a filterable value from an analysis result by field name. */
+function getFieldValue(a: AnalysisResult, field: string): FieldValue {
+  switch (field) {
+    // ── Atlas Score sub-scores (0–100)
+    case "score":               return a.atlasScore.overall;
+    case "trendScore":          return a.atlasScore.trendScore;
+    case "momentumScore":       return a.atlasScore.momentumScore;
+    case "volumeScore":         return a.atlasScore.volumeScore;
+    case "relStrengthScore":    return a.atlasScore.relativeStrengthScore;
+    case "exhaustionScore":     return a.atlasScore.exhaustionScore;
+    case "regimeScore":         return a.atlasScore.marketRegimeScore;
+    case "bullishProbability":  return a.atlasScore.bullishProbability;
+    case "confidenceScore":     return a.atlasScore.confidenceScore;
+    // ── Momentum
+    case "rsi":                 return a.momentum.rsi;
+    case "stochK":              return a.momentum.stochK;
+    case "macd":                return a.momentum.macd;
+    case "macdHistogram":       return a.momentum.macdHistogram;
+    // ── Volume
+    case "relativeVolume":      return a.volume.relativeVolume;
+    // ── Volatility
+    case "atrPercent":          return a.volatility.atrPercent;
+    case "bbWidthPct":          return a.volatility.bollingerMiddle > 0
+                                  ? (a.volatility.bollingerWidth / a.volatility.bollingerMiddle) * 100 : 0;
+    // ── Trend / price position
+    case "priceVsSma50":        return a.trend.priceVsSma50;
+    case "priceVsSma200":       return a.trend.priceVsSma200;
+    case "price":               return a.quote.price as number;
+    case "changePercent":       return a.quote.changePercent as number;
+    case "gapPercent":          return getGapPercent(a);
+    // ── Categorical strings
+    case "direction":           return a.atlasScore.direction;
+    case "sector":              return ((a.quote.sector as string | undefined) ?? "").toLowerCase();
+    case "exhaustion":          return a.exhaustion.exhaustionSignal;
+    case "pullbackClass":       return a.pullbackSetup?.classification ?? "unknown";
+    case "signalStrength": {
+      const s = a.atlasScore.overall;
+      return s >= 80 ? "strong" : s >= 60 ? "moderate" : "weak";
+    }
+    // ── Array field
+    case "patterns":            return (a.patterns?.patterns ?? []) as string[];
+    default:                    return 0;
+  }
+}
+
+interface CustomCriterion {
+  field: string;
+  operator: "gt" | "lt" | "gte" | "lte" | "eq" | "neq" | "between" | "contains" | "notContains";
+  value: number | string;
+  value2?: number;
+}
+
+function applyCustomCriterion(a: AnalysisResult, c: CustomCriterion): boolean {
+  const raw = getFieldValue(a, c.field);
+
+  // Array operators (patterns contains/notContains a label)
+  if (c.operator === "contains" || c.operator === "notContains") {
+    const arr = Array.isArray(raw) ? raw : [String(raw)];
+    const needle = String(c.value).toLowerCase();
+    const found = arr.some(s => s.toLowerCase().includes(needle));
+    return c.operator === "contains" ? found : !found;
+  }
+
+  // String equality operators
+  if (typeof raw === "string") {
+    const rv = String(c.value).toLowerCase();
+    if (c.operator === "eq")  return raw.toLowerCase() === rv;
+    if (c.operator === "neq") return raw.toLowerCase() !== rv;
+    return false;
+  }
+
+  // Numeric operators
+  const num = typeof raw === "number" ? raw : parseFloat(String(raw));
+  const cv  = typeof c.value === "number" ? c.value : parseFloat(String(c.value));
+  switch (c.operator) {
+    case "gt":      return num > cv;
+    case "lt":      return num < cv;
+    case "gte":     return num >= cv;
+    case "lte":     return num <= cv;
+    case "eq":      return num === cv;
+    case "neq":     return num !== cv;
+    case "between": return c.value2 !== undefined ? num >= cv && num <= c.value2 : num >= cv;
+    default:        return true;
+  }
+}
+
+const VALID_FIELDS = new Set([
+  "score","trendScore","momentumScore","volumeScore","relStrengthScore","exhaustionScore",
+  "regimeScore","bullishProbability","confidenceScore","rsi","stochK","macd","macdHistogram",
+  "relativeVolume","atrPercent","bbWidthPct","priceVsSma50","priceVsSma200",
+  "price","changePercent","gapPercent",
+  "direction","sector","exhaustion","pullbackClass","signalStrength","patterns",
+]);
+
+const VALID_OPERATORS = new Set([
+  "gt","lt","gte","lte","eq","neq","between","contains","notContains",
+]);
+
+router.post("/scanner/custom", (req, res): void => {
+  const { criteria, limit: rawLimit, sortBy = "score", sortDir = "desc" } = req.body as {
+    criteria: CustomCriterion[];
+    limit?: number;
+    sortBy?: string;
+    sortDir?: "asc" | "desc";
+  };
+
+  if (!Array.isArray(criteria)) {
+    res.status(400).json({ error: "criteria must be an array" });
+    return;
+  }
+
+  // Validate each criterion
+  for (const c of criteria) {
+    if (!VALID_FIELDS.has(c.field)) {
+      res.status(400).json({ error: `Unknown field: ${c.field}` });
+      return;
+    }
+    if (!VALID_OPERATORS.has(c.operator)) {
+      res.status(400).json({ error: `Unknown operator: ${c.operator}` });
+      return;
+    }
+  }
+
+  const limit = Math.min(Number(rawLimit) || 50, 100);
+
+  try {
+    const job = getOrStartScanJob();
+
+    // Filter — all criteria must pass (AND logic)
+    const matched = job.analyses.filter(a =>
+      criteria.every(c => applyCustomCriterion(a, c))
+    );
+
+    // Sort
+    const sortedField = VALID_FIELDS.has(sortBy) ? sortBy : "score";
+    matched.sort((a, b) => {
+      const av = getFieldValue(a, sortedField);
+      const bv = getFieldValue(b, sortedField);
+      const diff = typeof av === "number" && typeof bv === "number"
+        ? av - bv
+        : String(av).localeCompare(String(bv));
+      return sortDir === "asc" ? diff : -diff;
+    });
+
+    const rows = matched.slice(0, limit).map(toRow);
+
+    res.json({
+      results: rows,
+      progress: { done: job.done, total: job.total },
+      complete: job.complete,
+      scannedAt: job.completedAt ?? job.startedAt,
+      matchCount: matched.length,
+    });
+  } catch (err) {
+    logger.error({ err }, "Custom scan failed");
+    res.status(500).json({ error: "Custom scan failed" });
+  }
+});
+
 export default router;

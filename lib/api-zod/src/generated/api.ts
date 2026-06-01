@@ -849,6 +849,61 @@ export const GetScannerGapDownResponse = zod.object({
 
 
 /**
+ * @summary Run a custom scan with user-defined filter criteria against the live 590-ticker universe
+ */
+export const runCustomScanBodyLimitDefault = 50;
+export const runCustomScanBodyLimitMax = 100;
+
+export const runCustomScanBodySortByDefault = `score`;
+export const runCustomScanBodySortDirDefault = `desc`;
+
+export const RunCustomScanBody = zod.object({
+  "criteria": zod.array(zod.object({
+  "field": zod.string().describe('Field to filter on: score, trendScore, momentumScore, volumeScore, relStrengthScore, exhaustionScore, bullishProbability, rsi, stochK, macd, relativeVolume, atrPercent, bbWidthPct, priceVsSma50, priceVsSma200, changePercent, price, direction, sector, exhaustion, pullbackClass, patterns'),
+  "operator": zod.enum(['gt', 'lt', 'gte', 'lte', 'eq', 'neq', 'between', 'contains', 'notContains']),
+  "value": zod.unknown().describe('Primary value (number or string)'),
+  "value2": zod.number().optional().describe('Upper bound when operator is \'between\'')
+})).describe('All criteria are ANDed together'),
+  "limit": zod.number().max(runCustomScanBodyLimitMax).default(runCustomScanBodyLimitDefault),
+  "sortBy": zod.string().default(runCustomScanBodySortByDefault).describe('Field name to sort by (same set as criteria fields)'),
+  "sortDir": zod.enum(['asc', 'desc']).default(runCustomScanBodySortDirDefault)
+})
+
+export const RunCustomScanResponse = zod.object({
+  "results": zod.array(zod.object({
+  "ticker": zod.string(),
+  "name": zod.string(),
+  "price": zod.number(),
+  "change": zod.number(),
+  "changePercent": zod.number(),
+  "gapPercent": zod.number(),
+  "atlasScore": zod.number(),
+  "atlasLabel": zod.string(),
+  "bullishProbability": zod.number(),
+  "bearishProbability": zod.number(),
+  "confidenceScore": zod.number(),
+  "direction": zod.string(),
+  "signalStrength": zod.enum(['strong', 'moderate', 'weak']),
+  "sector": zod.string().nullable(),
+  "volume": zod.number(),
+  "relativeVolume": zod.number(),
+  "rsi": zod.number(),
+  "catalysts": zod.array(zod.string()),
+  "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
+  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
+  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)'),
+  "assetType": zod.string().optional().describe('equity | etf | leveraged-etf | volatility-etf | bond-etf | commodity-etf | international-etf'),
+  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay')
+})),
+  "progress": zod.object({
+  "done": zod.number(),
+  "total": zod.number()
+}),
+  "complete": zod.boolean()
+})
+
+
+/**
  * @summary Get user watchlist
  */
 export const GetWatchlistResponseItem = zod.object({

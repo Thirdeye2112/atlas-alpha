@@ -543,6 +543,49 @@ export interface StockAnalysis {
   cachedAt: string;
 }
 
+export type CustomScanCriterionOperator = typeof CustomScanCriterionOperator[keyof typeof CustomScanCriterionOperator];
+
+
+export const CustomScanCriterionOperator = {
+  gt: 'gt',
+  lt: 'lt',
+  gte: 'gte',
+  lte: 'lte',
+  eq: 'eq',
+  neq: 'neq',
+  between: 'between',
+  contains: 'contains',
+  notContains: 'notContains',
+} as const;
+
+export interface CustomScanCriterion {
+  /** Field to filter on: score, trendScore, momentumScore, volumeScore, relStrengthScore, exhaustionScore, bullishProbability, rsi, stochK, macd, relativeVolume, atrPercent, bbWidthPct, priceVsSma50, priceVsSma200, changePercent, price, direction, sector, exhaustion, pullbackClass, patterns */
+  field: string;
+  operator: CustomScanCriterionOperator;
+  /** Primary value (number or string) */
+  value: unknown;
+  /** Upper bound when operator is 'between' */
+  value2?: number;
+}
+
+export type CustomScanInputSortDir = typeof CustomScanInputSortDir[keyof typeof CustomScanInputSortDir];
+
+
+export const CustomScanInputSortDir = {
+  asc: 'asc',
+  desc: 'desc',
+} as const;
+
+export interface CustomScanInput {
+  /** All criteria are ANDed together */
+  criteria: CustomScanCriterion[];
+  /** @maximum 100 */
+  limit?: number;
+  /** Field name to sort by (same set as criteria fields) */
+  sortBy?: string;
+  sortDir?: CustomScanInputSortDir;
+}
+
 export type ScannerResponseProgress = {
   done: number;
   total: number;

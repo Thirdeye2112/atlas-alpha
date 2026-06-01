@@ -378,6 +378,31 @@ paths:
               schema:
                 $ref: "#/components/schemas/ScannerResponse"
 
+  /scanner/custom:
+    post:
+      operationId: runCustomScan
+      tags: [scanner]
+      summary: Run a custom scan with user-defined filter criteria against the live 590-ticker universe
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomScanInput"
+      responses:
+        "200":
+          description: Custom scan results matching all supplied criteria
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScannerResponse"
+        "400":
+          description: Invalid criteria
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
   /watchlist:
     get:
       operationId: getWatchlist
@@ -1425,6 +1450,44 @@ components:
           type: string
           enum: [daily, weekly]
       required: [type, label, description, confidence, lines, targets]
+
+    CustomScanCriterion:
+      type: object
+      required: [field, operator, value]
+      properties:
+        field:
+          type: string
+          description: "Field to filter on: score, trendScore, momentumScore, volumeScore, relStrengthScore, exhaustionScore, bullishProbability, rsi, stochK, macd, relativeVolume, atrPercent, bbWidthPct, priceVsSma50, priceVsSma200, changePercent, price, direction, sector, exhaustion, pullbackClass, patterns"
+        operator:
+          type: string
+          enum: [gt, lt, gte, lte, eq, neq, between, contains, notContains]
+        value:
+          description: "Primary value (number or string)"
+        value2:
+          type: number
+          description: "Upper bound when operator is 'between'"
+
+    CustomScanInput:
+      type: object
+      required: [criteria]
+      properties:
+        criteria:
+          type: array
+          items:
+            $ref: "#/components/schemas/CustomScanCriterion"
+          description: "All criteria are ANDed together"
+        limit:
+          type: integer
+          default: 50
+          maximum: 100
+        sortBy:
+          type: string
+          description: "Field name to sort by (same set as criteria fields)"
+          default: score
+        sortDir:
+          type: string
+          enum: [asc, desc]
+          default: desc
 
     ScannerResponse:
       type: object

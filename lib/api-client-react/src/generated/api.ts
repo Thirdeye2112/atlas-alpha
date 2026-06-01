@@ -27,6 +27,7 @@ import type {
   BacktestMultiResult,
   BacktestOutput,
   CrossSectionalICResult,
+  CustomScanInput,
   DeleteAlert200,
   GapAnalysisResult,
   GetBacktestCrossSectionalParams,
@@ -1473,6 +1474,77 @@ export function useGetScannerGapDown<TData = Awaited<ReturnType<typeof getScanne
 
 
 
+
+export const getRunCustomScanUrl = () => {
+
+
+
+
+  return `/api/scanner/custom`
+}
+
+/**
+ * @summary Run a custom scan with user-defined filter criteria against the live 590-ticker universe
+ */
+export const runCustomScan = async (customScanInput: CustomScanInput, options?: RequestInit): Promise<ScannerResponse> => {
+
+  return customFetch<ScannerResponse>(getRunCustomScanUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      customScanInput,)
+  }
+);}
+
+
+
+
+export const getRunCustomScanMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runCustomScan>>, TError,{data: BodyType<CustomScanInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof runCustomScan>>, TError,{data: BodyType<CustomScanInput>}, TContext> => {
+
+const mutationKey = ['runCustomScan'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof runCustomScan>>, {data: BodyType<CustomScanInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  runCustomScan(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RunCustomScanMutationResult = NonNullable<Awaited<ReturnType<typeof runCustomScan>>>
+    export type RunCustomScanMutationBody = BodyType<CustomScanInput>
+    export type RunCustomScanMutationError = ErrorType<ApiError>
+
+    /**
+ * @summary Run a custom scan with user-defined filter criteria against the live 590-ticker universe
+ */
+export const useRunCustomScan = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runCustomScan>>, TError,{data: BodyType<CustomScanInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof runCustomScan>>,
+        TError,
+        {data: BodyType<CustomScanInput>},
+        TContext
+      > => {
+      return useMutation(getRunCustomScanMutationOptions(options));
+    }
 
 export const getGetWatchlistUrl = () => {
 
