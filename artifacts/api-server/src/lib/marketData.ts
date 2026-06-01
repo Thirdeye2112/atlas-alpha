@@ -288,11 +288,10 @@ export async function fetchYahooRaw(
 
 export async function fetchOHLCV(ticker: string, period = "3mo", interval = "1d"): Promise<OHLCVBar[]> {
   const key = `${ticker}:${period}:${interval}`;
-  const cached = ohlcvCache.get<OHLCVBar[]>(key);
-  if (cached) return cached;
 
   const isIntraday = INTRADAY_INTERVALS.has(interval);
 
+  // Compute the expected start date first so we can validate cache coverage.
   const end   = new Date();
   const start = new Date();
   if (period === "max") {
@@ -311,25 +310,44 @@ export async function fetchOHLCV(ticker: string, period = "3mo", interval = "1d"
     }
   }
 
-  let bars: OHLCVBar[];
+  // Cache hit — but validate coverage: the cached blob may have been seeded with a
+  // shorter history (e.g. 2Y of data stored under the "5y" key from an older backfill).
+  // If the first bar is more than 45 days later than `start`, treat the cache as stale.
+  const cached = ohlcvCache.get<OHLCVBar[]>(key);
+  if (cached) {
+    const firstBarTime = cached.length > 0 ? new Date(cached[0].time + "T12:00:00Z").getTime() : 0;
+    const lagDays = (firstBarTime - start.getTime()) / 86_400_000;
+    if (lagDays <= 45) {
+      return cached; // cache covers the requested range
+    }
+    // Cache is stale for this period — evict and re-fetch
+    ohlcvCache.del(key);
+    logger.debug({ ticker, period, interval, lagDays: Math.round(lagDays) }, "OHLCV cache evicted — stale coverage");
+  }
 
-  if (!isIntraday) {
-    // Daily bars: serve from persistent DB store, only pull the missing tail from Yahoo.
-    // getOrFetchDailyBars handles upsert + fallback internally.
-    const fromDate = start.toISOString().split("T")[0];
-    const toDate   = end.toISOString().split("T")[0];
+  let bars: OHLCVBar[];
+  const fromDate = start.toISOString().split("T")[0];
+  const toDate   = end.toISOString().split("T")[0];
+
+  if (isIntraday) {
+    // Intraday: no persistent store — always fetch from Yahoo
+    bars = await fetchYahooRaw(ticker, start, end, interval);
+  } else if (interval === "1d") {
+    // Daily: DB-first strategy — persistent store handles gap-fills on both ends
     bars = await getOrFetchDailyBars(
       ticker, fromDate, toDate,
       (t, p1, p2) => fetchYahooRaw(t, p1, p2, "1d"),
     );
   } else {
-    // Intraday: no persistent store — always fetch from Yahoo
+    // Weekly / monthly: fetch natively from Yahoo with the correct interval.
+    // The DB store only holds daily bars, so we can't reuse it here.
+    // Yahoo Finance supports up to 20Y for weekly and the full history for monthly.
     bars = await fetchYahooRaw(ticker, start, end, interval);
   }
 
   ohlcvCache.set(key, bars);
   persistOhlcv(key, bars as unknown as object);
-  if (!isIntraday) seedShorterPeriods(ticker, period, interval, bars);
+  if (interval === "1d") seedShorterPeriods(ticker, period, interval, bars);
   logger.debug({ ticker, period, interval, bars: bars.length }, "OHLCV fetched");
   return bars;
 }

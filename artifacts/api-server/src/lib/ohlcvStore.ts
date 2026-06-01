@@ -74,6 +74,15 @@ export async function getLastDate(ticker: string): Promise<string | null> {
   return result[0]?.maxDate ?? null;
 }
 
+/** Earliest stored date for a ticker, or null if no rows exist. */
+export async function getFirstDate(ticker: string): Promise<string | null> {
+  const result = await db
+    .select({ minDate: sql<string | null>`MIN(${ohlcvHistoryTable.date})` })
+    .from(ohlcvHistoryTable)
+    .where(eq(ohlcvHistoryTable.ticker, ticker));
+  return result[0]?.minDate ?? null;
+}
+
 /** Bar counts for a list of tickers — used to decide what needs backfilling. */
 export async function getBarCounts(tickers: string[]): Promise<Map<string, number>> {
   if (!tickers.length) return new Map();
@@ -129,9 +138,10 @@ type YahooFetcher = (ticker: string, period1: Date, period2: Date) => Promise<OH
 
 /**
  * Return daily bars for [fromDate, toDate] using a DB-first strategy:
- *   1. If DB has recent data → serve directly (no Yahoo call)
- *   2. If DB is stale/empty → fetch only the missing tail from Yahoo, upsert, return from DB
- *   3. If DB ops fail → fall back to a direct Yahoo call
+ *   1. Check tail freshness (recent end of data)
+ *   2. Check head coverage (old end of data) — if DB doesn't go back far enough, fetch the gap
+ *   3. Upsert any missing bars, then serve from DB
+ *   4. If DB ops fail → fall back to a direct Yahoo call
  */
 export async function getOrFetchDailyBars(
   ticker:     string,
@@ -140,33 +150,54 @@ export async function getOrFetchDailyBars(
   fetchYahoo: YahooFetcher,
 ): Promise<OHLCVBar[]> {
   try {
-    const lastDate = await getLastDate(ticker);
+    const [lastDate, firstDate] = await Promise.all([
+      getLastDate(ticker),
+      getFirstDate(ticker),
+    ]);
 
-    if (lastDate && isCurrent(lastDate)) {
-      const bars = await getHistory(ticker, fromDate, toDate);
-      if (bars.length > 0) return bars;
+    const tailFresh = lastDate !== null && isCurrent(lastDate);
+
+    // ── Gap at the TAIL (recent data missing) ──────────────────────────────
+    if (!tailFresh) {
+      const fetchFrom = lastDate ? addDays(lastDate, 1) : fromDate;
+      const fetchTo   = addDays(todayStr(), 1);
+      if (fetchFrom <= fetchTo) {
+        const newBars = await fetchYahoo(
+          ticker,
+          new Date(fetchFrom + "T12:00:00Z"),
+          new Date(fetchTo   + "T12:00:00Z"),
+        );
+        if (newBars.length > 0) {
+          await upsertBars(ticker, newBars);
+          logger.debug({ ticker, count: newBars.length, from: fetchFrom }, "OHLCV history: tail upsert");
+        }
+      }
     }
 
-    // Pull only the missing tail (or full range if no data at all)
-    const fetchFrom = lastDate ? addDays(lastDate, 1) : fromDate;
-    const fetchTo   = addDays(todayStr(), 1);
-
-    if (fetchFrom <= fetchTo) {
-      const newBars = await fetchYahoo(
-        ticker,
-        new Date(fetchFrom + "T12:00:00Z"),
-        new Date(fetchTo   + "T12:00:00Z"),
-      );
-      if (newBars.length > 0) {
-        await upsertBars(ticker, newBars);
-        logger.debug({ ticker, count: newBars.length, from: fetchFrom }, "OHLCV history: upserted bars");
+    // ── Gap at the HEAD (requested range older than what's stored) ─────────
+    // Allow a 10-day buffer for weekends / holidays before triggering a fetch.
+    const needsHistory = firstDate === null || addDays(fromDate, 10) < firstDate;
+    if (needsHistory) {
+      const fetchFrom = fromDate;
+      const fetchTo   = firstDate ? addDays(firstDate, -1) : addDays(todayStr(), 1);
+      if (fetchFrom < fetchTo) {
+        logger.debug({ ticker, from: fetchFrom, to: fetchTo }, "OHLCV history: fetching historical gap");
+        const oldBars = await fetchYahoo(
+          ticker,
+          new Date(fetchFrom + "T12:00:00Z"),
+          new Date(fetchTo   + "T12:00:00Z"),
+        );
+        if (oldBars.length > 0) {
+          await upsertBars(ticker, oldBars);
+          logger.debug({ ticker, count: oldBars.length, from: fetchFrom }, "OHLCV history: head upsert");
+        }
       }
     }
 
     const bars = await getHistory(ticker, fromDate, toDate);
     if (bars.length > 0) return bars;
 
-    // DB came back empty after upsert (e.g. ticker had no data in Yahoo for that range)
+    // DB came back empty after upserts (e.g. ticker had no Yahoo data for range)
     return fetchYahoo(
       ticker,
       new Date(fromDate + "T12:00:00Z"),

@@ -7,3 +7,4 @@
 - [Platform upgrades v1.3](platform-upgrades-v1.3.md) — regime v1.3 field names, IS/OOS split design, alert DB schema, AI narrative toggle, and AnalysisResult field gotchas.
 - [Adaptive scoring architecture](adaptive-scoring.md) — optimalWeights stored in CalibrationEntry; calcAtlasScore accepts ScoreOpts; IC quality caps confidence; contrarian flag propagates to narrative and Dashboard badge
 - [Pattern overlays architecture](pattern-overlays.md) — multi-scale bull/bear flag detection; use poleNetMove (not H-L range) for target projection; 3M signals, 6M+ swing points
+- [OHLCV cache architecture](ohlcv-cache-architecture.md) — weekly/monthly must go direct to Yahoo (not DB store); blob cache needs coverage validation or stale 2Y data serves for 5Y/ALL
