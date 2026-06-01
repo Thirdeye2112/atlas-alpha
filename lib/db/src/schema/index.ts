@@ -3,3 +3,4 @@ export * from "./stockCache";
 export * from "./calibration";
 export * from "./signalLog";
 export * from "./alerts";
+export * from "./ohlcvHistory";

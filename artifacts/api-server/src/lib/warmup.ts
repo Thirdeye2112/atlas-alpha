@@ -1,5 +1,7 @@
 import { SCANNER_UNIVERSE } from "./scannerUniverse.js";
 import { runFullAnalysis } from "./analysisEngine.js";
+import { fetchYahooRaw } from "./marketData.js";
+import { runOhlcvBackfill, getBackfillState } from "./ohlcvStore.js";
 import { analysisCache, ohlcvCache, quoteCache } from "./cache.js";
 import { logger } from "./logger.js";
 
@@ -90,6 +92,15 @@ export async function runWarmup(label = "startup"): Promise<void> {
     { loaded: state.loaded, failed: state.failed, durationMs, label },
     "Cache warmup complete"
   );
+
+  // Fire-and-forget: ensure all 373 tickers have 2Y of daily bars in ohlcv_history.
+  // First boot does a full 2Y seed (~2 min background job); subsequent boots
+  // only fetch the missing tail (last bar → today) and skip up-to-date tickers.
+  if (!getBackfillState().running) {
+    runOhlcvBackfill(SCANNER_UNIVERSE, fetchYahooRaw).catch(err =>
+      logger.error({ err, label }, "OHLCV backfill failed")
+    );
+  }
 }
 
 // ── Scheduler ─────────────────────────────────────────────────────────────────

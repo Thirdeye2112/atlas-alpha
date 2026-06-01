@@ -1,6 +1,7 @@
 import YahooFinanceClass from "yahoo-finance2";
 import { quoteCache, ohlcvCache } from "./cache.js";
 import { persistQuote, persistOhlcv } from "./dbCache.js";
+import { getOrFetchDailyBars } from "./ohlcvStore.js";
 import { logger } from "./logger.js";
 
 const yahooFinance = new YahooFinanceClass({ suppressNotices: ["yahooSurvey"] });
@@ -247,26 +248,62 @@ function seedShorterPeriods(ticker: string, period: string, interval: string, ba
   }
 }
 
+const INTRADAY_INTERVALS = new Set(["1m","2m","5m","15m","30m","60m","90m","1h"]);
+const VALID_INTERVALS = ["1m","2m","5m","15m","30m","60m","90m","1h","1d","5d","1wk","1mo","3mo"] as const;
+type ValidInterval = typeof VALID_INTERVALS[number];
+
+/**
+ * Raw Yahoo Finance OHLCV fetch — no caching, no DB.
+ * Exported so ohlcvStore.ts can inject it as a callback and warmup.ts can call it directly.
+ */
+export async function fetchYahooRaw(
+  ticker:   string,
+  period1:  Date,
+  period2:  Date,
+  interval = "1d",
+): Promise<OHLCVBar[]> {
+  const isIntraday = INTRADAY_INTERVALS.has(interval);
+  const mapped: ValidInterval = (VALID_INTERVALS.includes(interval as ValidInterval) ? interval : "1d") as ValidInterval;
+
+  const historical = await yahooCall(() => yahooFinance.chart(ticker, {
+    period1,
+    period2,
+    interval: mapped,
+  }));
+
+  return (historical.quotes ?? [])
+    .filter(q => q.open != null && q.close != null)
+    .map(q => {
+      const d = q.date instanceof Date ? q.date : new Date(String(q.date));
+      return {
+        time:   isIntraday ? d.toISOString() : d.toISOString().split("T")[0],
+        open:   q.open   ?? 0,
+        high:   q.high   ?? 0,
+        low:    q.low    ?? 0,
+        close:  q.close  ?? 0,
+        volume: q.volume ?? 0,
+      };
+    });
+}
+
 export async function fetchOHLCV(ticker: string, period = "3mo", interval = "1d"): Promise<OHLCVBar[]> {
   const key = `${ticker}:${period}:${interval}`;
   const cached = ohlcvCache.get<OHLCVBar[]>(key);
   if (cached) return cached;
 
-  const end = new Date();
+  const isIntraday = INTRADAY_INTERVALS.has(interval);
+
+  const end   = new Date();
   const start = new Date();
-
-  const intradayIntervals = new Set(["1m","2m","5m","15m","30m","60m","90m","1h"]);
-  const isIntraday = intradayIntervals.has(interval);
-
   if (period === "max") {
     start.setFullYear(end.getFullYear() - 20);
   } else {
     switch (period) {
-      case "1d":  start.setDate(end.getDate() - 1); break;
-      case "5d":  start.setDate(end.getDate() - 5); break;
-      case "1mo": start.setMonth(end.getMonth() - 1); break;
-      case "3mo": start.setMonth(end.getMonth() - 3); break;
-      case "6mo": start.setMonth(end.getMonth() - 6); break;
+      case "1d":  start.setDate(end.getDate() - 1);         break;
+      case "5d":  start.setDate(end.getDate() - 5);         break;
+      case "1mo": start.setMonth(end.getMonth() - 1);       break;
+      case "3mo": start.setMonth(end.getMonth() - 3);       break;
+      case "6mo": start.setMonth(end.getMonth() - 6);       break;
       case "1y":  start.setFullYear(end.getFullYear() - 1); break;
       case "2y":  start.setFullYear(end.getFullYear() - 2); break;
       case "5y":  start.setFullYear(end.getFullYear() - 5); break;
@@ -274,39 +311,25 @@ export async function fetchOHLCV(ticker: string, period = "3mo", interval = "1d"
     }
   }
 
-  const validIntervals = ["1m","2m","5m","15m","30m","60m","90m","1h","1d","5d","1wk","1mo","3mo"] as const;
-  type ValidInterval = typeof validIntervals[number];
-  const mappedInterval: ValidInterval = (validIntervals.includes(interval as ValidInterval) ? interval : "1d") as ValidInterval;
+  let bars: OHLCVBar[];
 
-  const historical = await yahooCall(() => yahooFinance.chart(ticker, {
-    period1: start,
-    period2: end,
-    interval: mappedInterval,
-  }));
-
-  const bars: OHLCVBar[] = (historical.quotes ?? [])
-    .filter(q => q.open != null && q.close != null)
-    .map(q => {
-      const date = q.date instanceof Date ? q.date : new Date(String(q.date));
-      const time = isIntraday
-        ? date.toISOString()
-        : date.toISOString().split("T")[0];
-      return {
-        time,
-        open: q.open ?? 0,
-        high: q.high ?? 0,
-        low: q.low ?? 0,
-        close: q.close ?? 0,
-        volume: q.volume ?? 0,
-      };
-    });
+  if (!isIntraday) {
+    // Daily bars: serve from persistent DB store, only pull the missing tail from Yahoo.
+    // getOrFetchDailyBars handles upsert + fallback internally.
+    const fromDate = start.toISOString().split("T")[0];
+    const toDate   = end.toISOString().split("T")[0];
+    bars = await getOrFetchDailyBars(
+      ticker, fromDate, toDate,
+      (t, p1, p2) => fetchYahooRaw(t, p1, p2, "1d"),
+    );
+  } else {
+    // Intraday: no persistent store — always fetch from Yahoo
+    bars = await fetchYahooRaw(ticker, start, end, interval);
+  }
 
   ohlcvCache.set(key, bars);
-  persistOhlcv(key, bars as unknown as object); // fire-and-forget DB write
-
-  // Pre-warm shorter-period cache keys so the chart doesn't need a second fetch
-  seedShorterPeriods(ticker, period, interval, bars);
-
+  persistOhlcv(key, bars as unknown as object);
+  if (!isIntraday) seedShorterPeriods(ticker, period, interval, bars);
   logger.debug({ ticker, period, interval, bars: bars.length }, "OHLCV fetched");
   return bars;
 }
