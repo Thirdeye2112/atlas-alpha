@@ -67,11 +67,11 @@ function buildResult(
     { weights: calEntry?.optimalWeights ?? null, rankIC: calEntry?.rankIC, icRating: calEntry?.icRating }
   );
 
-  // Display-only signals — skipped in scanner/warmup light-mode paths to reduce CPU per cycle
-  const patterns         = lightMode
-    ? { patterns: [], marketStructure: "ranging" as const, supportLevel: 0, resistanceLevel: 0 }
-    : calcPatterns(bars, trend, volatility);
-  const chartSignals     = lightMode ? [] : calcChartSignals(bars);
+  // calcPatterns runs on already-fetched daily bars (fast, ~0.1ms per ticker);
+  // always computed so pattern labels surface in scanner rows.
+  // calcChartSignals / patternOverlays remain skipped in light-mode (expensive).
+  const patterns     = calcPatterns(bars, trend, volatility);
+  const chartSignals = lightMode ? [] : calcChartSignals(bars);
   const patternOverlays  = lightMode ? [] : calcPatternOverlaysMultiTF(bars, weeklyBars);
 
   // TA overlays — always computed (fast, ≤1ms each); omitted from scanner light-mode paths

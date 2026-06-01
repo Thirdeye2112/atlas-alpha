@@ -33,6 +33,51 @@ type SortDir = "asc" | "desc";
 /** Polling interval while scan is in progress */
 const POLL_MS = 2000;
 
+// ── Pattern chip config ───────────────────────────────────────────────────────
+const PATTERN_ABBREV: Record<string, string> = {
+  "Bearish Island Reversal": "ISLAND↓",
+  "Bullish Island Reversal": "ISLAND↑",
+  "Rising Wedge":            "RISE WDG",
+  "Falling Wedge":           "FALL WDG",
+  "Bull Flag":               "FLAG↑",
+  "Bear Flag":               "FLAG↓",
+  "Cup and Handle":          "C&H",
+  "Head and Shoulders":      "H&S",
+  "Inv Head and Shoulders":  "INV H&S",
+  "Ascending Triangle":      "ASC TRI",
+  "Descending Triangle":     "DESC TRI",
+  "Symmetrical Triangle":    "SYM TRI",
+  "Double Top":              "DBL TOP",
+  "Double Bottom":           "DBL BOT",
+  "BB Breakout":             "BB↑",
+  "BB Breakdown":            "BB↓",
+  "Golden Cross":            "GOLD×",
+  "Death Cross":             "DEATH×",
+  "Morning Star":            "MRN★",
+  "Morning Doji Star":       "MRN DOJI",
+  "Evening Star":            "EVE★",
+  "Evening Doji Star":       "EVE DOJI",
+  "Three White Soldiers":    "3 SOLD",
+  "Three Black Crows":       "3 CROW",
+  "Volatility Squeeze":      "VOL SQZ",
+  "NR7 Compression":         "NR7",
+  "Inside Day":              "IB",
+  "Distribution Top":        "DIST TOP",
+  "Parabolic Rise":          "PARABOLIC",
+};
+const BEARISH_PATTERNS = new Set([
+  "Bearish Island Reversal", "Rising Wedge", "Bear Flag",
+  "Head and Shoulders", "Descending Triangle", "Double Top", "Distribution Top",
+  "BB Breakdown", "Death Cross", "Evening Star", "Evening Doji Star",
+  "Three Black Crows",
+]);
+const BULLISH_PATTERNS = new Set([
+  "Bullish Island Reversal", "Falling Wedge", "Bull Flag", "Cup and Handle",
+  "Inv Head and Shoulders", "Ascending Triangle", "Double Bottom",
+  "BB Breakout", "Golden Cross", "Morning Star", "Morning Doji Star",
+  "Three White Soldiers",
+]);
+
 function refetchInterval(query: { state: { data?: ScannerResponse } }) {
   return (!query.state.data || !query.state.data.complete) ? POLL_MS : false;
 }
@@ -496,6 +541,17 @@ function ScannerTable({
                               ? "bg-warning/20 text-warning font-semibold"
                               : "text-muted-foreground bg-muted"
                           )}>{c}</span>
+                        );
+                      })}
+                      {((row as ScannerResult & { patternLabels?: string[] }).patternLabels ?? []).slice(0, 3).map((p, i) => {
+                        const label = PATTERN_ABBREV[p] ?? p.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 7);
+                        return (
+                          <span key={`p${i}`} title={p} className={cn(
+                            "text-xs px-1 rounded font-mono font-semibold",
+                            BEARISH_PATTERNS.has(p) ? "bg-destructive/20 text-destructive" :
+                            BULLISH_PATTERNS.has(p) ? "bg-success/20 text-success" :
+                            "bg-muted/60 text-muted-foreground"
+                          )}>{label}</span>
                         );
                       })}
                     </div>

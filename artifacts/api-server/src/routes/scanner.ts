@@ -140,6 +140,8 @@ function toRow(a: AnalysisResult) {
     ),
     assetType: getAssetType(ticker),
     isDistorted: isStructurallyDistorted(ticker),
+    // Pattern recognition labels from indicators (Bearish Island Reversal, Rising Wedge, Bull Flag, Inside Day)
+    patternLabels: (a.patterns?.patterns ?? []) as string[],
   };
 }
 
