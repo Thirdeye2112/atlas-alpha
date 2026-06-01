@@ -1225,6 +1225,10 @@ components:
           oneOf:
             - $ref: "#/components/schemas/WeeklyContextResult"
             - type: "null"
+        pullbackSetup:
+          oneOf:
+            - $ref: "#/components/schemas/PullbackReversalResult"
+            - type: "null"
         cachedAt:
           type: string
       required:
@@ -1371,6 +1375,30 @@ components:
           type: string
           enum: [bullish, bearish, neutral]
       required: [weeklyTrend, weeklyRsi, weeklyMacdBullish, weeklyAboveSma20, weeklyAboveSma50, weeklyAlignment]
+
+    PullbackReversalResult:
+      type: object
+      properties:
+        classification:
+          type: string
+          enum: [pullback, reversal, ambiguous]
+        pullbackScore:
+          type: number
+          description: "0–100: >62 = pullback (buyable dip), <38 = reversal (trend change)"
+        keySignals:
+          type: array
+          items:
+            type: object
+            properties:
+              label:
+                type: string
+              sentiment:
+                type: string
+                enum: [bullish, bearish, neutral]
+            required: [label, sentiment]
+        summary:
+          type: string
+      required: [classification, pullbackScore, keySignals, summary]
 
     PatternOverlay:
       type: object

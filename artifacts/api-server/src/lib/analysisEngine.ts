@@ -11,6 +11,7 @@ import {
 } from "./indicators.js";
 import { calcAtlasScore, type AtlasAlphaScore } from "./scoring.js";
 import { calcPatternOverlaysMultiTF, type PatternOverlay } from "./patternOverlays.js";
+import { calcPullbackReversal, type PullbackReversalResult } from "./pullbackReversal.js";
 import { analysisCache } from "./cache.js";
 import { SCANNER_UNIVERSE } from "./scannerUniverse.js";
 import { calibrationStore } from "./calibrationStore.js";
@@ -34,6 +35,7 @@ export interface AnalysisResult {
   fibLevels: FibLevelsResult | null;
   volumeProfile: VolumeProfileResult | null;
   weeklyContext: WeeklyContextResult | null;
+  pullbackSetup: PullbackReversalResult | null;
   historicalDate?: string;
   cachedAt: string;
 }
@@ -78,6 +80,7 @@ function buildResult(
   const fibLevels     = lightMode ? null : calcFibLevels(bars);
   const volumeProfile = lightMode ? null : calcVolumeProfile(bars);
   const weeklyContext = lightMode ? null : calcWeeklyContext(weeklyBars);
+  const pullbackSetup = calcPullbackReversal(bars, trend, momentum, volume, exhaustion);
 
   return {
     quote: quoteOverride,
@@ -96,6 +99,7 @@ function buildResult(
     fibLevels,
     volumeProfile,
     weeklyContext,
+    pullbackSetup,
     ...(historicalDate ? { historicalDate } : {}),
     cachedAt: new Date().toISOString(),
   };

@@ -13,6 +13,7 @@ import type { MomentumIndicators } from './momentumIndicators';
 import type { OptionsAnalysis } from './optionsAnalysis';
 import type { PatternDetection } from './patternDetection';
 import type { PatternOverlay } from './patternOverlay';
+import type { PullbackReversalResult } from './pullbackReversalResult';
 import type { RelativeStrength } from './relativeStrength';
 import type { StockQuote } from './stockQuote';
 import type { TrendIndicators } from './trendIndicators';
@@ -37,5 +38,6 @@ export interface StockAnalysis {
   fibLevels?: FibLevelsResult | null;
   volumeProfile?: VolumeProfileResult | null;
   weeklyContext?: WeeklyContextResult | null;
+  pullbackSetup?: PullbackReversalResult | null;
   cachedAt: string;
 }

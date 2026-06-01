@@ -491,6 +491,37 @@ export interface WeeklyContextResult {
   weeklyAlignment: WeeklyContextResultWeeklyAlignment;
 }
 
+export type PullbackReversalResultClassification = typeof PullbackReversalResultClassification[keyof typeof PullbackReversalResultClassification];
+
+
+export const PullbackReversalResultClassification = {
+  pullback: 'pullback',
+  reversal: 'reversal',
+  ambiguous: 'ambiguous',
+} as const;
+
+export type PullbackReversalResultKeySignalsItemSentiment = typeof PullbackReversalResultKeySignalsItemSentiment[keyof typeof PullbackReversalResultKeySignalsItemSentiment];
+
+
+export const PullbackReversalResultKeySignalsItemSentiment = {
+  bullish: 'bullish',
+  bearish: 'bearish',
+  neutral: 'neutral',
+} as const;
+
+export type PullbackReversalResultKeySignalsItem = {
+  label: string;
+  sentiment: PullbackReversalResultKeySignalsItemSentiment;
+};
+
+export interface PullbackReversalResult {
+  classification: PullbackReversalResultClassification;
+  /** 0–100: >62 = pullback (buyable dip), <38 = reversal (trend change) */
+  pullbackScore: number;
+  keySignals: PullbackReversalResultKeySignalsItem[];
+  summary: string;
+}
+
 export interface StockAnalysis {
   quote: StockQuote;
   atlasScore: AtlasAlphaScore;
@@ -507,6 +538,7 @@ export interface StockAnalysis {
   fibLevels?: FibLevelsResult | null;
   volumeProfile?: VolumeProfileResult | null;
   weeklyContext?: WeeklyContextResult | null;
+  pullbackSetup?: PullbackReversalResult | null;
   cachedAt: string;
 }
 

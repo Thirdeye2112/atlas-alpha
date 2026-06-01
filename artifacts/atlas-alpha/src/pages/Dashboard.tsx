@@ -1474,6 +1474,53 @@ export default function Dashboard() {
                 fallback={displayAnalysis.atlasScore.signalNarrative}
               />
 
+              {/* Pullback vs Reversal panel */}
+              {!isHistoricalMode && (() => {
+                const ps = (displayAnalysis as unknown as { pullbackSetup?: { classification: string; pullbackScore: number; keySignals: { label: string; sentiment: string }[]; summary: string } | null })?.pullbackSetup;
+                if (!ps) return null;
+                const isPullback  = ps.classification === "pullback";
+                const isReversal  = ps.classification === "reversal";
+                const badgeClass  = isPullback  ? "bg-success/15 text-success border-success/30" :
+                                    isReversal  ? "bg-destructive/15 text-destructive border-destructive/30" :
+                                                  "bg-zinc-700/20 text-muted-foreground border-border";
+                const barColor    = isPullback  ? "bg-success" : isReversal ? "bg-destructive" : "bg-zinc-500";
+                const label       = isPullback ? "PULLBACK" : isReversal ? "REVERSAL" : "AMBIGUOUS";
+                return (
+                  <div className="mt-6 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xs font-bold text-muted-foreground tracking-wider">DIP BUY vs REVERSAL</h3>
+                      <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded border tracking-widest font-mono", badgeClass)}>
+                        {label}
+                      </span>
+                    </div>
+                    {/* Score bar */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10px] font-mono text-muted-foreground">
+                        <span>REVERSAL</span>
+                        <span className={cn("font-bold", isPullback ? "text-success" : isReversal ? "text-destructive" : "text-muted-foreground")}>{ps.pullbackScore}/100</span>
+                        <span>PULLBACK</span>
+                      </div>
+                      <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                        <div className={cn("h-full rounded-full transition-all", barColor)} style={{ width: `${ps.pullbackScore}%` }} />
+                      </div>
+                    </div>
+                    {/* Summary */}
+                    <p className="text-[10px] text-muted-foreground font-mono leading-relaxed">{ps.summary}</p>
+                    {/* Key signals */}
+                    <div className="space-y-1">
+                      {ps.keySignals.slice(0, 5).map((sig, i) => (
+                        <div key={i} className="flex items-start gap-1.5 text-[10px] font-mono">
+                          <span className={cn("mt-0.5 flex-shrink-0", sig.sentiment === "bullish" ? "text-success" : sig.sentiment === "bearish" ? "text-destructive" : "text-muted-foreground")}>
+                            {sig.sentiment === "bullish" ? "▲" : sig.sentiment === "bearish" ? "▼" : "—"}
+                          </span>
+                          <span className="text-muted-foreground">{sig.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
               <div className="mt-6">
                 <h3 className="text-xs font-bold text-muted-foreground tracking-wider mb-2">KEY CATALYSTS</h3>
                 <ul className="list-disc pl-4 space-y-1 text-sm text-secondary-foreground">

@@ -257,6 +257,15 @@ export const GetStockAnalysisResponse = zod.object({
   "weeklyAboveSma50": zod.boolean(),
   "weeklyAlignment": zod.enum(['bullish', 'bearish', 'neutral'])
 }),zod.null()]).optional(),
+  "pullbackSetup": zod.union([zod.object({
+  "classification": zod.enum(['pullback', 'reversal', 'ambiguous']),
+  "pullbackScore": zod.number().describe('0–100: >62 = pullback (buyable dip), <38 = reversal (trend change)'),
+  "keySignals": zod.array(zod.object({
+  "label": zod.string(),
+  "sentiment": zod.enum(['bullish', 'bearish', 'neutral'])
+})),
+  "summary": zod.string()
+}),zod.null()]).optional(),
   "cachedAt": zod.string()
 })
 
