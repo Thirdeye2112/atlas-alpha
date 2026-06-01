@@ -98,7 +98,8 @@ function toRow(a: AnalysisResult) {
       a.trend,
       (a.quote.sector as string | null) ?? null,
       a.quote.volume as number,
-      getGapPercent(a)
+      getGapPercent(a),
+      a.exhaustion,            // surface Distribution Top, Parabolic Rise, Double Top in all tabs
     ),
     assetType: getAssetType(ticker),
     isDistorted: isStructurallyDistorted(ticker),

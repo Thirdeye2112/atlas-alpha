@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useMemo } from "react";
+import React, { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   useGetScannerTopLongs,             getGetScannerTopLongsQueryKey,
@@ -97,12 +97,14 @@ function ScannerTable({
   showGap,
   showGapScore,
   showKeyLevel,
+  autoFetch = false,
 }: {
   response?: ScannerResponse;
   isLoading: boolean;
   showGap?: boolean;
   showGapScore?: boolean;
   showKeyLevel?: boolean;
+  autoFetch?: boolean;
 }) {
   const [sortCol, setSortCol] = useState<SortCol | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -113,6 +115,7 @@ function ScannerTable({
   const [btDone, setBtDone]   = useState(0);
   const [btTotal, setBtTotal] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
+  const autoFetchedRef = useRef(false);
 
   function handleSort(col: SortCol) {
     if (sortCol === col) {
@@ -174,6 +177,15 @@ function ScannerTable({
 
     setBtLoading(false);
   }, [tickers]);
+
+  // Auto-trigger IC fetch for high-priority tabs when scan completes
+  useEffect(() => {
+    if (!autoFetch || !complete || data.length === 0) return;
+    if (autoFetchedRef.current || btLoading || icMap.size > 0) return;
+    autoFetchedRef.current = true;
+    runBacktest();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoFetch, complete, data.length]);
 
   // ── Sort ────────────────────────────────────────────────────────────────────
 
@@ -379,19 +391,28 @@ function ScannerTable({
                     {row.relativeVolume.toFixed(1)}x
                   </td>
 
-                  {/* ── IC 10D column ───────────────────────────────────────── */}
-                  <td className="px-3 py-2 text-right tabular-nums">
+                  {/* ── IC 5D column ───────────────────────────────────────── */}
+                  <td className="px-3 py-2 text-right">
                     {ic ? (
-                      <span className={cn("font-bold text-xs", icColor(ic.rankICRating))}>
-                        {ic.rankIC >= 0 ? "+" : ""}{ic.rankIC.toFixed(3)}
-                        <span className="text-muted-foreground/40 font-normal ml-0.5 text-[10px]">
-                          t{ic.icTStat >= 0 ? "+" : ""}{ic.icTStat.toFixed(1)}
+                      <div className="flex flex-col items-end gap-0.5">
+                        <span className={cn("font-bold text-xs tabular-nums", icColor(ic.rankICRating))}>
+                          {ic.rankIC >= 0 ? "+" : ""}{ic.rankIC.toFixed(3)}
                         </span>
-                      </span>
+                        <span className={cn(
+                          "text-[9px] font-bold tracking-wide px-1 rounded leading-[14px]",
+                          ic.rankICRating === "noise"
+                            ? "text-muted-foreground/40 bg-muted/30"
+                            : ic.rankIC > 0
+                              ? "text-success/80 bg-success/10"
+                              : "text-destructive/80 bg-destructive/10"
+                        )}>
+                          {ic.rankICRating === "noise" ? "NOISE" : ic.rankIC > 0 ? "▲ CONF" : "▼ CONT"}
+                        </span>
+                      </div>
                     ) : (
                       btLoading
-                        ? <span className="text-muted-foreground/30 animate-pulse">…</span>
-                        : <span className="text-muted-foreground/30">—</span>
+                        ? <span className="text-muted-foreground/30 animate-pulse text-xs">…</span>
+                        : <span className="text-muted-foreground/30 text-xs">—</span>
                     )}
                   </td>
 
@@ -496,8 +517,8 @@ export default function Scanner() {
         </TabsList>
 
         <div className="flex-1 overflow-auto mt-4">
-          <TabsContent value="longs"      className="m-0 h-full"><ScannerTable response={longs}      isLoading={lLoading}    /></TabsContent>
-          <TabsContent value="shorts"     className="m-0 h-full"><ScannerTable response={shorts}     isLoading={sLoading}    /></TabsContent>
+          <TabsContent value="longs"      className="m-0 h-full"><ScannerTable response={longs}      isLoading={lLoading}    autoFetch /></TabsContent>
+          <TabsContent value="shorts"     className="m-0 h-full"><ScannerTable response={shorts}     isLoading={sLoading}    autoFetch /></TabsContent>
           <TabsContent value="breakouts"  className="m-0 h-full"><ScannerTable response={breakouts}  isLoading={bLoading}    /></TabsContent>
           <TabsContent value="breakdowns" className="m-0 h-full"><ScannerTable response={breakdowns} isLoading={bdLoading}   /></TabsContent>
           <TabsContent value="gap-setup-long" className="m-0 h-full flex flex-col gap-3">

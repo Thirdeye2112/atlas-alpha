@@ -1,0 +1,15 @@
+#1 — MSFT (score 72, IC +0.158 / strong, conf 67%, no flags)
+The cleanest setup in the entire scan. Strong positive IC means the walk-forward backtest confirms that elevated scores for MSFT actually lead to positive returns — not contrarian. No distribution top, no parabolic extension, no structural warnings. The IC quality is the highest positive reading in the batch. This is the one pick where the score, the history, and the structure all point the same direction.
+
+#2 — ORCL (score 83, IC +0.065 / moderate, conf 83%, ⚠ dist flag)
+Very strong score, positive (confirmatory) IC, high confidence. The one caveat is a mild distribution flag — stochastic elevated. Given that the IC is positive and confidence is 83%, the momentum is likely still mid-run rather than exhausting. Worth watching the volume on Monday's open; if it holds on light volume that's the flag to reassess.
+
+🔴 Best Shorts for Monday
+#1 — CRM (score 62, IC −0.242 / STRONG contrarian, parabolic rise)
+This is the strongest negative IC in the entire scan — −0.242. That means historically when CRM's score rises, it falls. Score is 62 (elevated but not extreme), and the parabolic rise detector flagged it. The parabolic move creates the timing — the "hump" is forming. Best short risk/reward of the batch because the score isn't yet at the top so there's room to push it higher before the entry, or short the current level with a tight stop above the parabolic peak.
+
+#2 — AVGO (score 76, IC −0.163 / strong contrarian, conf 83%)
+Strong negative IC, high score, high confidence, and — crucially — no distribution top or parabolic flag yet. That last part actually makes it a cleaner short entry: the exhaustion indicators haven't fired yet, meaning the move hasn't peaked on the indicators. The IC is saying the price structure is where it gets sold. High short quality because the IC magnitude is reliable.
+
+#3 — FSLR (score 79, IC −0.135 / strong contrarian, distribution_top active, conf 83%)
+Contrarian IC + distribution exhaustion signal already firing. This one may be further along in the setup — the distribution top is already active, meaning you're closer to the turn. Tighter stop, more reactive to volume behavior.
