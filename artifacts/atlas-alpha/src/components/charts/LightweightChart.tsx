@@ -46,6 +46,12 @@ export interface ExtendedHoursPoint {
   type: "pre" | "post";
 }
 
+/** Per-bar Atlas Score overlay — one entry per OHLCV bar, value 0–100. */
+export interface ScoreOverlayPoint {
+  time: string;
+  score: number;
+}
+
 interface Props {
   data: OHLCVBar[];
   height?: number;
@@ -60,6 +66,8 @@ interface Props {
   swingLookback?: number;
   patternOverlays?: PatternOverlay[];
   extendedHours?: ExtendedHoursPoint;
+  /** Per-bar score overlay rendered as a color-coded histogram strip below the candles. */
+  scoreOverlay?: ScoreOverlayPoint[];
 }
 
 function toChartTime(time: string): UTCTimestamp | string {
@@ -170,6 +178,7 @@ export default function LightweightChart({
   swingLookback = 3,
   patternOverlays = [],
   extendedHours,
+  scoreOverlay = [],
 }: Props) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const tooltipRef        = useRef<HTMLDivElement>(null);
@@ -233,13 +242,23 @@ export default function LightweightChart({
 
     candlestickSeries.setData(formattedData);
 
-    // Volume histogram — bottom 22% of chart, colored by candle direction
+    // When score overlay is active: three-pane layout (candles / score / volume).
+    // Explicit bottom margin on the candlestick scale keeps it in the top portion.
+    const hasScore = scoreOverlay.length > 0;
+    if (hasScore) {
+      candlestickSeries.priceScale().applyOptions({
+        scaleMargins: { top: 0, bottom: 0.38 },
+      });
+    }
+
+    // Volume histogram — bottom ~18–22% of chart, colored by candle direction
     const volumeSeries = chart.addSeries(HistogramSeries, {
       priceFormat: { type: "volume" },
       priceScaleId: "volume",
     });
     volumeSeries.priceScale().applyOptions({
-      scaleMargins: { top: 0.78, bottom: 0 },
+      // Slightly smaller when score strip is also shown
+      scaleMargins: { top: hasScore ? 0.83 : 0.78, bottom: 0 },
     });
     volumeSeries.setData(
       formattedData.map(bar => ({
@@ -250,6 +269,41 @@ export default function LightweightChart({
           : "rgba(239,68,68,0.35)",
       }))
     );
+
+    // ── Score overlay strip (1M view) — per-bar Atlas Score 0–100 ─────────────
+    // Each bar is colored by zone: green ≥65, amber 45–64, red <45.
+    if (hasScore) {
+      const scoreSeries = chart.addSeries(HistogramSeries, {
+        priceFormat: { type: "price", precision: 0, minMove: 1 },
+        priceScaleId: "score",
+        title: "",
+        lastValueVisible: false,
+        priceLineVisible: false,
+      });
+      scoreSeries.priceScale().applyOptions({
+        scaleMargins: { top: 0.63, bottom: 0.19 },
+        borderVisible: false,
+      });
+      scoreSeries.setData(
+        scoreOverlay.map(p => ({
+          time: toChartTime(p.time) as UTCTimestamp,
+          value: p.score,
+          color: p.score >= 65
+            ? "rgba(52,211,153,0.55)"
+            : p.score >= 45
+            ? "rgba(251,191,36,0.55)"
+            : "rgba(239,68,68,0.55)",
+        }))
+      );
+      scoreSeries.createPriceLine({
+        price: 50,
+        color: "rgba(255,255,255,0.10)",
+        lineStyle: LineStyle.Dashed,
+        lineWidth: 1,
+        axisLabelVisible: false,
+        title: "",
+      });
+    }
 
     // Moving average lines — SMA50, SMA87, SMA200 — computed from bar data, full-width
     const closes = data.map(d => d.close);
@@ -511,7 +565,7 @@ export default function LightweightChart({
       chartRef.current = null;
       seriesRef.current = null;
     };
-  }, [data, height, onCandleClick, priceLines, signals, showSwingPoints, swingLookback, patternOverlays, extendedHours]);
+  }, [data, height, onCandleClick, priceLines, signals, showSwingPoints, swingLookback, patternOverlays, extendedHours, scoreOverlay]);
 
   return (
     <div

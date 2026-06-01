@@ -7,7 +7,7 @@ import {
   OHLCVBar,
 } from "@workspace/api-client-react";
 import WatchlistSidebar from "@/components/layout/WatchlistSidebar";
-import LightweightChart, { ChartPriceLine, ChartLineSeries, ChartSignalMarker, ExtendedHoursPoint, PatternOverlay } from "@/components/charts/LightweightChart";
+import LightweightChart, { ChartPriceLine, ChartLineSeries, ChartSignalMarker, ExtendedHoursPoint, PatternOverlay, ScoreOverlayPoint } from "@/components/charts/LightweightChart";
 import ScoreGauge from "@/components/charts/ScoreGauge";
 import MiniGauge from "@/components/charts/MiniGauge";
 import RsiMiniChart from "@/components/charts/RsiMiniChart";
@@ -853,6 +853,7 @@ export default function Dashboard() {
   const [selectedBar, setSelectedBar] = useState<{ date: string; close: number } | null>(null);
   const [showVwap, setShowVwap] = useState(false);
   const [vwapAnchor, setVwapAnchor] = useState<"3M" | "6M" | "1Y">("3M");
+  const [scoreTimeline, setScoreTimeline] = useState<{ date: string; score: number }[] | null>(null);
 
   // Live analysis — staleTime matches server cache TTL (5 min) to avoid re-fetching fresh data
   const { data: analysis, isLoading: analysisLoading } = useGetStockAnalysis(ticker, {
@@ -929,6 +930,38 @@ export default function Dashboard() {
     if (points.length < 2) return [];
     return [{ label: `AVWAP·${vwapAnchor}`, color: "rgba(99,102,241,0.90)", lineStyle: "solid", lineWidth: 1, data: points }];
   }, [showVwap, vwapAnchor, ohlcv]);
+
+  // Score timeline — fetched from backtest IC endpoint when on 1M view.
+  // Resets when ticker changes, re-fetches when switching to/from 1M.
+  useEffect(() => {
+    if (timeframe.period !== "1mo" || !ticker) {
+      setScoreTimeline(null);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/backtest/ic?ticker=${encodeURIComponent(ticker)}&horizon=5`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: any) => {
+        if (cancelled || !d?.timeline) return;
+        setScoreTimeline(d.timeline as { date: string; score: number }[]);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [ticker, timeframe.period]);
+
+  // Per-bar score overlay: map each daily score to all matching 60m bars on that date.
+  // This produces a flat "step" per trading day — fully aligned with the chart's time scale.
+  const scoreOverlayData = useMemo((): ScoreOverlayPoint[] => {
+    if (timeframe.period !== "1mo" || !ohlcv || !scoreTimeline) return [];
+    const scoreByDate = new Map(scoreTimeline.map(p => [p.date, p.score]));
+    const result: ScoreOverlayPoint[] = [];
+    for (const bar of ohlcv) {
+      const date = bar.time.length === 10 ? bar.time : bar.time.slice(0, 10);
+      const score = scoreByDate.get(date);
+      if (score !== undefined) result.push({ time: bar.time, score });
+    }
+    return result;
+  }, [timeframe.period, ohlcv, scoreTimeline]);
 
   // Which analysis to display (historical takes priority when selected)
   const isHistoricalMode = !!selectedBar;
@@ -1082,6 +1115,7 @@ export default function Dashboard() {
                   showSwingPoints={["6mo", "1y", "2y", "5y", "max"].includes(timeframe.period)}
                   swingLookback={timeframe.period === "6mo" ? 3 : timeframe.period === "1y" ? 4 : 5}
                   patternOverlays={displayAnalysis?.patternOverlays as PatternOverlay[] ?? []}
+                  scoreOverlay={scoreOverlayData}
                   extendedHours={(() => {
                     if (!displayAnalysis || timeframe.interval !== "1d") return undefined;
                     const q = displayAnalysis.quote;
