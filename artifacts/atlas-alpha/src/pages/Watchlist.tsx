@@ -83,7 +83,7 @@ function parseCsvPositions(text: string): CsvPosition[] {
   const lines = cleaned.split(/\r?\n/).filter(l => l.trim());
   if (lines.length < 2) return [];
 
-  const header = lines[0].split(",").map(h => h.replace(/['"]/g, "").trim().toLowerCase());
+  const header = lines[0].split(",").map(h => h.replace(/"/g, "").trim().toLowerCase());
 
   const findCol = (...names: string[]): number =>
     names.reduce<number>((found, name) => found >= 0 ? found : header.indexOf(name), -1);
