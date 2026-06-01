@@ -87,6 +87,7 @@ export * from './patternOverlayTimeframe';
 export * from './patternOverlayType';
 export * from './patternTarget';
 export * from './patternTargetRole';
+export * from './refreshWatchlistPrices200';
 export * from './regimeICBreakdown';
 export * from './relativeStrength';
 export * from './scannerResponse';

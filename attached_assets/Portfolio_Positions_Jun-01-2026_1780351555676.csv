@@ -1,0 +1,22 @@
+﻿Account Number,Account Name,Symbol,Description,Quantity,Last Price,Last Price Change,Current Value,Today's Gain/Loss Dollar,Today's Gain/Loss Percent,Total Gain/Loss Dollar,Total Gain/Loss Percent,Percent Of Account,Cost Basis Total,Average Cost Basis,Type
+249873710,Rollover IRA,SPAXX**,HELD IN MONEY MARKET,,,,$816.21,,,,,21.07%,,,Cash,
+249873710,Rollover IRA,DXCM,DEXCOM INC,4,$75.365,+$1.625,$301.46,+$7.50,+2.55%,+$7.50,+2.55%,7.78%,$293.96,$73.49,Cash,
+249873710,Rollover IRA,FBOT,FIDELITY DISRUPTIVE AUTOMATION ETF,9.625,$40.135,+$0.275,$386.29,+$3.40,+0.88%,+$27.62,+7.70%,9.97%,$358.67,$37.26,Cash,
+249873710,Rollover IRA,FBTC,FIDELITY WISE ORIGIN BITCOIN FUND,14.787,$62.07,-$1.83,$917.82,-$27.07,-2.87%,-$441.13,-32.47%,23.70%,$1358.95,$91.90,Cash,
+249873710,Rollover IRA,FDVV,FIDELITY HIGH DIVIDEND ETF,8.048,$61.675,+$0.035,$496.36,+$0.28,+0.05%,+$96.41,+24.10%,12.82%,$399.95,$49.70,Cash,
+249873710,Rollover IRA,IEMG,ISHARES CORE MSCI EMERGING MARKETS ETF,9.625,$85.375,+$1.905,$821.73,+$18.33,+2.28%,+$321.82,+64.37%,21.22%,$499.91,$51.94,Cash,
+249873710,Rollover IRA,ISCB,ISHARES TR MRGSTR SM CP ETF,5.708,$72.49,+$0.1223,$413.77,+$0.69,+0.16%,+$113.79,+37.93%,10.68%,$299.98,$52.55,Cash,
+249873710,Rollover IRA,PSKY,PARAMOUNT SKYDANCE CORP COM CL B,15.541,$11.085,+$0.475,$172.27,+$7.38,+4.47%,-$27.73,-13.87%,4.45%,$200.00,$12.87,Cash,
+249873710,Rollover IRA,Pending activity,,,,,-$452.64,,,,,,,,,
+261356734,ROTH IRA,SPAXX**,HELD IN MONEY MARKET,,,,$838.52,,,,,35.55%,,,Cash,
+261356734,ROTH IRA,FBOT,FIDELITY DISRUPTIVE AUTOMATION ETF,10.622,$40.135,+$0.275,$426.31,+$2.92,+0.68%,+$57.38,+15.55%,18.07%,$368.93,$34.73,Cash,
+261356734,ROTH IRA,FBTC,FIDELITY WISE ORIGIN BITCOIN FUND,4.501,$62.07,-$1.83,$279.37,-$8.24,-2.87%,-$145.06,-34.18%,11.84%,$424.43,$94.30,Cash,
+261356734,ROTH IRA,FDIF,FIDELITY DISRUPTORS ETF,5.439,$39.78,+$0.7211,$216.36,+$3.92,+1.84%,+$16.37,+8.18%,9.17%,$199.99,$36.77,Cash,
+261356734,ROTH IRA,FDVV,FIDELITY HIGH DIVIDEND ETF,5,$61.675,+$0.035,$308.37,+$0.17,+0.05%,+$36.07,+13.24%,13.07%,$272.30,$54.46,Cash,
+261356734,ROTH IRA,ISCB,ISHARES TR MRGSTR SM CP ETF,4,$72.49,+$0.1223,$289.96,+$0.48,+0.16%,+$16.96,+6.21%,12.29%,$273.00,$68.25,Cash,
+
+"The data and information in this spreadsheet is provided to you solely for your use and is not for distribution. The spreadsheet is provided for informational purposes only, and is not intended to provide advice, nor should it be construed as an offer to sell, a solicitation of an offer to buy or a recommendation for any security by Fidelity or any third party. Data and information shown is based on information known to Fidelity as of the date it was exported and is subject to change. It should not be used in place of your account statements or trade confirmations and is not intended for tax reporting purposes. For more information on the data included in this spreadsheet, including any limitations thereof, go to Fidelity.com."
+
+"Brokerage services are provided by Fidelity Brokerage Services LLC (FBS), 900 Salem Street, Smithfield, RI 02917. Custody and other services provided by National Financial Services LLC (NFS). Both are Fidelity Investment companies and members SIPC, NYSE. Neither FBS nor NFS offer crypto as a direct investment nor provide trading or custody services for such assets."
+
+"Date downloaded Jun-01-2026 3:11 p.m ET"

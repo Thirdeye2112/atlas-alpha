@@ -879,6 +879,14 @@ export const AddToWatchlistBody = zod.object({
 
 
 /**
+ * @summary Refresh today G/L for all watchlist items using live quotes
+ */
+export const RefreshWatchlistPricesResponse = zod.object({
+  "updated": zod.number()
+})
+
+
+/**
  * @summary Upsert broker position data for a ticker (creates entry if not present)
  */
 export const UpdateWatchlistPositionParams = zod.object({

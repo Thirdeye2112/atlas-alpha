@@ -1092,6 +1092,10 @@ export type GetScannerGapDownParams = {
 limit?: number;
 };
 
+export type RefreshWatchlistPrices200 = {
+  updated: number;
+};
+
 export type GetBacktestIcParams = {
 ticker: string;
 horizon?: number;

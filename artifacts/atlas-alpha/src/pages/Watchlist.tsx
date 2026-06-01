@@ -5,12 +5,13 @@ import {
   useAddToWatchlist,
   useRemoveFromWatchlist,
   useUpdateWatchlistPosition,
+  useRefreshWatchlistPrices,
 } from "@workspace/api-client-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, formatPercent, getBgColorForScore, getColorForDirection } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
-import { Plus, Trash2, Bell, BellOff, X, CheckCircle2, AlertTriangle, Upload } from "lucide-react";
+import { Plus, Trash2, Bell, BellOff, X, CheckCircle2, AlertTriangle, Upload, RefreshCw } from "lucide-react";
 import { Link } from "wouter";
 
 interface Alert {
@@ -214,6 +215,16 @@ export default function Watchlist() {
   const addMutation = useAddToWatchlist();
   const removeMutation = useRemoveFromWatchlist();
   const positionMutation = useUpdateWatchlistPosition();
+  const [syncStatus, setSyncStatus] = useState<string | null>(null);
+  const syncMutation = useRefreshWatchlistPrices({
+    mutation: {
+      onSuccess: (data) => {
+        qc.invalidateQueries({ queryKey: getGetWatchlistQueryKey() });
+        setSyncStatus(`Updated today's G/L for ${data.updated} position${data.updated !== 1 ? "s" : ""}`);
+        setTimeout(() => setSyncStatus(null), 4000);
+      },
+    },
+  });
 
   const createAlertMutation = useMutation({
     mutationFn: createAlert,
@@ -379,6 +390,19 @@ export default function Watchlist() {
               {csvImporting ? "IMPORTING…" : "IMPORT CSV"}
             </Button>
 
+            {/* Sync today G/L from live quotes */}
+            <Button
+              type="button"
+              variant="outline"
+              disabled={syncMutation.isPending}
+              onClick={() => syncMutation.mutate()}
+              className="font-mono border-border text-muted-foreground hover:text-foreground"
+              title="Refresh today's gain/loss from live prices"
+            >
+              <RefreshCw className={cn("w-4 h-4 mr-2", syncMutation.isPending && "animate-spin")} />
+              {syncMutation.isPending ? "SYNCING…" : "SYNC PRICES"}
+            </Button>
+
             {/* Manual add */}
             <form onSubmit={handleAdd} className="flex gap-2">
               <Input
@@ -392,6 +416,13 @@ export default function Watchlist() {
               </Button>
             </form>
           </div>
+
+          {/* Sync prices status badge */}
+          {syncStatus && (
+            <div className="text-xs font-mono px-3 py-1 rounded border bg-success/10 border-success/30 text-success">
+              ✓ {syncStatus}
+            </div>
+          )}
 
           {/* CSV result badge */}
           {csvStatus && (

@@ -416,6 +416,23 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiError"
 
+  /watchlist/refresh-prices:
+    post:
+      operationId: refreshWatchlistPrices
+      tags: [watchlist]
+      summary: Refresh today G/L for all watchlist items using live quotes
+      responses:
+        "200":
+          description: Number of items updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updated:
+                    type: integer
+                required: [updated]
+
   /watchlist/{ticker}:
     patch:
       operationId: updateWatchlistPosition

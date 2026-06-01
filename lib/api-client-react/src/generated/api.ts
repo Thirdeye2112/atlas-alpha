@@ -50,6 +50,7 @@ import type {
   MarketOverview,
   NarrativeResponse,
   OHLCVBar,
+  RefreshWatchlistPrices200,
   ScannerResponse,
   StockAnalysis,
   StockQuote,
@@ -1619,6 +1620,76 @@ export const useAddToWatchlist = <TError = ErrorType<ApiError>,
         TContext
       > => {
       return useMutation(getAddToWatchlistMutationOptions(options));
+    }
+
+export const getRefreshWatchlistPricesUrl = () => {
+
+
+
+
+  return `/api/watchlist/refresh-prices`
+}
+
+/**
+ * @summary Refresh today G/L for all watchlist items using live quotes
+ */
+export const refreshWatchlistPrices = async ( options?: RequestInit): Promise<RefreshWatchlistPrices200> => {
+
+  return customFetch<RefreshWatchlistPrices200>(getRefreshWatchlistPricesUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRefreshWatchlistPricesMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refreshWatchlistPrices>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof refreshWatchlistPrices>>, TError,void, TContext> => {
+
+const mutationKey = ['refreshWatchlistPrices'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof refreshWatchlistPrices>>, void> = () => {
+
+
+          return  refreshWatchlistPrices(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RefreshWatchlistPricesMutationResult = NonNullable<Awaited<ReturnType<typeof refreshWatchlistPrices>>>
+
+    export type RefreshWatchlistPricesMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Refresh today G/L for all watchlist items using live quotes
+ */
+export const useRefreshWatchlistPrices = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refreshWatchlistPrices>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof refreshWatchlistPrices>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getRefreshWatchlistPricesMutationOptions(options));
     }
 
 export const getUpdateWatchlistPositionUrl = (ticker: string,) => {

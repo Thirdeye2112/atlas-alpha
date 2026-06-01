@@ -97,6 +97,31 @@ router.post("/watchlist", async (req, res): Promise<void> => {
   });
 });
 
+router.post("/watchlist/refresh-prices", async (req, res): Promise<void> => {
+  const entries = await db.select().from(watchlistTable).orderBy(watchlistTable.addedAt);
+  const withQty = entries.filter(e => e.quantity != null && e.quantity > 0);
+
+  let updated = 0;
+  await Promise.allSettled(
+    withQty.map(async (entry) => {
+      try {
+        const q = await fetchQuote(entry.ticker);
+        const todayGainLossDollar = parseFloat(((q.change ?? 0) * (entry.quantity ?? 0)).toFixed(2));
+        const todayGainLossPercent = parseFloat((q.changePercent ?? 0).toFixed(4));
+        await db
+          .update(watchlistTable)
+          .set({ todayGainLossDollar, todayGainLossPercent })
+          .where(eq(watchlistTable.ticker, entry.ticker));
+        updated++;
+      } catch {
+        req.log.warn({ ticker: entry.ticker }, "refresh-prices: quote failed");
+      }
+    })
+  );
+
+  res.json({ updated });
+});
+
 router.patch("/watchlist/:ticker", async (req, res): Promise<void> => {
   const paramTicker = req.params.ticker?.toUpperCase();
   if (!paramTicker) {
