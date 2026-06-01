@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { 
   useGetWatchlist, getGetWatchlistQueryKey,
@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, formatPercent, getBgColorForScore, getColorForDirection } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
-import { Plus, Trash2, Bell, BellOff, X, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, Bell, BellOff, X, CheckCircle2, AlertTriangle, Upload } from "lucide-react";
 import { Link } from "wouter";
 
 interface Alert {
@@ -60,11 +60,40 @@ const CONDITION_LABELS: Record<string, string> = {
   direction_change: "Direction changes",
 };
 
+function parseCsvTickers(text: string): string[] {
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) return [];
+
+  const header = lines[0].split(",").map(h => h.replace(/['"]/g, "").trim().toLowerCase());
+  const colIdx = ["symbol", "ticker", "stock symbol", "security"].reduce<number>(
+    (found, name) => found >= 0 ? found : header.indexOf(name),
+    -1
+  );
+  if (colIdx < 0) return [];
+
+  const tickers: string[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(",");
+    const raw = (cols[colIdx] ?? "").replace(/['"]/g, "").trim().toUpperCase();
+    if (
+      raw &&
+      /^[A-Z]{1,5}(\.[A-Z]{1,2})?$/.test(raw) &&
+      !["--", "N/A", "CASH", "PENDING"].includes(raw)
+    ) {
+      tickers.push(raw);
+    }
+  }
+  return [...new Set(tickers)];
+}
+
 export default function Watchlist() {
   const [ticker, setTicker] = useState("");
   const [alertPanelTicker, setAlertPanelTicker] = useState<string | null>(null);
   const [newCondition, setNewCondition] = useState<"score_above" | "score_below" | "direction_change">("score_above");
   const [newThreshold, setNewThreshold] = useState("70");
+  const [csvStatus, setCsvStatus] = useState<{ added: number; skipped: number } | null>(null);
+  const [csvImporting, setCsvImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const qc = useQueryClient();
 
   const { data: watchlist, isLoading } = useGetWatchlist({
@@ -112,6 +141,47 @@ export default function Watchlist() {
       { data: { ticker: ticker.toUpperCase() } },
       { onSuccess: () => { setTicker(""); qc.invalidateQueries({ queryKey: getGetWatchlistQueryKey() }); } }
     );
+  };
+
+  const handleCsvFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setCsvStatus(null);
+    setCsvImporting(true);
+
+    const text = await file.text();
+    const tickers = parseCsvTickers(text);
+    if (tickers.length === 0) {
+      setCsvImporting(false);
+      setCsvStatus({ added: 0, skipped: 0 });
+      return;
+    }
+
+    const existing = new Set((watchlist ?? []).map(w => w.ticker));
+    let added = 0;
+    let skipped = 0;
+
+    for (const t of tickers) {
+      if (existing.has(t)) { skipped++; continue; }
+      try {
+        await new Promise<void>((resolve, reject) =>
+          addMutation.mutate(
+            { data: { ticker: t } },
+            { onSuccess: () => resolve(), onError: () => { skipped++; resolve(); } }
+          )
+        );
+        added++;
+        existing.add(t);
+      } catch {
+        skipped++;
+      }
+    }
+
+    await qc.invalidateQueries({ queryKey: getGetWatchlistQueryKey() });
+    setCsvImporting(false);
+    setCsvStatus({ added, skipped });
+    setTimeout(() => setCsvStatus(null), 6000);
   };
 
   const handleRemove = (t: string) => {
@@ -166,22 +236,61 @@ export default function Watchlist() {
         </div>
       )}
 
-      <div className="mb-6 flex justify-between items-end">
+      <div className="mb-6 flex justify-between items-end flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-display tracking-widest text-primary mb-2">WATCHLIST MANAGEMENT</h1>
           <p className="text-muted-foreground font-mono text-sm">Monitor active targets and score changes.</p>
         </div>
-        <form onSubmit={handleAdd} className="flex gap-2">
-          <Input
-            value={ticker}
-            onChange={(e) => setTicker(e.target.value)}
-            placeholder="TICKER"
-            className="w-32 font-mono uppercase bg-card border-border"
-          />
-          <Button type="submit" disabled={addMutation.isPending} className="font-mono">
-            <Plus className="w-4 h-4 mr-2" /> ADD
-          </Button>
-        </form>
+        <div className="flex flex-col items-end gap-2">
+          <div className="flex gap-2">
+            {/* CSV import */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={handleCsvFile}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              disabled={csvImporting}
+              onClick={() => fileInputRef.current?.click()}
+              className="font-mono border-border text-muted-foreground hover:text-foreground"
+              title="Import tickers from a broker CSV (Fidelity, Schwab, TD)"
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              {csvImporting ? "IMPORTING…" : "IMPORT CSV"}
+            </Button>
+
+            {/* Manual add */}
+            <form onSubmit={handleAdd} className="flex gap-2">
+              <Input
+                value={ticker}
+                onChange={(e) => setTicker(e.target.value)}
+                placeholder="TICKER"
+                className="w-32 font-mono uppercase bg-card border-border"
+              />
+              <Button type="submit" disabled={addMutation.isPending} className="font-mono">
+                <Plus className="w-4 h-4 mr-2" /> ADD
+              </Button>
+            </form>
+          </div>
+
+          {/* CSV result badge */}
+          {csvStatus && (
+            <div className={cn(
+              "text-xs font-mono px-3 py-1 rounded border",
+              csvStatus.added > 0
+                ? "bg-success/10 border-success/30 text-success"
+                : "bg-muted/30 border-border text-muted-foreground"
+            )}>
+              {csvStatus.added > 0
+                ? `✓ ${csvStatus.added} ticker${csvStatus.added !== 1 ? "s" : ""} added${csvStatus.skipped > 0 ? ` · ${csvStatus.skipped} skipped` : ""}`
+                : "No new tickers found in CSV"}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 overflow-auto border border-border rounded-md bg-card">
