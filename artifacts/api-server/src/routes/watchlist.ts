@@ -56,6 +56,12 @@ router.get("/watchlist", async (req, res): Promise<void> => {
         costBasisTotal: entry.costBasisTotal ?? null,
         avgCostBasis: entry.avgCostBasis ?? null,
         accountName: entry.accountName ?? null,
+        description: entry.description ?? null,
+        todayGainLossDollar: entry.todayGainLossDollar ?? null,
+        todayGainLossPercent: entry.todayGainLossPercent ?? null,
+        totalGainLossDollar: entry.totalGainLossDollar ?? null,
+        totalGainLossPercent: entry.totalGainLossPercent ?? null,
+        percentOfAccount: entry.percentOfAccount ?? null,
       };
     })
   );
@@ -104,31 +110,38 @@ router.patch("/watchlist/:ticker", async (req, res): Promise<void> => {
     return;
   }
 
-  const { quantity, costBasisTotal, avgCostBasis, accountName } = parsed.data;
+  const {
+    quantity, costBasisTotal, avgCostBasis, accountName,
+    description, todayGainLossDollar, todayGainLossPercent,
+    totalGainLossDollar, totalGainLossPercent, percentOfAccount,
+  } = parsed.data;
+
+  const positionFields = {
+    quantity: quantity ?? null,
+    costBasisTotal: costBasisTotal ?? null,
+    avgCostBasis: avgCostBasis ?? null,
+    accountName: accountName ?? null,
+    description: description ?? null,
+    todayGainLossDollar: todayGainLossDollar ?? null,
+    todayGainLossPercent: todayGainLossPercent ?? null,
+    totalGainLossDollar: totalGainLossDollar ?? null,
+    totalGainLossPercent: totalGainLossPercent ?? null,
+    percentOfAccount: percentOfAccount ?? null,
+  };
 
   const existing = await db.select().from(watchlistTable).where(eq(watchlistTable.ticker, paramTicker));
 
   let entry;
   if (existing.length === 0) {
-    // Upsert: create if not present
     const [created] = await db.insert(watchlistTable).values({
       ticker: paramTicker,
-      quantity: quantity ?? null,
-      costBasisTotal: costBasisTotal ?? null,
-      avgCostBasis: avgCostBasis ?? null,
-      accountName: accountName ?? null,
+      ...positionFields,
     }).returning();
     entry = created;
   } else {
-    // Update position fields
     const [updated] = await db
       .update(watchlistTable)
-      .set({
-        quantity: quantity ?? null,
-        costBasisTotal: costBasisTotal ?? null,
-        avgCostBasis: avgCostBasis ?? null,
-        accountName: accountName ?? null,
-      })
+      .set(positionFields)
       .where(eq(watchlistTable.ticker, paramTicker))
       .returning();
     entry = updated;

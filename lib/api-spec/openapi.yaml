@@ -1532,6 +1532,18 @@ components:
           type: ["number", "null"]
         accountName:
           type: ["string", "null"]
+        description:
+          type: ["string", "null"]
+        todayGainLossDollar:
+          type: ["number", "null"]
+        todayGainLossPercent:
+          type: ["number", "null"]
+        totalGainLossDollar:
+          type: ["number", "null"]
+        totalGainLossPercent:
+          type: ["number", "null"]
+        percentOfAccount:
+          type: ["number", "null"]
       required:
         - id
         - ticker
@@ -1549,6 +1561,12 @@ components:
         - costBasisTotal
         - avgCostBasis
         - accountName
+        - description
+        - todayGainLossDollar
+        - todayGainLossPercent
+        - totalGainLossDollar
+        - totalGainLossPercent
+        - percentOfAccount
 
     WatchlistInput:
       type: object
@@ -1571,6 +1589,18 @@ components:
           type: ["number", "null"]
         accountName:
           type: ["string", "null"]
+        description:
+          type: ["string", "null"]
+        todayGainLossDollar:
+          type: ["number", "null"]
+        todayGainLossPercent:
+          type: ["number", "null"]
+        totalGainLossDollar:
+          type: ["number", "null"]
+        totalGainLossPercent:
+          type: ["number", "null"]
+        percentOfAccount:
+          type: ["number", "null"]
 
     MarketQuote:
       type: object

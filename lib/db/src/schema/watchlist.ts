@@ -7,10 +7,17 @@ export const watchlistTable = pgTable("watchlist", {
   ticker: text("ticker").notNull().unique(),
   notes: text("notes"),
   addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
+  // Broker position data (from CSV import)
+  description: text("description"),
   quantity: doublePrecision("quantity"),
   costBasisTotal: doublePrecision("cost_basis_total"),
   avgCostBasis: doublePrecision("avg_cost_basis"),
   accountName: text("account_name"),
+  todayGainLossDollar: doublePrecision("today_gain_loss_dollar"),
+  todayGainLossPercent: doublePrecision("today_gain_loss_percent"),
+  totalGainLossDollar: doublePrecision("total_gain_loss_dollar"),
+  totalGainLossPercent: doublePrecision("total_gain_loss_percent"),
+  percentOfAccount: doublePrecision("percent_of_account"),
 });
 
 export const insertWatchlistSchema = createInsertSchema(watchlistTable).omit({ id: true, addedAt: true });

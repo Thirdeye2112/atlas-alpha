@@ -858,7 +858,13 @@ export const GetWatchlistResponseItem = zod.object({
   "quantity": zod.number().nullable(),
   "costBasisTotal": zod.number().nullable(),
   "avgCostBasis": zod.number().nullable(),
-  "accountName": zod.string().nullable()
+  "accountName": zod.string().nullable(),
+  "description": zod.string().nullable(),
+  "todayGainLossDollar": zod.number().nullable(),
+  "todayGainLossPercent": zod.number().nullable(),
+  "totalGainLossDollar": zod.number().nullable(),
+  "totalGainLossPercent": zod.number().nullable(),
+  "percentOfAccount": zod.number().nullable()
 })
 export const GetWatchlistResponse = zod.array(GetWatchlistResponseItem)
 
@@ -883,7 +889,13 @@ export const UpdateWatchlistPositionBody = zod.object({
   "quantity": zod.number().nullish(),
   "costBasisTotal": zod.number().nullish(),
   "avgCostBasis": zod.number().nullish(),
-  "accountName": zod.string().nullish()
+  "accountName": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "todayGainLossDollar": zod.number().nullish(),
+  "todayGainLossPercent": zod.number().nullish(),
+  "totalGainLossDollar": zod.number().nullish(),
+  "totalGainLossPercent": zod.number().nullish(),
+  "percentOfAccount": zod.number().nullish()
 })
 
 export const UpdateWatchlistPositionResponse = zod.object({

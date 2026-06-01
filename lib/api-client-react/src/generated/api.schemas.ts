@@ -600,6 +600,18 @@ export interface WatchlistItem {
   avgCostBasis: number | null;
   /** @nullable */
   accountName: string | null;
+  /** @nullable */
+  description: string | null;
+  /** @nullable */
+  todayGainLossDollar: number | null;
+  /** @nullable */
+  todayGainLossPercent: number | null;
+  /** @nullable */
+  totalGainLossDollar: number | null;
+  /** @nullable */
+  totalGainLossPercent: number | null;
+  /** @nullable */
+  percentOfAccount: number | null;
 }
 
 export interface WatchlistInput {
@@ -616,6 +628,18 @@ export interface WatchlistPositionInput {
   avgCostBasis?: number | null;
   /** @nullable */
   accountName?: string | null;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  todayGainLossDollar?: number | null;
+  /** @nullable */
+  todayGainLossPercent?: number | null;
+  /** @nullable */
+  totalGainLossDollar?: number | null;
+  /** @nullable */
+  totalGainLossPercent?: number | null;
+  /** @nullable */
+  percentOfAccount?: number | null;
 }
 
 export interface MarketQuote {

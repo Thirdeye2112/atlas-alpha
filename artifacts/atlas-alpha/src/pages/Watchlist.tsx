@@ -65,10 +65,16 @@ const CONDITION_LABELS: Record<string, string> = {
 
 interface CsvPosition {
   ticker: string;
+  description: string | null;
   quantity: number | null;
   costBasisTotal: number | null;
   avgCostBasis: number | null;
   accountName: string | null;
+  todayGainLossDollar: number | null;
+  todayGainLossPercent: number | null;
+  totalGainLossDollar: number | null;
+  totalGainLossPercent: number | null;
+  percentOfAccount: number | null;
 }
 
 function parseCsvPositions(text: string): CsvPosition[] {
@@ -85,15 +91,23 @@ function parseCsvPositions(text: string): CsvPosition[] {
   const symbolIdx    = findCol("symbol", "ticker", "stock symbol", "security");
   if (symbolIdx < 0) return [];
 
-  const qtyIdx       = findCol("quantity", "qty", "shares");
-  const costTotalIdx = findCol("cost basis total", "cost basis", "total cost basis", "total cost");
-  const avgCostIdx   = findCol("average cost basis", "avg cost basis per share", "avg cost basis", "avg cost", "average cost");
-  const accountIdx   = findCol("account name", "account");
+  const qtyIdx          = findCol("quantity", "qty", "shares");
+  const costTotalIdx    = findCol("cost basis total", "cost basis", "total cost basis", "total cost");
+  const avgCostIdx      = findCol("average cost basis", "avg cost basis per share", "avg cost basis", "avg cost", "average cost");
+  const accountIdx      = findCol("account name", "account");
+  const descriptionIdx  = findCol("description", "security name", "name");
+  const todayDollarIdx  = findCol("today's gain/loss dollar", "today's gain/loss $", "daily gain/loss $", "day gain/loss $");
+  const todayPctIdx     = findCol("today's gain/loss percent", "today's gain/loss %", "daily gain/loss %");
+  const totalDollarIdx  = findCol("total gain/loss dollar", "total gain/loss $", "unrealized gain/loss $");
+  const totalPctIdx     = findCol("total gain/loss percent", "total gain/loss %", "unrealized gain/loss %");
+  const pctOfAccountIdx = findCol("percent of account", "% of account", "portfolio %");
 
   const parseNum = (s: string): number | null => {
     const n = parseFloat(s.replace(/[$%+,'"]/g, "").trim());
     return isNaN(n) ? null : n;
   };
+  const parseStr = (s: string): string | null =>
+    (s ?? "").replace(/['"]/g, "").trim() || null;
 
   const positionMap = new Map<string, CsvPosition>();
 
@@ -105,34 +119,53 @@ function parseCsvPositions(text: string): CsvPosition[] {
     if (!raw || !/^[A-Z]{1,5}(\.[A-Z]{1,2})?$/.test(raw)) continue;
     if (["--", "N/A", "CASH", "PENDING"].includes(raw)) continue;
 
-    const qty       = qtyIdx >= 0      ? parseNum(cols[qtyIdx] ?? "")       : null;
-    const costTotal = costTotalIdx >= 0 ? parseNum(cols[costTotalIdx] ?? "") : null;
-    const avgCost   = avgCostIdx >= 0   ? parseNum(cols[avgCostIdx] ?? "")   : null;
-    const account   = accountIdx >= 0
-      ? (cols[accountIdx] ?? "").replace(/['"]/g, "").trim() || null
-      : null;
+    const qty         = qtyIdx >= 0          ? parseNum(cols[qtyIdx] ?? "")          : null;
+    const costTotal   = costTotalIdx >= 0     ? parseNum(cols[costTotalIdx] ?? "")    : null;
+    const avgCost     = avgCostIdx >= 0       ? parseNum(cols[avgCostIdx] ?? "")      : null;
+    const account     = accountIdx >= 0       ? parseStr(cols[accountIdx] ?? "")      : null;
+    const description = descriptionIdx >= 0   ? parseStr(cols[descriptionIdx] ?? "")  : null;
+    const todayDollar = todayDollarIdx >= 0   ? parseNum(cols[todayDollarIdx] ?? "")  : null;
+    const todayPct    = todayPctIdx >= 0      ? parseNum(cols[todayPctIdx] ?? "")     : null;
+    const totalDollar = totalDollarIdx >= 0   ? parseNum(cols[totalDollarIdx] ?? "")  : null;
+    const totalPct    = totalPctIdx >= 0      ? parseNum(cols[totalPctIdx] ?? "")     : null;
+    const pctOfAcct   = pctOfAccountIdx >= 0  ? parseNum(cols[pctOfAccountIdx] ?? "") : null;
 
     // Skip rows without a valid quantity (money market, pending activity, etc.)
     if (qty === null) continue;
 
     if (positionMap.has(raw)) {
-      // Aggregate across accounts
+      // Aggregate across accounts — sum qty, cost basis; recalc avg; join accounts; sum today/total G/L
       const prev = positionMap.get(raw)!;
-      const newQty  = (prev.quantity ?? 0) + qty;
-      const newCost = prev.costBasisTotal !== null && costTotal !== null
-        ? prev.costBasisTotal + costTotal
-        : (prev.costBasisTotal ?? costTotal);
-      const newAvg  = newQty > 0 && newCost !== null ? newCost / newQty : avgCost;
-      const accounts = [prev.accountName, account].filter(Boolean).join(" / ");
+      const newQty        = (prev.quantity ?? 0) + qty;
+      const newCostTotal  = prev.costBasisTotal !== null && costTotal !== null
+        ? prev.costBasisTotal + costTotal : (prev.costBasisTotal ?? costTotal);
+      const newAvg        = newQty > 0 && newCostTotal !== null ? newCostTotal / newQty : avgCost;
+      const accounts      = [prev.accountName, account].filter(Boolean).join(" / ");
+      const newTodayDollar = prev.todayGainLossDollar !== null && todayDollar !== null
+        ? prev.todayGainLossDollar + todayDollar : (prev.todayGainLossDollar ?? todayDollar);
+      const newTotalDollar = prev.totalGainLossDollar !== null && totalDollar !== null
+        ? prev.totalGainLossDollar + totalDollar : (prev.totalGainLossDollar ?? totalDollar);
       positionMap.set(raw, {
         ticker: raw,
+        description: prev.description ?? description,
         quantity: newQty,
-        costBasisTotal: newCost,
+        costBasisTotal: newCostTotal,
         avgCostBasis: newAvg,
         accountName: accounts || null,
+        todayGainLossDollar: newTodayDollar,
+        todayGainLossPercent: todayPct,   // % doesn't aggregate simply; use last
+        totalGainLossDollar: newTotalDollar,
+        totalGainLossPercent: totalPct,
+        percentOfAccount: (prev.percentOfAccount ?? 0) + (pctOfAcct ?? 0) || null,
       });
     } else {
-      positionMap.set(raw, { ticker: raw, quantity: qty, costBasisTotal: costTotal, avgCostBasis: avgCost, accountName: account });
+      positionMap.set(raw, {
+        ticker: raw, description, quantity: qty, costBasisTotal: costTotal,
+        avgCostBasis: avgCost, accountName: account,
+        todayGainLossDollar: todayDollar, todayGainLossPercent: todayPct,
+        totalGainLossDollar: totalDollar, totalGainLossPercent: totalPct,
+        percentOfAccount: pctOfAcct,
+      });
     }
   }
 
@@ -239,6 +272,12 @@ export default function Watchlist() {
                 costBasisTotal: pos.costBasisTotal,
                 avgCostBasis: pos.avgCostBasis,
                 accountName: pos.accountName,
+                description: pos.description,
+                todayGainLossDollar: pos.todayGainLossDollar,
+                todayGainLossPercent: pos.todayGainLossPercent,
+                totalGainLossDollar: pos.totalGainLossDollar,
+                totalGainLossPercent: pos.totalGainLossPercent,
+                percentOfAccount: pos.percentOfAccount,
               },
             },
             { onSuccess: () => resolve(), onError: () => reject() }
@@ -281,7 +320,7 @@ export default function Watchlist() {
   // Determine if any item has broker position data
   const hasPositions = (watchlist ?? []).some(item => item.quantity !== null);
   // Total columns for colSpan
-  const totalCols = hasPositions ? 12 : 7;
+  const totalCols = hasPositions ? 15 : 7;
 
   return (
     <div className={cn("flex-1 p-6 overflow-hidden flex flex-col h-full mx-auto w-full", hasPositions ? "max-w-7xl" : "max-w-5xl")}>
@@ -391,6 +430,9 @@ export default function Watchlist() {
                   <th className="p-4 font-medium text-right">MKT VAL</th>
                   <th className="p-4 font-medium text-right">UNREAL P&amp;L</th>
                   <th className="p-4 font-medium text-right">UNREAL %</th>
+                  <th className="p-4 font-medium text-right">TODAY G/L</th>
+                  <th className="p-4 font-medium text-right">TOTAL G/L</th>
+                  <th className="p-4 font-medium text-right">% OF ACCT</th>
                   <th className="p-4 font-medium">ACCOUNT</th>
                 </>}
                 <th className="p-4 font-medium text-right">ACTIONS</th>
@@ -412,8 +454,15 @@ export default function Watchlist() {
                 return (
                   <React.Fragment key={item.id}>
                     <tr className="hover:bg-muted/30 transition-colors">
-                      <td className="p-4 font-bold text-primary">
-                        <Link href={`/?ticker=${item.ticker}`} className="hover:underline">{item.ticker}</Link>
+                      <td className="p-4">
+                        <Link href={`/?ticker=${item.ticker}`} className="hover:underline font-bold text-primary">
+                          {item.ticker}
+                        </Link>
+                        {item.description && (
+                          <div className="text-[10px] text-muted-foreground truncate max-w-[120px]" title={item.description}>
+                            {item.description}
+                          </div>
+                        )}
                       </td>
                       <td className="p-4 text-right">{formatCurrency(item.price)}</td>
                       <td className={cn("p-4 text-right", item.change && item.change >= 0 ? "text-success" : "text-destructive")}>
@@ -446,6 +495,25 @@ export default function Watchlist() {
                         </td>
                         <td className={cn("p-4 text-right font-medium", unrealPct === null ? "text-muted-foreground" : unrealPct >= 0 ? "text-success" : "text-destructive")}>
                           {formatPnlPct(unrealPct)}
+                        </td>
+                        <td className={cn("p-4 text-right", item.todayGainLossDollar === null ? "text-muted-foreground" : item.todayGainLossDollar >= 0 ? "text-success" : "text-destructive")}>
+                          {item.todayGainLossDollar !== null ? (
+                            <div>{formatPnl(item.todayGainLossDollar)}</div>
+                          ) : "—"}
+                          {item.todayGainLossPercent !== null && (
+                            <div className="text-[10px] opacity-70">{formatPnlPct(item.todayGainLossPercent)}</div>
+                          )}
+                        </td>
+                        <td className={cn("p-4 text-right", item.totalGainLossDollar === null ? "text-muted-foreground" : item.totalGainLossDollar >= 0 ? "text-success" : "text-destructive")}>
+                          {item.totalGainLossDollar !== null ? (
+                            <div>{formatPnl(item.totalGainLossDollar)}</div>
+                          ) : "—"}
+                          {item.totalGainLossPercent !== null && (
+                            <div className="text-[10px] opacity-70">{formatPnlPct(item.totalGainLossPercent)}</div>
+                          )}
+                        </td>
+                        <td className="p-4 text-right text-muted-foreground">
+                          {item.percentOfAccount !== null ? `${item.percentOfAccount.toFixed(1)}%` : "—"}
                         </td>
                         <td className="p-4 text-xs text-muted-foreground max-w-[120px] truncate" title={item.accountName ?? ""}>
                           {item.accountName ?? "—"}
