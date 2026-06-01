@@ -9,18 +9,55 @@ const router: IRouter = Router();
 
 // ── Gap Probability Score ─────────────────────────────────────────────────────
 // Weights mirror research effect sizes: ATR +1.40σ (40%), BB +1.14σ (35%), RVOL +0.72σ (25%)
-// Score = 0 at filter threshold, 100 at the mean value observed on historical gap days
+// Score = 0 at filter threshold, 100 at the mean value observed on historical gap days.
+// bbWidthPct must be a PERCENTAGE (bollingerWidth$ / bollingerMiddle * 100) — NOT the raw
+// dollar width stored in volatility.bollingerWidth.
 function clamp01(v: number): number { return Math.max(0, Math.min(100, v)); }
-// gapPct: today's open vs prior close (%). If the session has already gapped ≥1.5%,
-// the elevated ATR/BB/RVOL are post-gap aftermath — not a forward signal. Score → 0.
-// Thresholds are calibrated from T=0 (gap-day) conditions; a future improvement would
-// re-derive them from T-1 data to eliminate the gap-event's own inflation of these metrics.
-function calcGapProbScore(atrPct: number, bbWidth: number, relVol: number, gapPct = 0): number {
-  if (Math.abs(gapPct) >= 1.5) return 0; // gap already fired — conditions are aftermath
-  const atrScore  = clamp01((atrPct - 3.2)  / (4.8  - 3.2)  * 100); // 0 at 3.2%, 100 at 4.8%
-  const bbScore   = clamp01((bbWidth - 15)   / (23.7 - 15)   * 100); // 0 at 15%, 100 at 23.7%
-  const rvolScore = clamp01((relVol - 1.2)   / (1.45 - 1.2)  * 100); // 0 at 1.2x, 100 at 1.45x
-  return Math.round(0.40 * atrScore + 0.35 * bbScore + 0.25 * rvolScore);
+
+function calcGapProbScore(
+  atrPct: number,
+  bbWidthPct: number,
+  relVol: number,
+  gapPct = 0,
+  earningsDaysAway: number | null = null,
+): number {
+  // Gap already fired — elevated readings are post-event aftermath, not forward signal
+  if (Math.abs(gapPct) >= 1.5) return 0;
+
+  const atrScore  = clamp01((atrPct     - 3.2)  / (4.8  - 3.2)  * 100); // 0 at 3.2%, 100 at 4.8%
+  const bbScore   = clamp01((bbWidthPct - 15)   / (23.7 - 15)   * 100); // 0 at 15%, 100 at 23.7%
+  const rvolScore = clamp01((relVol     - 1.2)  / (1.45 - 1.2)  * 100); // 0 at 1.2x, 100 at 1.45x
+  const base = Math.round(0.40 * atrScore + 0.35 * bbScore + 0.25 * rvolScore);
+
+  // Earnings proximity boost — historical gap rate is ~65% within 1 day of earnings,
+  // regardless of where technical indicators sit (earnings-driven gaps bypass technicals).
+  if (earningsDaysAway !== null) {
+    if (earningsDaysAway <= 1) return Math.max(base, 75); // earnings tonight/tomorrow → high
+    if (earningsDaysAway <= 3) return Math.max(base, 50); // earnings within 3 days → moderate
+    if (earningsDaysAway <= 7) return Math.max(base, 30); // earnings next week → mild lift
+  }
+  return base;
+}
+
+// ── Earnings timestamp parser ─────────────────────────────────────────────────
+// Yahoo Finance returns earningsTimestamp as either a Unix integer (seconds) OR
+// an ISO date string — depending on version and serialisation path. Returns the
+// number of calendar days until earnings, or null if past / unavailable / > 14d.
+// Note: Yahoo Finance often shows the LAST earnings date until the next one is
+// scheduled (usually a few weeks ahead). The boost fires only when a future date
+// is present, which is correct behaviour.
+function earningsDaysAheadFromQuote(quote: Record<string, unknown>): number | null {
+  const raw = quote.earningsTimestamp;
+  let tsMs: number | null = null;
+  if (typeof raw === "number" && raw > 0) {
+    tsMs = raw * 1000;                           // Unix seconds → ms
+  } else if (typeof raw === "string" && raw) {
+    const parsed = new Date(raw).getTime();
+    if (!isNaN(parsed)) tsMs = parsed;           // ISO date string
+  }
+  if (tsMs === null) return null;
+  const daysAway = Math.round((tsMs - Date.now()) / 86400000);
+  return daysAway >= 0 && daysAway <= 14 ? daysAway : null;
 }
 
 // ── Gap setup row builder ─────────────────────────────────────────────────────
@@ -28,27 +65,23 @@ function calcGapProbScore(atrPct: number, bbWidth: number, relVol: number, gapPc
 // gapSetupScore and earningsDaysAway into the row object.
 function toGapSetupRow(a: AnalysisResult, direction: "long" | "short"): object {
   const base = toRow(a) as Record<string, unknown>;
-  const atrPct  = a.volatility.atrPercent;
-  const bbWidth = a.volatility.bollingerWidth;
+  const atrPct     = a.volatility.atrPercent;
+  // Convert bollinger width from dollars to % of midline — matches research engine formula
+  const bbWidthPct = a.volatility.bollingerMiddle > 0
+    ? (a.volatility.bollingerWidth / a.volatility.bollingerMiddle) * 100
+    : 0;
   const relVol  = a.volume.relativeVolume;
   const vs200   = a.trend.priceVsSma200;
   const gapPct  = getGapPercent(a);
-  const gapSetupScore = calcGapProbScore(atrPct, bbWidth, relVol, gapPct);
+
+  // Compute earnings proximity BEFORE scoring — it boosts the score floor
+  const earningsDaysAway = earningsDaysAheadFromQuote(a.quote as Record<string, unknown>);
+
+  const gapSetupScore = calcGapProbScore(atrPct, bbWidthPct, relVol, gapPct, earningsDaysAway);
 
   const conditions: string[] = [];
-
-  // Earnings first (highest priority catalyst)
-  const earningsTs = (a.quote as Record<string, unknown>).earningsTimestamp as number | null | undefined;
-  let earningsDaysAway: number | null = null;
-  if (earningsTs && earningsTs > 0) {
-    const daysAway = Math.round((earningsTs * 1000 - Date.now()) / 86400000);
-    if (daysAway >= 0 && daysAway <= 14) {
-      earningsDaysAway = daysAway;
-      conditions.push(`EARN ${daysAway}d`);
-    }
-  }
-
-  conditions.push(`ATR ${atrPct.toFixed(1)}%`, `BB ${bbWidth.toFixed(0)}%`, `VOL ${relVol.toFixed(1)}x`);
+  if (earningsDaysAway !== null) conditions.push(`EARN ${earningsDaysAway}d`);
+  conditions.push(`ATR ${atrPct.toFixed(1)}%`, `BB ${bbWidthPct.toFixed(0)}%`, `VOL ${relVol.toFixed(1)}x`);
   if (direction === "short" && vs200 > 5) conditions.push(`+${vs200.toFixed(0)}% SMA200`);
 
   return { ...base, catalysts: conditions, gapSetupScore, earningsDaysAway };
@@ -62,11 +95,15 @@ function gapSetupScanResponse(
   direction: "long" | "short"
 ) {
   const job = getOrStartScanJob();
+  // Map first so gapSetupScore is available for filtering and sorting.
+  // Drop zero-score rows (stocks where the gap already fired intraday ≥1.5% —
+  // their elevated ATR/BB/RVOL is aftermath, not a forward signal).
   const rows = job.analyses
     .filter(filter)
-    .sort(sort)
-    .slice(0, limit)
-    .map(a => toGapSetupRow(a, direction));
+    .map(a => toGapSetupRow(a, direction) as Record<string, unknown>)
+    .filter(r => (r.gapSetupScore as number) > 0)
+    .sort((a, b) => (b.gapSetupScore as number) - (a.gapSetupScore as number))
+    .slice(0, limit);
 
   return {
     results: rows,
@@ -266,24 +303,29 @@ router.get("/scanner/gap-setup-long", (req, res): void => {
   try {
     res.json(gapSetupScanResponse(
       a => {
-        const atrPct  = a.volatility.atrPercent;          // % of price, baseline 2.7%, gaps 4.8%
-        const bbWidth = a.volatility.bollingerWidth;       // (upper-lower)/mid, baseline 12.6%, gaps 23.7%
+        const atrPct     = a.volatility.atrPercent;        // % of price, baseline 2.7%, gaps 4.8%
+        const bbWidthPct = a.volatility.bollingerMiddle > 0 // % band width, baseline 12.6%, gaps 23.7%
+          ? (a.volatility.bollingerWidth / a.volatility.bollingerMiddle) * 100 : 0;
         const relVol  = a.volume.relativeVolume;           // baseline 1.02x, gaps 1.45x
         const gap     = getGapPercent(a);                  // exclude stocks already gapping
         const rsi     = a.momentum.rsi;
         const vs200   = a.trend.priceVsSma200;             // not massively extended above SMA200
+        // Also include earnings-imminent stocks regardless of technical filter
+        const earningsDaysAway = earningsDaysAheadFromQuote(a.quote as Record<string, unknown>);
+        const earningsImminent = earningsDaysAway !== null && earningsDaysAway <= 1;
         return (
-          atrPct  >= 3.2   &&   // elevated volatility (research: 3.5% mean at gap, threshold 3.2)
-          bbWidth >= 15    &&   // wide bands (research: 23.7% mean at gap, threshold 15)
-          relVol  >= 1.2   &&   // prior-day volume elevated (research: 1.45x mean at gap)
+          (earningsImminent || (
+            atrPct     >= 3.2   &&   // elevated volatility (research: 3.5% mean at gap, threshold 3.2)
+            bbWidthPct >= 15    &&   // wide bands % (research: 23.7% mean at gap, threshold 15)
+            relVol     >= 1.2        // prior-day volume elevated (research: 1.45x mean at gap)
+          ))
+          &&
           gap < 2.0        &&   // not already gapping up
           gap > -5.0       &&   // not in a big gap-down right now
           rsi < 70         &&   // not overbought
           vs200 < 30       &&   // not massively extended above SMA200 (gap-down risk)
           a.atlasScore.direction !== "bearish"  &&  // not in confirmed downtrend
           a.atlasScore.exhaustionScore < 45         // exclude distribution-top / exhausted-buyer setups
-                                                    // (retroactive analysis: only fader on 2026-05-31 had exh=58;
-                                                    //  all gappers had exh ≤ 31)
         );
       },
       // Sort: composite of ATR% × relative volume — most "primed" stocks first
@@ -303,24 +345,28 @@ router.get("/scanner/gap-setup-short", (req, res): void => {
   try {
     res.json(gapSetupScanResponse(
       a => {
-        const atrPct  = a.volatility.atrPercent;
-        const bbWidth = a.volatility.bollingerWidth;
+        const atrPct     = a.volatility.atrPercent;
+        const bbWidthPct = a.volatility.bollingerMiddle > 0
+          ? (a.volatility.bollingerWidth / a.volatility.bollingerMiddle) * 100 : 0;
         const relVol  = a.volume.relativeVolume;
         const gap     = getGapPercent(a);
         const vs200   = a.trend.priceVsSma200;             // +0.64σ effect: gap-downs come from extended stocks
         const rsi     = a.momentum.rsi;
+        const earningsDaysAway = earningsDaysAheadFromQuote(a.quote as Record<string, unknown>);
+        const earningsImminent = earningsDaysAway !== null && earningsDaysAway <= 1;
         return (
-          atrPct  >= 3.2   &&   // elevated volatility
-          bbWidth >= 15    &&   // wide bands
-          relVol  >= 1.2   &&   // volume elevation
+          (earningsImminent || (
+            atrPct     >= 3.2   &&   // elevated volatility
+            bbWidthPct >= 15    &&   // wide bands %
+            relVol     >= 1.2        // volume elevation
+          ))
+          &&
           gap > -2.0       &&   // not already gapping down
           gap < 5.0        &&   // not in a big gap-up right now
           vs200 > 5        &&   // extended above SMA200 (research strongest directional predictor)
           rsi > 45         &&   // not already sold off
           a.atlasScore.direction !== "bullish"  &&  // not in confirmed uptrend
           a.atlasScore.exhaustionScore < 50         // exclude capitulation-bottom stocks that may reverse UP
-                                                    // (retroactive analysis: both flat shorts on 2026-05-31
-                                                    //  had exh=59 and exh=60 — exhausted sellers, not fresh)
         );
       },
       // Sort: most extended above SMA200 with highest ATR (most vulnerable to down-gap)
