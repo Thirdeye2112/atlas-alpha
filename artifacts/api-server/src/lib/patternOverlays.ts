@@ -19,7 +19,7 @@ export interface PatternTarget {
 }
 
 export interface PatternOverlay {
-  type: "bull-flag" | "bear-flag" | "ascending-triangle" | "descending-triangle" | "double-bottom" | "head-and-shoulders";
+  type: "bull-flag" | "bear-flag" | "ascending-triangle" | "descending-triangle" | "double-bottom" | "double-top" | "head-and-shoulders";
   label: string;
   description: string;
   confidence: "high" | "medium" | "low";
@@ -321,6 +321,82 @@ function detectTriangles(bars: OHLCVBar[]): PatternOverlay[] {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Double Top detection
+// Two roughly-equal peaks + meaningful trough between + price retreating
+// ─────────────────────────────────────────────────────────────────────────────
+function detectDoubleTop(bars: OHLCVBar[]): PatternOverlay[] {
+  const n = bars.length;
+  if (n < 30) return [];
+
+  const highs  = bars.map(b => b.high);
+  const closes = bars.map(b => b.close);
+
+  const lb  = highs.slice(-80);
+  const len = lb.length;
+  if (len < 20) return [];
+
+  // First peak: global high in lookback window
+  let p1Idx = 0;
+  for (let i = 1; i < len; i++) if (lb[i] > lb[p1Idx]) p1Idx = i;
+  const p1 = lb[p1Idx];
+  if (p1Idx < 5 || p1Idx > len - 8) return [];
+
+  // Trough between the two peaks
+  const cbOffset = n - len;
+  let troughIdx = p1Idx + 1;
+  let troughVal = closes[cbOffset + p1Idx + 1] ?? closes[cbOffset + p1Idx];
+  for (let i = p1Idx + 2; i < len - 3; i++) {
+    const c = closes[cbOffset + i];
+    if (c !== undefined && c < troughVal) { troughVal = c; troughIdx = i; }
+  }
+  const troughDrop = (p1 - troughVal) / p1 * 100;
+  if (troughDrop < 3 || troughIdx <= p1Idx) return [];
+
+  // Second peak: highest point after the trough
+  let p2Idx = troughIdx + 1;
+  let p2    = lb[troughIdx + 1] ?? 0;
+  for (let i = troughIdx + 2; i < len; i++) if (lb[i] > p2) { p2 = lb[i]; p2Idx = i; }
+
+  const peakDiff = Math.abs(p2 - p1) / p1 * 100;
+  const isRecent = p2Idx >= len - 20;
+  if (peakDiff > 4 || !isRecent || troughDrop < 3) return [];
+
+  const neckline  = r2(troughVal);
+  const peakLevel = r2((p1 + p2) / 2);
+  const target    = r2(neckline - (peakLevel - neckline));
+  const stop      = r2(peakLevel * 1.015);
+  const p1Date    = bars[cbOffset + p1Idx].time;
+  const p2Date    = bars[cbOffset + p2Idx].time;
+  const troughDate = bars[cbOffset + troughIdx].time;
+  const endDate   = bars[n - 1].time;
+
+  const confidence: PatternOverlay["confidence"] =
+    peakDiff < 2 && troughDrop > 5 ? "high" : peakDiff < 3.5 ? "medium" : "low";
+
+  return [{
+    type: "double-top",
+    label: "Double Top",
+    confidence,
+    description: `Two peaks ~${peakLevel.toFixed(2)} · Neckline ${neckline.toFixed(2)} · B/D target ${target.toFixed(2)}`,
+    lines: [
+      {
+        points: [{ date: p1Date, price: r2(p1) }, { date: p2Date, price: r2(p2) }],
+        style: "dotted", color: "rgba(239,68,68,0.55)", label: "Resistance",
+      },
+      {
+        points: [{ date: troughDate, price: neckline }, { date: endDate, price: neckline }],
+        style: "dashed", color: "#ef4444", label: "Neckline",
+      },
+    ],
+    targets: [
+      { price: neckline, label: `B/D ${neckline.toFixed(2)}`, role: "breakout" },
+      { price: target,   label: `T1  ${target.toFixed(2)}`,   role: "target"   },
+      { price: stop,     label: `SL  ${stop.toFixed(2)}`,     role: "stop"     },
+    ],
+  }];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Public API
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -381,7 +457,15 @@ export function calcPatternOverlaysMultiTF(
     }
   }
 
-  // If no flags found on either timeframe, fall back to tip-of-series triangles
+  // Double Top (structural reversal — daily only)
+  if (dailyBars.length >= 30) {
+    for (const ov of detectDoubleTop(dailyBars)) {
+      if (out.length >= 5) break;
+      merge(ov, "daily");
+    }
+  }
+
+  // If no flags/double-top found on either timeframe, fall back to tip-of-series triangles
   if (out.length === 0 && dailyBars.length >= 25) {
     for (const ov of detectTriangles(dailyBars)) {
       out.push({ ...ov, timeframe: "daily" });

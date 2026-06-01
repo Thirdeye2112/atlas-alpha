@@ -198,7 +198,7 @@ export const GetStockAnalysisResponse = zod.object({
   "strength": zod.enum(['strong', 'moderate'])
 })),
   "patternOverlays": zod.array(zod.object({
-  "type": zod.enum(['bull-flag', 'bear-flag', 'ascending-triangle', 'descending-triangle', 'double-bottom', 'head-and-shoulders']),
+  "type": zod.enum(['bull-flag', 'bear-flag', 'ascending-triangle', 'descending-triangle', 'double-bottom', 'double-top', 'head-and-shoulders']),
   "label": zod.string(),
   "description": zod.string(),
   "confidence": zod.enum(['high', 'medium', 'low']),

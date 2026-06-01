@@ -657,6 +657,24 @@ export function calcPatterns(bars: OHLCVBar[], trend: TrendResult, volatility: V
     if (poleGain < -6 && tight && volDecline) patterns.push("Bear Flag");
   }
 
+  // ── Bullish / Bearish Pennant ─────────────────────────────────────────────────
+  // Sharp pole + short symmetrical consolidation (converging highs AND lows)
+  // Distinct from Flag: Flag has parallel channels; Pennant has converging trendlines
+  if (n >= 20) {
+    const poleC  = closes.slice(-20, -5);
+    const pMove  = (poleC[poleC.length - 1] - poleC[0]) / poleC[0] * 100;
+    const pHigH  = highs.slice(-5);
+    const pLowL  = lows.slice(-5);
+    const highsConv = pHigH[pHigH.length - 1] < pHigH[0];
+    const lowsConv  = pLowL[pLowL.length - 1] > pLowL[0];
+    const poleRng = Math.max(...highs.slice(-20, -5)) - Math.min(...lows.slice(-20, -5));
+    const consRng = Math.max(...pHigH) - Math.min(...pLowL);
+    const tight2  = poleRng > 0 && consRng < poleRng * 0.30;
+    if (Math.abs(pMove) > 5 && highsConv && lowsConv && tight2) {
+      patterns.push(pMove > 0 ? "Bullish Pennant" : "Bearish Pennant");
+    }
+  }
+
   // ── Ascending / Descending Triangle ──────────────────────────────────────────
   // Flat top + rising lows (ascending) | Flat bottom + falling highs (descending)
   if (n >= 20) {
@@ -736,6 +754,46 @@ export function calcPatterns(bars: OHLCVBar[], trend: TrendResult, volatility: V
     }
   }
 
+  // ── Double Top ─────────────────────────────────────────────────────────────────
+  // Two roughly-equal highs + meaningful trough between them + price retreating
+  if (n >= 20) {
+    const dtH = highs.slice(-60);
+    const dtLen = dtH.length;
+    if (dtLen >= 20) {
+      let p1Idx = 0;
+      for (let i = 1; i < dtLen; i++) if (dtH[i] > dtH[p1Idx]) p1Idx = i;
+      const p1 = dtH[p1Idx];
+      if (p1Idx >= 3 && p1Idx <= dtLen - 5) {
+        let troughIdx = p1Idx, troughVal = closes[n - dtLen + p1Idx];
+        for (let i = p1Idx + 1; i < dtLen - 2; i++) {
+          const cv = closes[n - dtLen + i];
+          if (cv !== undefined && cv < troughVal) { troughVal = cv; troughIdx = i; }
+        }
+        const troughDrop = (p1 - troughVal) / p1 * 100;
+        if (troughDrop >= 3 && troughIdx > p1Idx) {
+          let p2Idx = troughIdx, p2 = dtH[troughIdx] ?? 0;
+          for (let i = troughIdx + 1; i < dtLen; i++) if (dtH[i] > p2) { p2 = dtH[i]; p2Idx = i; }
+          const peakDiff2 = Math.abs(p2 - p1) / p1 * 100;
+          const isRecent2 = p2Idx >= dtLen - 20;
+          if (peakDiff2 <= 3.5 && isRecent2 && troughDrop >= 3) patterns.push("Double Top");
+        }
+      }
+    }
+  }
+
+  // ── Rectangle / Base ──────────────────────────────────────────────────────────
+  // Horizontal consolidation: flat highs AND flat lows for 20 bars
+  // Common during institutional accumulation/distribution before breakout
+  if (n >= 25) {
+    const rH2   = highs.slice(-20), rL2 = lows.slice(-20);
+    const maxH2 = Math.max(...rH2),  minH2 = Math.min(...rH2);
+    const maxL2 = Math.max(...rL2),  minL2 = Math.min(...rL2);
+    const hFlat = maxH2 > 0 && (maxH2 - minH2) / maxH2 < 0.035;
+    const lFlat = maxL2 > 0 && (maxL2 - minL2) / maxL2 < 0.035;
+    const band  = maxH2 > 0 ? (maxH2 - minL2) / maxH2 : 1;
+    if (hFlat && lFlat && band < 0.07) patterns.push("Rectangle Base");
+  }
+
   // ── Head and Shoulders (bearish) ─────────────────────────────────────────────
   if (n >= 40) {
     const h = highs.slice(-80);
@@ -801,20 +859,47 @@ export function calcPatterns(bars: OHLCVBar[], trend: TrendResult, volatility: V
       patterns.push("NR7 Compression");
   }
 
-  // ── Three-candle patterns (library-based, current state only) ────────────────
+  // ── Candlestick patterns (library-based, current bar only) ──────────────────
   if (n >= 5) {
     const ohlc = { open: bars.map(b => b.open), high: highs, low: lows, close: closes };
-    try { if (threewhitesoldiers(ohlc).at(-1)) patterns.push("Three White Soldiers"); } catch { /* skip */ }
-    try { if (threeblackcrows(ohlc).at(-1))    patterns.push("Three Black Crows");    } catch { /* skip */ }
-    try { if (morningstar(ohlc).at(-1))        patterns.push("Morning Star");         } catch { /* skip */ }
-    try { if (eveningstar(ohlc).at(-1))        patterns.push("Evening Star");         } catch { /* skip */ }
-    try { if (morningdojistar(ohlc).at(-1))    patterns.push("Morning Doji Star");    } catch { /* skip */ }
-    try { if (eveningdojistar(ohlc).at(-1))    patterns.push("Evening Doji Star");    } catch { /* skip */ }
-    try { if (abandonedbaby(ohlc).at(-1))      patterns.push("Abandoned Baby");       } catch { /* skip */ }
+    // Single-bar reversal candles
+    try { if (bullishhammerstick(ohlc).at(-1))      patterns.push("Hammer");               } catch { /* skip */ }
+    try { if (bearishhammerstick(ohlc).at(-1))      patterns.push("Inverted Hammer");      } catch { /* skip */ }
+    try { if (hangingman(ohlc).at(-1))              patterns.push("Hanging Man");           } catch { /* skip */ }
+    try { if (shootingstar(ohlc).at(-1))            patterns.push("Shooting Star");         } catch { /* skip */ }
+    try { if (doji(ohlc).at(-1))                    patterns.push("Doji");                  } catch { /* skip */ }
+    try { if (dragonflydoji(ohlc).at(-1))           patterns.push("Dragonfly Doji");        } catch { /* skip */ }
+    try { if (gravestonedoji(ohlc).at(-1))          patterns.push("Gravestone Doji");       } catch { /* skip */ }
+    try { if (bullishmarubozu(ohlc).at(-1))         patterns.push("Bullish Marubozu");      } catch { /* skip */ }
+    try { if (bearishmarubozu(ohlc).at(-1))         patterns.push("Bearish Marubozu");      } catch { /* skip */ }
+    try { if (bullishinvertedhammerstick(ohlc).at(-1)) patterns.push("Bullish Inv Hammer"); } catch { /* skip */ }
+    try { if (bearishinvertedhammerstick(ohlc).at(-1)) patterns.push("Bearish Inv Hammer"); } catch { /* skip */ }
+    try { if (bullishspinningtop(ohlc).at(-1))      patterns.push("Bullish Spinning Top");  } catch { /* skip */ }
+    try { if (bearishspinningtop(ohlc).at(-1))      patterns.push("Bearish Spinning Top");  } catch { /* skip */ }
+    // Two-bar reversal patterns
+    try { if (bullishengulfingpattern(ohlc).at(-1)) patterns.push("Bullish Engulfing");     } catch { /* skip */ }
+    try { if (bearishengulfingpattern(ohlc).at(-1)) patterns.push("Bearish Engulfing");     } catch { /* skip */ }
+    try { if (bullishharami(ohlc).at(-1))           patterns.push("Bullish Harami");        } catch { /* skip */ }
+    try { if (bearishharami(ohlc).at(-1))           patterns.push("Bearish Harami");        } catch { /* skip */ }
+    try { if (bullishharamicross(ohlc).at(-1))      patterns.push("Bullish Harami Cross");  } catch { /* skip */ }
+    try { if (bearishharamicross(ohlc).at(-1))      patterns.push("Bearish Harami Cross");  } catch { /* skip */ }
+    try { if (piercingline(ohlc).at(-1))            patterns.push("Piercing Line");         } catch { /* skip */ }
+    try { if (darkcloudcover(ohlc).at(-1))          patterns.push("Dark Cloud Cover");      } catch { /* skip */ }
+    try { if (tweezertop(ohlc).at(-1))              patterns.push("Tweezer Top");           } catch { /* skip */ }
+    try { if (tweezerbottom(ohlc).at(-1))           patterns.push("Tweezer Bottom");        } catch { /* skip */ }
+    try { if (downsidetasukigap(ohlc).at(-1))       patterns.push("Downside Tasuki Gap");   } catch { /* skip */ }
+    // Three-bar reversal patterns
+    try { if (threewhitesoldiers(ohlc).at(-1))      patterns.push("Three White Soldiers");  } catch { /* skip */ }
+    try { if (threeblackcrows(ohlc).at(-1))         patterns.push("Three Black Crows");     } catch { /* skip */ }
+    try { if (morningstar(ohlc).at(-1))             patterns.push("Morning Star");          } catch { /* skip */ }
+    try { if (eveningstar(ohlc).at(-1))             patterns.push("Evening Star");          } catch { /* skip */ }
+    try { if (morningdojistar(ohlc).at(-1))         patterns.push("Morning Doji Star");     } catch { /* skip */ }
+    try { if (eveningdojistar(ohlc).at(-1))         patterns.push("Evening Doji Star");     } catch { /* skip */ }
+    try { if (abandonedbaby(ohlc).at(-1))           patterns.push("Abandoned Baby");        } catch { /* skip */ }
   }
 
   return {
-    patterns: [...new Set(patterns)].slice(0, 12),
+    patterns: [...new Set(patterns)].slice(0, 20),
     marketStructure,
     supportLevel:    Math.round(supportLevel    * 100) / 100,
     resistanceLevel: Math.round(resistanceLevel * 100) / 100,

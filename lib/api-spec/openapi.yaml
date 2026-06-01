@@ -1405,7 +1405,7 @@ components:
       properties:
         type:
           type: string
-          enum: [bull-flag, bear-flag, ascending-triangle, descending-triangle, double-bottom, head-and-shoulders]
+          enum: [bull-flag, bear-flag, ascending-triangle, descending-triangle, double-bottom, double-top, head-and-shoulders]
         label:
           type: string
         description:

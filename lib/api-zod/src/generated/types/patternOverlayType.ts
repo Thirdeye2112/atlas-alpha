@@ -15,5 +15,6 @@ export const PatternOverlayType = {
   'ascending-triangle': 'ascending-triangle',
   'descending-triangle': 'descending-triangle',
   'double-bottom': 'double-bottom',
+  'double-top': 'double-top',
   'head-and-shoulders': 'head-and-shoulders',
 } as const;
