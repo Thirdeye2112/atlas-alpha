@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { fetchQuote, fetchOHLCV } from "../lib/marketData.js";
 import { marketCache } from "../lib/cache.js";
 import { calcTrend, calcRegimeIndicators } from "../lib/indicators.js";
-import { getCachedBreadth } from "../lib/analysisEngine.js";
+import { getOrStartScanJob } from "../lib/scanJob.js";
 import { SCANNER_UNIVERSE } from "../lib/scannerUniverse.js";
 
 const router: IRouter = Router();
@@ -73,8 +73,20 @@ router.get("/market/overview", async (req, res): Promise<void> => {
     marketRegime = "risk_off";
   }
 
-  // Breadth from cached scanner analyses (null until scanner has run)
-  const breadth = getCachedBreadth();
+  // Breadth from the scanner job's in-memory analyses (always fresh — 30-min TTL).
+  // We read from job.analyses rather than analysisCache because the cache TTL (5 min)
+  // is shorter than the scanner job TTL (30 min), causing breadth to go null between scans.
+  const job = getOrStartScanJob();
+  const jobAnalyses = job.analyses;
+  let aboveSma50 = 0, aboveSma200 = 0;
+  for (const a of jobAnalyses) {
+    const price = a.quote.price as number;
+    if (a.trend.sma50  > 0 && price > a.trend.sma50)  aboveSma50++;
+    if (a.trend.sma200 > 0 && price > a.trend.sma200) aboveSma200++;
+  }
+  const breadthTotal  = jobAnalyses.length;
+  const pctAboveSma50  = breadthTotal >= 20 ? Math.round(aboveSma50  / breadthTotal * 100) : null;
+  const pctAboveSma200 = breadthTotal >= 20 ? Math.round(aboveSma200 / breadthTotal * 100) : null;
 
   const overview = {
     spy: toMarketQuote(spy),
@@ -89,9 +101,9 @@ router.get("/market/overview", async (req, res): Promise<void> => {
     realizedVolPct: regime.realizedVolPct,
     creditSpreadFactor: regime.creditSpreadFactor,
     vixTermStructureFactor: regime.vixTermStructureFactor,
-    pctAboveSma50:  breadth.pctAboveSma50,
-    pctAboveSma200: breadth.pctAboveSma200,
-    breadthUniverse: breadth.total > 0 ? breadth.total : null,
+    pctAboveSma50,
+    pctAboveSma200,
+    breadthUniverse: breadthTotal > 0 ? breadthTotal : null,
     universe: {
       size: SCANNER_UNIVERSE.length,
       note: "Current large/mid-cap constituents + ETFs. Point-in-time historical membership not tracked — backtests exclude delisted names.",
