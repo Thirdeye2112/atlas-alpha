@@ -40,11 +40,12 @@ router.post("/alerts", async (req, res): Promise<void> => {
     res.status(400).json({ error: "ticker (string) required" }); return;
   }
   if (!conditionType || typeof conditionType !== "string" ||
-      !["score_above", "score_below", "direction_change"].includes(conditionType)) {
-    res.status(400).json({ error: "conditionType must be 'score_above' | 'score_below' | 'direction_change'" }); return;
+      !["score_above", "score_below", "direction_change", "price_above", "price_below"].includes(conditionType)) {
+    res.status(400).json({ error: "conditionType must be 'score_above' | 'score_below' | 'direction_change' | 'price_above' | 'price_below'" }); return;
   }
-  if ((conditionType === "score_above" || conditionType === "score_below") && threshold === undefined) {
-    res.status(400).json({ error: "threshold required for score_above / score_below" }); return;
+  if ((conditionType === "score_above" || conditionType === "score_below" ||
+       conditionType === "price_above" || conditionType === "price_below") && threshold === undefined) {
+    res.status(400).json({ error: "threshold required for score/price conditions" }); return;
   }
 
   try {
@@ -92,6 +93,7 @@ export async function checkAlertsForTicker(
   ticker: string,
   score: number,
   direction: string,
+  price: number,
 ): Promise<void> {
   try {
     const active = await db
@@ -109,6 +111,10 @@ export async function checkAlertsForTicker(
         fire = score >= alert.threshold && alert.lastTriggeredAt === null;
       } else if (alert.conditionType === "score_below" && alert.threshold !== null) {
         fire = score <= alert.threshold && alert.lastTriggeredAt === null;
+      } else if (alert.conditionType === "price_above" && alert.threshold !== null) {
+        fire = price >= alert.threshold && alert.lastTriggeredAt === null;
+      } else if (alert.conditionType === "price_below" && alert.threshold !== null) {
+        fire = price <= alert.threshold && alert.lastTriggeredAt === null;
       } else if (alert.conditionType === "direction_change") {
         fire = alert.lastKnownDir !== null && alert.lastKnownDir !== direction;
       }

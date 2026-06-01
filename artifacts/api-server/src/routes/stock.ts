@@ -60,8 +60,8 @@ router.get("/stock/:ticker/analysis", async (req, res): Promise<void> => {
       },
     });
 
-    // Fire-and-forget: check if any score/direction alerts fire for this ticker
-    checkAlertsForTicker(sym, analysis.atlasScore.overall, analysis.atlasScore.direction)
+    // Fire-and-forget: check if any score/direction/price alerts fire for this ticker
+    checkAlertsForTicker(sym, analysis.atlasScore.overall, analysis.atlasScore.direction, analysis.quote.price as number)
       .catch(() => { /* non-critical */ });
   } catch (err) {
     req.log.warn({ err, ticker: params.data.ticker }, "Analysis failed");

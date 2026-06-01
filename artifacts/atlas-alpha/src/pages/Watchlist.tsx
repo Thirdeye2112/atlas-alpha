@@ -56,9 +56,11 @@ async function acknowledgeAlert(id: number): Promise<void> {
 }
 
 const CONDITION_LABELS: Record<string, string> = {
-  score_above:     "Score ≥",
-  score_below:     "Score ≤",
+  score_above:      "Score ≥",
+  score_below:      "Score ≤",
   direction_change: "Direction changes",
+  price_above:      "Price ≥ $",
+  price_below:      "Price ≤ $",
 };
 
 interface CsvPosition {
@@ -152,7 +154,7 @@ function formatPnlPct(val: number | null): string {
 export default function Watchlist() {
   const [ticker, setTicker] = useState("");
   const [alertPanelTicker, setAlertPanelTicker] = useState<string | null>(null);
-  const [newCondition, setNewCondition] = useState<"score_above" | "score_below" | "direction_change">("score_above");
+  const [newCondition, setNewCondition] = useState<"score_above" | "score_below" | "direction_change" | "price_above" | "price_below">("score_above");
   const [newThreshold, setNewThreshold] = useState("70");
   const [csvStatus, setCsvStatus] = useState<{ imported: number; failed: number } | null>(null);
   const [csvImporting, setCsvImporting] = useState(false);
@@ -527,15 +529,20 @@ export default function Watchlist() {
                               >
                                 <option value="score_above">Score ≥</option>
                                 <option value="score_below">Score ≤</option>
+                                <option value="price_above">Price ≥ $</option>
+                                <option value="price_below">Price ≤ $</option>
                                 <option value="direction_change">Direction changes</option>
                               </select>
                               {newCondition !== "direction_change" && (
                                 <input
                                   type="number"
-                                  min={0} max={100}
+                                  min={0}
+                                  step={newCondition === "price_above" || newCondition === "price_below" ? "0.01" : "1"}
+                                  max={newCondition === "price_above" || newCondition === "price_below" ? undefined : 100}
                                   value={newThreshold}
                                   onChange={e => setNewThreshold(e.target.value)}
-                                  className="w-16 text-xs font-mono bg-background border border-border rounded px-2 py-1 focus:outline-none focus:border-primary"
+                                  className="w-24 text-xs font-mono bg-background border border-border rounded px-2 py-1 focus:outline-none focus:border-primary"
+                                  placeholder={newCondition === "price_above" || newCondition === "price_below" ? "price" : "0–100"}
                                 />
                               )}
                               <button
