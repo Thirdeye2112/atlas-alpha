@@ -7,7 +7,7 @@ export const SCANNER_UNIVERSE: string[] = [
 
   // ── Mid-cap Technology & Software ─────────────────────────────────────────
   "MRVL", "ON", "SMCI", "ARM", "NET", "DDOG", "ZS", "OKTA", "TEAM", "WDAY",
-  "VEEV", "ANSS", "KEYS", "TER", "SWKS", "MPWR", "ENTG", "ENPH", "FSLR", "SEDG",
+  "VEEV", "KEYS", "TER", "SWKS", "MPWR", "ENTG", "ENPH", "FSLR", "SEDG",
   "SHOP", "ZM", "ROKU", "RBLX", "U", "LYFT", "UBER", "GRAB",
 
   // ── Fintech / Crypto-adjacent ──────────────────────────────────────────────
@@ -58,6 +58,131 @@ export const SCANNER_UNIVERSE: string[] = [
 
   // ── China / Emerging ──────────────────────────────────────────────────────
   "BABA", "JD", "PDD", "BIDU", "NIO",
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ── S&P 500 COMPLETIONS ────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ── Financials ────────────────────────────────────────────────────────────
+  "BRK-B",                                         // Berkshire Hathaway
+  "BX", "APO", "KKR", "CG",                       // Private equity / alternatives
+  "FITB", "HBAN", "KEY", "RF", "CFG", "MTB",      // Regional banks
+  "BK", "STT", "NTRS",                             // Custody / trust banks
+  "TROW", "IVZ", "BEN",                            // Asset managers
+  "AIZ", "L", "HIG", "AON", "FNF", "VOYA", "PFG", "WRB", "ACGL", // Insurance
+  "NDAQ", "RJF",                                   // Exchanges / wealth mgmt
+
+  // ── Communication Services ────────────────────────────────────────────────
+  "CHTR",                                          // Cable / broadband
+  "WBD", "PARA", "NWSA", "FOX",                   // Media
+  "LYV",                                           // Live events
+  "EA", "TTWO",                                    // Video games
+  "OMC", "IPG",                                    // Advertising agencies
+
+  // ── Consumer Discretionary ────────────────────────────────────────────────
+  "YUM", "CMG", "DPZ", "QSR", "DRI",              // Restaurants
+  "APTV", "KMX", "AN",                             // Auto & dealers
+  "PHM", "TOL", "NVR",                             // Homebuilders
+  "BBY", "DLTR", "GPC",                            // Specialty retail
+  "LVS", "WYNN", "CZR", "NCLH",                   // Gaming & cruise
+  "RL", "PVH", "TPR",                              // Apparel / luxury
+  "HAS",                                           // Toys
+
+  // ── Consumer Staples ──────────────────────────────────────────────────────
+  "MKC", "CAG", "CPB", "HRL", "SJM", "CHD",       // Food / household
+  "WBA", "TAP",                                    // Drug retail / beverages
+  "KVUE",                                          // Kenvue (J&J spin-off)
+
+  // ── Energy ────────────────────────────────────────────────────────────────
+  "MRO",                                           // Marathon Oil
+  "OKE", "TRGP",                                  // Midstream
+  "LNG",                                           // Cheniere (LNG exports)
+  "EQT",                                           // Natural gas E&P
+
+  // ── Healthcare ────────────────────────────────────────────────────────────
+  "ELV", "CNC", "MOH",                             // Managed care
+  "HOLX", "HSIC", "MTD", "RMD", "COO", "CRL", "RVTY", // Devices / diagnostics
+  "VTRS", "INCY", "OGN", "UTHR", "ALNY",          // Pharma / biotech
+  "A", "AVTR",                                     // Life science tools
+
+  // ── Industrials & Defense ─────────────────────────────────────────────────
+  "DAL", "UAL", "AAL", "LUV",                      // Airlines
+  "EXPD", "JBHT", "CHRW", "XPO", "GXO",           // Freight & logistics
+  "LHX", "TDG", "HEI", "TXT",                     // Aerospace / defense
+  "PH", "DOV", "AME", "IEX", "FTV", "GNRC", "ALLE", "SWK", "BWA", // Industrials
+  "PWR", "MTZ", "J", "HUBB",                      // Construction / infra
+  "BALL", "IP", "PKG", "CCK",                      // Packaging
+  "AXON",                                          // Public safety / security
+
+  // ── Information Technology ────────────────────────────────────────────────
+  "HPQ", "HPE", "DELL", "WDC", "NTAP", "CDW",     // Hardware / storage
+  "NXPI", "MCHP",                                  // Semiconductors (Nasdaq-100)
+  "FTNT", "AKAM", "FFIV", "GRMN",                 // Networking / security
+  "ROP", "TYL", "PAYC", "HUBS", "MANH", "IT",    // Enterprise software
+  "CTSH", "EPAM", "GDDY",                          // IT services
+  "FICO", "TRMB", "ZBRA",                          // Analytics / decisioning
+  "PSTG", "GEN",                                   // Storage / security software
+  "LDOS",                                          // Defense IT services
+
+  // ── Materials ─────────────────────────────────────────────────────────────
+  "CTVA", "FMC",                                   // Ag chemicals
+  "CE", "EMN", "RPM", "OLN", "HUN", "WLK",        // Specialty chemicals
+  "ATI",                                           // Specialty metals
+  "SEE", "SON", "AVY",                             // Packaging
+  "VMC", "MLM",                                    // Aggregates / construction mats
+
+  // ── Real Estate ───────────────────────────────────────────────────────────
+  "EXR", "KIM", "BXP", "VNO", "IRM",              // Storage / office / retail REITs
+  "CPT", "CUBE", "UDR",                            // Residential / storage
+  "INVH", "AMH",                                   // Single-family rental
+  "VICI", "GLPI",                                  // Gaming REITs
+  "ELS", "SUI",                                    // Manufactured housing
+
+  // ── Utilities ─────────────────────────────────────────────────────────────
+  "ES", "CNP", "CMS", "NI", "LNT", "PNW",         // Electric / gas utilities
+  "NRG", "EIX", "AEE", "FE", "PPL", "ETR", "PEG", "AES",
+  "CEG", "VST",                                    // Clean / nuclear power gen
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ── RUSSELL 1000 NOTABLE MID-CAPS ─────────────────────────────────────────
+  // High-growth names outside the S&P 500 core. Elevated gap frequency makes
+  // them ideal for gap-setup and short-squeeze scans.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // High-growth Tech
+  "APP",   // AppLovin — digital advertising
+  "DUOL",  // Duolingo — edtech
+  "MNDY",  // Monday.com — work OS
+  "TOST",  // Toast — restaurant tech
+  "DT",    // Dynatrace — observability
+  "PATH",  // UiPath — RPA automation
+  "MDB",   // MongoDB — database
+  "CFLT",  // Confluent — data streaming
+  "GTLB",  // GitLab — DevSecOps
+  "DOCS",  // Doximity — medical networking
+  "BILL",  // Bill.com — SMB payments
+  "ZI",    // ZoomInfo — B2B data
+  "BRZE",  // Braze — customer engagement
+  "TTD",   // The Trade Desk — programmatic ads
+  "SMAR",  // Smartsheet — collaborative work
+
+  // Consumer / Retail mid-caps
+  "DKNG",  // DraftKings — sports betting
+  "CAVA",  // CAVA Group — fast casual
+  "CELH",  // Celsius Holdings — energy drinks
+  "HIMS",  // Hims & Hers Health
+  "RDDT",  // Reddit — social media
+  "AFRM",  // Affirm — BNPL payments
+  "CART",  // Maplebear (Instacart)
+
+  // Healthcare / Biotech mid-caps
+  "NTRA",  // Natera — genetic testing
+  "PCVX",  // Vaxcyte — vaccines
+  "RXRX",  // Recursion Pharma — AI drug discovery
+
+  // Clean energy mid-caps
+  "RUN",   // Sunrun — residential solar
+  "BE",    // Bloom Energy — fuel cells
 
   // ── US Broad-Market Index ETFs ────────────────────────────────────────────
   // S&P 500
