@@ -18,6 +18,10 @@ tags:
     description: Watchlist management
   - name: market
     description: Market overview
+  - name: backtest
+    description: Walk-forward backtest and calibration
+  - name: alerts
+    description: Price and signal alerts
   - name: research
     description: Research and quantitative analysis tools
 
@@ -445,6 +449,206 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MarketOverview"
+
+  /stock/{ticker}/narrative:
+    get:
+      operationId: getStockNarrative
+      tags: [stock]
+      summary: AI-generated signal narrative (requires ENABLE_AI_NARRATIVE=true)
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: AI narrative text
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NarrativeResponse"
+        "503":
+          description: AI narrative unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /backtest/ic:
+    get:
+      operationId: getBacktestIc
+      tags: [backtest]
+      summary: Walk-forward IC backtest for a single ticker
+      parameters:
+        - name: ticker
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: horizon
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 10
+      responses:
+        "200":
+          description: Backtest result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BacktestOutput"
+        "400":
+          description: Insufficient data or bad ticker
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /backtest/multi:
+    get:
+      operationId: getBacktestMulti
+      tags: [backtest]
+      summary: Multi-horizon IC sweep (1D, 5D, 10D, 20D) for a single ticker
+      parameters:
+        - name: ticker
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Multi-horizon backtest result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BacktestMultiResult"
+        "400":
+          description: Insufficient data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /backtest/cross-sectional:
+    get:
+      operationId: getBacktestCrossSectional
+      tags: [backtest]
+      summary: Universe-wide cross-sectional Rank IC from signal_log snapshots
+      parameters:
+        - name: horizon
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 5
+      responses:
+        "200":
+          description: Cross-sectional IC result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CrossSectionalICResult"
+
+  /alerts:
+    get:
+      operationId: getAlerts
+      tags: [alerts]
+      summary: List all alerts
+      responses:
+        "200":
+          description: Alert list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Alert"
+    post:
+      operationId: createAlert
+      tags: [alerts]
+      summary: Create an alert
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AlertInput"
+      responses:
+        "201":
+          description: Created alert
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Alert"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /alerts/triggered:
+    get:
+      operationId: getTriggeredAlerts
+      tags: [alerts]
+      summary: List triggered-but-unacknowledged alerts
+      responses:
+        "200":
+          description: Triggered alerts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Alert"
+
+  /alerts/{id}:
+    delete:
+      operationId: deleteAlert
+      tags: [alerts]
+      summary: Delete an alert
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                required: [ok]
+
+  /alerts/{id}/acknowledge:
+    post:
+      operationId: acknowledgeAlert
+      tags: [alerts]
+      summary: Acknowledge a triggered alert
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Acknowledged
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                required: [ok]
 
   /research/gap-analysis:
     get:
@@ -1120,6 +1324,12 @@ components:
           type: number
           nullable: true
           description: "% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S/R)"
+        assetType:
+          type: string
+          description: "equity | etf | leveraged-etf | volatility-etf | bond-etf | commodity-etf | international-etf"
+        isDistorted:
+          type: boolean
+          description: "True for leveraged ETFs and VIX-futures products with structural decay"
       required:
         - ticker
         - name
@@ -1244,6 +1454,24 @@ components:
           enum: [risk_on, neutral, risk_off]
         marketRegimeScore:
           type: number
+        adx:
+          type: ["number", "null"]
+          description: "Average Directional Index for SPY — trend strength (>25 = trending)"
+        adxTrending:
+          type: ["boolean", "null"]
+          description: "True when ADX > 25"
+        realizedVol20:
+          type: ["number", "null"]
+          description: "SPY 20-day realized volatility (annualized %)"
+        realizedVolPct:
+          type: ["number", "null"]
+          description: "Realized vol percentile vs trailing 1Y (0-100)"
+        creditSpreadFactor:
+          type: ["number", "null"]
+          description: "HYG/LQD 20D momentum mapped 0–100 (100 = tightening spreads = risk-on)"
+        vixTermStructureFactor:
+          type: ["number", "null"]
+          description: "VIX3M/VIX ratio mapped 0–100 (100 = strong contango = calm market)"
         pctAboveSma50:
           type: ["number", "null"]
           description: "% of scanner universe with price above SMA50 (null until scanner has run)"
@@ -1441,3 +1669,363 @@ components:
             $ref: "#/components/schemas/GapEventItem"
         setupBacktest:
           $ref: "#/components/schemas/SetupBacktest"
+
+    NarrativeResponse:
+      type: object
+      properties:
+        ticker:
+          type: string
+        narrative:
+          type: string
+      required: [ticker, narrative]
+
+    Alert:
+      type: object
+      properties:
+        id:
+          type: integer
+        ticker:
+          type: string
+        conditionType:
+          type: string
+          enum: [score_above, score_below, direction_change]
+        threshold:
+          type: ["integer", "null"]
+        lastKnownDir:
+          type: ["string", "null"]
+        isActive:
+          type: boolean
+        lastTriggeredAt:
+          type: ["string", "null"]
+        acknowledgedAt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required: [id, ticker, conditionType, threshold, lastKnownDir, isActive, lastTriggeredAt, acknowledgedAt, createdAt]
+
+    AlertInput:
+      type: object
+      properties:
+        ticker:
+          type: string
+        conditionType:
+          type: string
+          enum: [score_above, score_below, direction_change]
+        threshold:
+          type: integer
+          description: "Required for score_above / score_below conditions"
+      required: [ticker, conditionType]
+
+    BacktestBucket:
+      type: object
+      properties:
+        count:
+          type: integer
+        hitRate:
+          type: ["number", "null"]
+        hitRateNet:
+          type: ["number", "null"]
+        avgReturn:
+          type: ["number", "null"]
+      required: [count, hitRate, hitRateNet, avgReturn]
+
+    BacktestDecile:
+      type: object
+      properties:
+        bucket:
+          type: string
+        count:
+          type: integer
+        hitRate:
+          type: ["number", "null"]
+        avgReturn:
+          type: ["number", "null"]
+      required: [bucket, count, hitRate, avgReturn]
+
+    BacktestScatterPoint:
+      type: object
+      properties:
+        x:
+          type: number
+        y:
+          type: number
+        date:
+          type: string
+      required: [x, y, date]
+
+    BacktestTimelineEntry:
+      type: object
+      properties:
+        date:
+          type: string
+        score:
+          type: number
+        fwdReturn:
+          type: number
+        direction:
+          type: string
+          enum: [bull, neutral, bear]
+        correct:
+          type: boolean
+      required: [date, score, fwdReturn, direction, correct]
+
+    OOSPeriod:
+      type: object
+      properties:
+        label:
+          type: string
+        start:
+          type: string
+        end:
+          type: string
+        ic:
+          type: number
+        n:
+          type: integer
+      required: [label, start, end, ic, n]
+
+    RegimeICBreakdown:
+      type: object
+      properties:
+        riskOn:
+          type: ["number", "null"]
+        riskOnN:
+          type: integer
+        neutral:
+          type: ["number", "null"]
+        neutralN:
+          type: integer
+        riskOff:
+          type: ["number", "null"]
+        riskOffN:
+          type: integer
+      required: [riskOn, riskOnN, neutral, neutralN, riskOff, riskOffN]
+
+    CategoryIC:
+      type: object
+      properties:
+        trend:
+          type: number
+        momentum:
+          type: number
+        volume:
+          type: number
+        relativeStrength:
+          type: number
+        regime:
+          type: number
+      required: [trend, momentum, volume, relativeStrength, regime]
+
+    ScoreWeights:
+      type: object
+      properties:
+        trend:
+          type: number
+        momentum:
+          type: number
+        volume:
+          type: number
+        relativeStrength:
+          type: number
+        regime:
+          type: number
+      required: [trend, momentum, volume, relativeStrength, regime]
+
+    BacktestOutput:
+      type: object
+      properties:
+        ticker:
+          type: string
+        horizon:
+          type: integer
+        marketCap:
+          type: ["number", "null"]
+        marketCapBucket:
+          type: string
+        marketCapNote:
+          type: string
+        isDistorted:
+          type: boolean
+        assetType:
+          type: string
+        ic:
+          type: number
+        icRating:
+          type: string
+        rankIC:
+          type: number
+        rankICRating:
+          type: string
+        icTStat:
+          type: number
+        totalObservations:
+          type: integer
+        calibratedSlope:
+          type: number
+        calibratedIntercept:
+          type: number
+        slippageBps:
+          type: number
+        brierScore:
+          type: ["number", "null"]
+        brierScoreCI:
+          oneOf:
+            - type: "null"
+            - type: object
+              properties:
+                low:
+                  type: number
+                high:
+                  type: number
+              required: [low, high]
+        brierIsOos:
+          type: boolean
+        winsorThresholdPct:
+          type: number
+        inSampleIC:
+          type: number
+        outOfSampleIC:
+          type: number
+        icDegradation:
+          type: number
+        oosPeriods:
+          type: array
+          items:
+            $ref: "#/components/schemas/OOSPeriod"
+        regimeIC:
+          $ref: "#/components/schemas/RegimeICBreakdown"
+        categoryIC:
+          $ref: "#/components/schemas/CategoryIC"
+        optimalWeights:
+          oneOf:
+            - type: "null"
+            - $ref: "#/components/schemas/ScoreWeights"
+        currentWeights:
+          $ref: "#/components/schemas/ScoreWeights"
+        bull:
+          $ref: "#/components/schemas/BacktestBucket"
+        neutral:
+          $ref: "#/components/schemas/BacktestBucket"
+        bear:
+          $ref: "#/components/schemas/BacktestBucket"
+        deciles:
+          type: array
+          items:
+            $ref: "#/components/schemas/BacktestDecile"
+        scatter:
+          type: array
+          items:
+            $ref: "#/components/schemas/BacktestScatterPoint"
+        timeline:
+          type: array
+          items:
+            $ref: "#/components/schemas/BacktestTimelineEntry"
+        cachedAt:
+          type: string
+      required:
+        - ticker
+        - horizon
+        - marketCap
+        - marketCapBucket
+        - marketCapNote
+        - isDistorted
+        - assetType
+        - ic
+        - icRating
+        - rankIC
+        - rankICRating
+        - icTStat
+        - totalObservations
+        - calibratedSlope
+        - calibratedIntercept
+        - slippageBps
+        - brierScore
+        - brierScoreCI
+        - brierIsOos
+        - winsorThresholdPct
+        - inSampleIC
+        - outOfSampleIC
+        - icDegradation
+        - oosPeriods
+        - regimeIC
+        - categoryIC
+        - optimalWeights
+        - currentWeights
+        - bull
+        - neutral
+        - bear
+        - deciles
+        - scatter
+        - timeline
+        - cachedAt
+
+    BacktestMultiHorizon:
+      type: object
+      properties:
+        horizon:
+          type: integer
+        rankIC:
+          type: number
+        rankICRating:
+          type: string
+        icTStat:
+          type: number
+        totalObservations:
+          type: integer
+        categoryIC:
+          $ref: "#/components/schemas/CategoryIC"
+        optimalWeights:
+          oneOf:
+            - type: "null"
+            - $ref: "#/components/schemas/ScoreWeights"
+      required: [horizon, rankIC, rankICRating, icTStat, totalObservations, categoryIC, optimalWeights]
+
+    BacktestMultiResult:
+      type: object
+      properties:
+        ticker:
+          type: string
+        horizons:
+          type: array
+          items:
+            $ref: "#/components/schemas/BacktestMultiHorizon"
+        optimalHorizon:
+          type: ["integer", "null"]
+      required: [ticker, horizons, optimalHorizon]
+
+    CrossSectionalICPeriod:
+      type: object
+      properties:
+        date:
+          type: string
+        ic:
+          type: number
+        n:
+          type: integer
+      required: [date, ic, n]
+
+    CrossSectionalICResult:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [complete, partial, accumulating]
+        horizon:
+          type: integer
+        snapshotCount:
+          type: integer
+        periodsWithIC:
+          type: ["integer", "null"]
+        meanCrossIC:
+          type: ["number", "null"]
+        tStat:
+          type: ["number", "null"]
+        positiveRate:
+          type: ["number", "null"]
+        note:
+          type: ["string", "null"]
+        icTimeSeries:
+          type: array
+          items:
+            $ref: "#/components/schemas/CrossSectionalICPeriod"
+      required: [status, horizon, snapshotCount, meanCrossIC, icTimeSeries]

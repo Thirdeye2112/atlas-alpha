@@ -33,4 +33,8 @@ export interface ScannerResult {
   earningsDaysAway?: number | null;
   /** % distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S/R) */
   keyLevelDist?: number | null;
+  /** equity | etf | leveraged-etf | volatility-etf | bond-etf | commodity-etf | international-etf */
+  assetType?: string;
+  /** True for leveraged ETFs and VIX-futures products with structural decay */
+  isDistorted?: boolean;
 }

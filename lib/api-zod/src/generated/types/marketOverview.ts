@@ -16,6 +16,36 @@ export interface MarketOverview {
   marketRegime: MarketOverviewMarketRegime;
   marketRegimeScore: number;
   /**
+     * Average Directional Index for SPY — trend strength (>25 = trending)
+     * @nullable
+     */
+  adx?: number | null;
+  /**
+     * True when ADX > 25
+     * @nullable
+     */
+  adxTrending?: boolean | null;
+  /**
+     * SPY 20-day realized volatility (annualized %)
+     * @nullable
+     */
+  realizedVol20?: number | null;
+  /**
+     * Realized vol percentile vs trailing 1Y (0-100)
+     * @nullable
+     */
+  realizedVolPct?: number | null;
+  /**
+     * HYG/LQD 20D momentum mapped 0–100 (100 = tightening spreads = risk-on)
+     * @nullable
+     */
+  creditSpreadFactor?: number | null;
+  /**
+     * VIX3M/VIX ratio mapped 0–100 (100 = strong contango = calm market)
+     * @nullable
+     */
+  vixTermStructureFactor?: number | null;
+  /**
      * % of scanner universe with price above SMA50 (null until scanner has run)
      * @nullable
      */

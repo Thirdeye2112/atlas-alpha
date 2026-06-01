@@ -20,8 +20,18 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AcknowledgeAlert200,
+  Alert,
+  AlertInput,
   ApiError,
+  BacktestMultiResult,
+  BacktestOutput,
+  CrossSectionalICResult,
+  DeleteAlert200,
   GapAnalysisResult,
+  GetBacktestCrossSectionalParams,
+  GetBacktestIcParams,
+  GetBacktestMultiParams,
   GetGapAnalysisParams,
   GetScannerBreakdownsParams,
   GetScannerBreakoutsParams,
@@ -38,6 +48,7 @@ import type {
   GetScannerTopShortsParams,
   HealthStatus,
   MarketOverview,
+  NarrativeResponse,
   OHLCVBar,
   ScannerResponse,
   StockAnalysis,
@@ -1755,6 +1766,700 @@ export function useGetMarketOverview<TData = Awaited<ReturnType<typeof getMarket
 
 
 
+
+export const getGetStockNarrativeUrl = (ticker: string,) => {
+
+
+
+
+  return `/api/stock/${ticker}/narrative`
+}
+
+/**
+ * @summary AI-generated signal narrative (requires ENABLE_AI_NARRATIVE=true)
+ */
+export const getStockNarrative = async (ticker: string, options?: RequestInit): Promise<NarrativeResponse> => {
+
+  return customFetch<NarrativeResponse>(getGetStockNarrativeUrl(ticker),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetStockNarrativeQueryKey = (ticker: string,) => {
+    return [
+    `/api/stock/${ticker}/narrative`
+    ] as const;
+    }
+
+
+export const getGetStockNarrativeQueryOptions = <TData = Awaited<ReturnType<typeof getStockNarrative>>, TError = ErrorType<ApiError>>(ticker: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStockNarrative>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetStockNarrativeQueryKey(ticker);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStockNarrative>>> = ({ signal }) => getStockNarrative(ticker, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(ticker), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStockNarrative>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetStockNarrativeQueryResult = NonNullable<Awaited<ReturnType<typeof getStockNarrative>>>
+export type GetStockNarrativeQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary AI-generated signal narrative (requires ENABLE_AI_NARRATIVE=true)
+ */
+
+export function useGetStockNarrative<TData = Awaited<ReturnType<typeof getStockNarrative>>, TError = ErrorType<ApiError>>(
+ ticker: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStockNarrative>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetStockNarrativeQueryOptions(ticker,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetBacktestIcUrl = (params: GetBacktestIcParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/backtest/ic?${stringifiedParams}` : `/api/backtest/ic`
+}
+
+/**
+ * @summary Walk-forward IC backtest for a single ticker
+ */
+export const getBacktestIc = async (params: GetBacktestIcParams, options?: RequestInit): Promise<BacktestOutput> => {
+
+  return customFetch<BacktestOutput>(getGetBacktestIcUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBacktestIcQueryKey = (params?: GetBacktestIcParams,) => {
+    return [
+    `/api/backtest/ic`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetBacktestIcQueryOptions = <TData = Awaited<ReturnType<typeof getBacktestIc>>, TError = ErrorType<ApiError>>(params: GetBacktestIcParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBacktestIc>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBacktestIcQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBacktestIc>>> = ({ signal }) => getBacktestIc(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBacktestIc>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBacktestIcQueryResult = NonNullable<Awaited<ReturnType<typeof getBacktestIc>>>
+export type GetBacktestIcQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary Walk-forward IC backtest for a single ticker
+ */
+
+export function useGetBacktestIc<TData = Awaited<ReturnType<typeof getBacktestIc>>, TError = ErrorType<ApiError>>(
+ params: GetBacktestIcParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBacktestIc>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBacktestIcQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetBacktestMultiUrl = (params: GetBacktestMultiParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/backtest/multi?${stringifiedParams}` : `/api/backtest/multi`
+}
+
+/**
+ * @summary Multi-horizon IC sweep (1D, 5D, 10D, 20D) for a single ticker
+ */
+export const getBacktestMulti = async (params: GetBacktestMultiParams, options?: RequestInit): Promise<BacktestMultiResult> => {
+
+  return customFetch<BacktestMultiResult>(getGetBacktestMultiUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBacktestMultiQueryKey = (params?: GetBacktestMultiParams,) => {
+    return [
+    `/api/backtest/multi`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetBacktestMultiQueryOptions = <TData = Awaited<ReturnType<typeof getBacktestMulti>>, TError = ErrorType<ApiError>>(params: GetBacktestMultiParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBacktestMulti>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBacktestMultiQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBacktestMulti>>> = ({ signal }) => getBacktestMulti(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBacktestMulti>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBacktestMultiQueryResult = NonNullable<Awaited<ReturnType<typeof getBacktestMulti>>>
+export type GetBacktestMultiQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary Multi-horizon IC sweep (1D, 5D, 10D, 20D) for a single ticker
+ */
+
+export function useGetBacktestMulti<TData = Awaited<ReturnType<typeof getBacktestMulti>>, TError = ErrorType<ApiError>>(
+ params: GetBacktestMultiParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBacktestMulti>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBacktestMultiQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetBacktestCrossSectionalUrl = (params?: GetBacktestCrossSectionalParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/backtest/cross-sectional?${stringifiedParams}` : `/api/backtest/cross-sectional`
+}
+
+/**
+ * @summary Universe-wide cross-sectional Rank IC from signal_log snapshots
+ */
+export const getBacktestCrossSectional = async (params?: GetBacktestCrossSectionalParams, options?: RequestInit): Promise<CrossSectionalICResult> => {
+
+  return customFetch<CrossSectionalICResult>(getGetBacktestCrossSectionalUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBacktestCrossSectionalQueryKey = (params?: GetBacktestCrossSectionalParams,) => {
+    return [
+    `/api/backtest/cross-sectional`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetBacktestCrossSectionalQueryOptions = <TData = Awaited<ReturnType<typeof getBacktestCrossSectional>>, TError = ErrorType<unknown>>(params?: GetBacktestCrossSectionalParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBacktestCrossSectional>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBacktestCrossSectionalQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBacktestCrossSectional>>> = ({ signal }) => getBacktestCrossSectional(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBacktestCrossSectional>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBacktestCrossSectionalQueryResult = NonNullable<Awaited<ReturnType<typeof getBacktestCrossSectional>>>
+export type GetBacktestCrossSectionalQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Universe-wide cross-sectional Rank IC from signal_log snapshots
+ */
+
+export function useGetBacktestCrossSectional<TData = Awaited<ReturnType<typeof getBacktestCrossSectional>>, TError = ErrorType<unknown>>(
+ params?: GetBacktestCrossSectionalParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBacktestCrossSectional>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBacktestCrossSectionalQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetAlertsUrl = () => {
+
+
+
+
+  return `/api/alerts`
+}
+
+/**
+ * @summary List all alerts
+ */
+export const getAlerts = async ( options?: RequestInit): Promise<Alert[]> => {
+
+  return customFetch<Alert[]>(getGetAlertsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAlertsQueryKey = () => {
+    return [
+    `/api/alerts`
+    ] as const;
+    }
+
+
+export const getGetAlertsQueryOptions = <TData = Awaited<ReturnType<typeof getAlerts>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAlerts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAlertsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAlerts>>> = ({ signal }) => getAlerts({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAlerts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAlertsQueryResult = NonNullable<Awaited<ReturnType<typeof getAlerts>>>
+export type GetAlertsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all alerts
+ */
+
+export function useGetAlerts<TData = Awaited<ReturnType<typeof getAlerts>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAlerts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAlertsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateAlertUrl = () => {
+
+
+
+
+  return `/api/alerts`
+}
+
+/**
+ * @summary Create an alert
+ */
+export const createAlert = async (alertInput: AlertInput, options?: RequestInit): Promise<Alert> => {
+
+  return customFetch<Alert>(getCreateAlertUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      alertInput,)
+  }
+);}
+
+
+
+
+export const getCreateAlertMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAlert>>, TError,{data: BodyType<AlertInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createAlert>>, TError,{data: BodyType<AlertInput>}, TContext> => {
+
+const mutationKey = ['createAlert'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createAlert>>, {data: BodyType<AlertInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createAlert(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateAlertMutationResult = NonNullable<Awaited<ReturnType<typeof createAlert>>>
+    export type CreateAlertMutationBody = BodyType<AlertInput>
+    export type CreateAlertMutationError = ErrorType<ApiError>
+
+    /**
+ * @summary Create an alert
+ */
+export const useCreateAlert = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAlert>>, TError,{data: BodyType<AlertInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createAlert>>,
+        TError,
+        {data: BodyType<AlertInput>},
+        TContext
+      > => {
+      return useMutation(getCreateAlertMutationOptions(options));
+    }
+
+export const getGetTriggeredAlertsUrl = () => {
+
+
+
+
+  return `/api/alerts/triggered`
+}
+
+/**
+ * @summary List triggered-but-unacknowledged alerts
+ */
+export const getTriggeredAlerts = async ( options?: RequestInit): Promise<Alert[]> => {
+
+  return customFetch<Alert[]>(getGetTriggeredAlertsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTriggeredAlertsQueryKey = () => {
+    return [
+    `/api/alerts/triggered`
+    ] as const;
+    }
+
+
+export const getGetTriggeredAlertsQueryOptions = <TData = Awaited<ReturnType<typeof getTriggeredAlerts>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTriggeredAlerts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTriggeredAlertsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTriggeredAlerts>>> = ({ signal }) => getTriggeredAlerts({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTriggeredAlerts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTriggeredAlertsQueryResult = NonNullable<Awaited<ReturnType<typeof getTriggeredAlerts>>>
+export type GetTriggeredAlertsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List triggered-but-unacknowledged alerts
+ */
+
+export function useGetTriggeredAlerts<TData = Awaited<ReturnType<typeof getTriggeredAlerts>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTriggeredAlerts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTriggeredAlertsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getDeleteAlertUrl = (id: number,) => {
+
+
+
+
+  return `/api/alerts/${id}`
+}
+
+/**
+ * @summary Delete an alert
+ */
+export const deleteAlert = async (id: number, options?: RequestInit): Promise<DeleteAlert200> => {
+
+  return customFetch<DeleteAlert200>(getDeleteAlertUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteAlertMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAlert>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteAlert>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteAlert'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteAlert>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteAlert(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteAlertMutationResult = NonNullable<Awaited<ReturnType<typeof deleteAlert>>>
+
+    export type DeleteAlertMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete an alert
+ */
+export const useDeleteAlert = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAlert>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteAlert>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteAlertMutationOptions(options));
+    }
+
+export const getAcknowledgeAlertUrl = (id: number,) => {
+
+
+
+
+  return `/api/alerts/${id}/acknowledge`
+}
+
+/**
+ * @summary Acknowledge a triggered alert
+ */
+export const acknowledgeAlert = async (id: number, options?: RequestInit): Promise<AcknowledgeAlert200> => {
+
+  return customFetch<AcknowledgeAlert200>(getAcknowledgeAlertUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getAcknowledgeAlertMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acknowledgeAlert>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof acknowledgeAlert>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['acknowledgeAlert'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof acknowledgeAlert>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  acknowledgeAlert(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AcknowledgeAlertMutationResult = NonNullable<Awaited<ReturnType<typeof acknowledgeAlert>>>
+
+    export type AcknowledgeAlertMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Acknowledge a triggered alert
+ */
+export const useAcknowledgeAlert = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acknowledgeAlert>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof acknowledgeAlert>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getAcknowledgeAlertMutationOptions(options));
+    }
 
 export const getGetGapAnalysisUrl = (params?: GetGapAnalysisParams,) => {
   const normalizedParams = new URLSearchParams();

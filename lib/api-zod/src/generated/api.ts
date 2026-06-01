@@ -279,7 +279,9 @@ export const GetScannerTopLongsResponse = zod.object({
   "catalysts": zod.array(zod.string()),
   "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
   "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
-  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)')
+  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)'),
+  "assetType": zod.string().optional().describe('equity | etf | leveraged-etf | volatility-etf | bond-etf | commodity-etf | international-etf'),
+  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -320,7 +322,9 @@ export const GetScannerTopShortsResponse = zod.object({
   "catalysts": zod.array(zod.string()),
   "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
   "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
-  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)')
+  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)'),
+  "assetType": zod.string().optional().describe('equity | etf | leveraged-etf | volatility-etf | bond-etf | commodity-etf | international-etf'),
+  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -361,7 +365,9 @@ export const GetScannerBreakoutsResponse = zod.object({
   "catalysts": zod.array(zod.string()),
   "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
   "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
-  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)')
+  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)'),
+  "assetType": zod.string().optional().describe('equity | etf | leveraged-etf | volatility-etf | bond-etf | commodity-etf | international-etf'),
+  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -402,7 +408,9 @@ export const GetScannerBreakdownsResponse = zod.object({
   "catalysts": zod.array(zod.string()),
   "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
   "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
-  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)')
+  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)'),
+  "assetType": zod.string().optional().describe('equity | etf | leveraged-etf | volatility-etf | bond-etf | commodity-etf | international-etf'),
+  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -443,7 +451,9 @@ export const GetScannerGammaSqueezeResponse = zod.object({
   "catalysts": zod.array(zod.string()),
   "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
   "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
-  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)')
+  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)'),
+  "assetType": zod.string().optional().describe('equity | etf | leveraged-etf | volatility-etf | bond-etf | commodity-etf | international-etf'),
+  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -484,7 +494,9 @@ export const GetScannerShortSqueezeResponse = zod.object({
   "catalysts": zod.array(zod.string()),
   "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
   "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
-  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)')
+  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)'),
+  "assetType": zod.string().optional().describe('equity | etf | leveraged-etf | volatility-etf | bond-etf | commodity-etf | international-etf'),
+  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -525,7 +537,9 @@ export const GetScannerInstitutionalAccumulationResponse = zod.object({
   "catalysts": zod.array(zod.string()),
   "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
   "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
-  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)')
+  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)'),
+  "assetType": zod.string().optional().describe('equity | etf | leveraged-etf | volatility-etf | bond-etf | commodity-etf | international-etf'),
+  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -566,7 +580,9 @@ export const GetScannerMeanReversionResponse = zod.object({
   "catalysts": zod.array(zod.string()),
   "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
   "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
-  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)')
+  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)'),
+  "assetType": zod.string().optional().describe('equity | etf | leveraged-etf | volatility-etf | bond-etf | commodity-etf | international-etf'),
+  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -607,7 +623,9 @@ export const GetScannerGapSetupLongResponse = zod.object({
   "catalysts": zod.array(zod.string()),
   "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
   "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
-  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)')
+  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)'),
+  "assetType": zod.string().optional().describe('equity | etf | leveraged-etf | volatility-etf | bond-etf | commodity-etf | international-etf'),
+  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -648,7 +666,9 @@ export const GetScannerGapSetupShortResponse = zod.object({
   "catalysts": zod.array(zod.string()),
   "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
   "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
-  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)')
+  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)'),
+  "assetType": zod.string().optional().describe('equity | etf | leveraged-etf | volatility-etf | bond-etf | commodity-etf | international-etf'),
+  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -689,7 +709,9 @@ export const GetScannerKeyLevelsResponse = zod.object({
   "catalysts": zod.array(zod.string()),
   "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
   "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
-  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)')
+  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)'),
+  "assetType": zod.string().optional().describe('equity | etf | leveraged-etf | volatility-etf | bond-etf | commodity-etf | international-etf'),
+  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -730,7 +752,9 @@ export const GetScannerGapUpResponse = zod.object({
   "catalysts": zod.array(zod.string()),
   "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
   "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
-  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)')
+  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)'),
+  "assetType": zod.string().optional().describe('equity | etf | leveraged-etf | volatility-etf | bond-etf | commodity-etf | international-etf'),
+  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -771,7 +795,9 @@ export const GetScannerGapDownResponse = zod.object({
   "catalysts": zod.array(zod.string()),
   "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
   "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
-  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)')
+  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)'),
+  "assetType": zod.string().optional().describe('equity | etf | leveraged-etf | volatility-etf | bond-etf | commodity-etf | international-etf'),
+  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -852,10 +878,270 @@ export const GetMarketOverviewResponse = zod.object({
 }),
   "marketRegime": zod.enum(['risk_on', 'neutral', 'risk_off']),
   "marketRegimeScore": zod.number(),
+  "adx": zod.number().nullish().describe('Average Directional Index for SPY — trend strength (>25 = trending)'),
+  "adxTrending": zod.boolean().nullish().describe('True when ADX > 25'),
+  "realizedVol20": zod.number().nullish().describe('SPY 20-day realized volatility (annualized %)'),
+  "realizedVolPct": zod.number().nullish().describe('Realized vol percentile vs trailing 1Y (0-100)'),
+  "creditSpreadFactor": zod.number().nullish().describe('HYG\/LQD 20D momentum mapped 0–100 (100 = tightening spreads = risk-on)'),
+  "vixTermStructureFactor": zod.number().nullish().describe('VIX3M\/VIX ratio mapped 0–100 (100 = strong contango = calm market)'),
   "pctAboveSma50": zod.number().nullable().describe('% of scanner universe with price above SMA50 (null until scanner has run)'),
   "pctAboveSma200": zod.number().nullable().describe('% of scanner universe with price above SMA200 (null until scanner has run)'),
   "breadthUniverse": zod.number().nullable().describe('Number of tickers included in breadth calculation'),
   "timestamp": zod.string()
+})
+
+
+/**
+ * @summary AI-generated signal narrative (requires ENABLE_AI_NARRATIVE=true)
+ */
+export const GetStockNarrativeParams = zod.object({
+  "ticker": zod.coerce.string()
+})
+
+export const GetStockNarrativeResponse = zod.object({
+  "ticker": zod.string(),
+  "narrative": zod.string()
+})
+
+
+/**
+ * @summary Walk-forward IC backtest for a single ticker
+ */
+export const getBacktestIcQueryHorizonDefault = 10;
+
+export const GetBacktestIcQueryParams = zod.object({
+  "ticker": zod.coerce.string(),
+  "horizon": zod.coerce.number().default(getBacktestIcQueryHorizonDefault)
+})
+
+export const GetBacktestIcResponse = zod.object({
+  "ticker": zod.string(),
+  "horizon": zod.number(),
+  "marketCap": zod.number().nullable(),
+  "marketCapBucket": zod.string(),
+  "marketCapNote": zod.string(),
+  "isDistorted": zod.boolean(),
+  "assetType": zod.string(),
+  "ic": zod.number(),
+  "icRating": zod.string(),
+  "rankIC": zod.number(),
+  "rankICRating": zod.string(),
+  "icTStat": zod.number(),
+  "totalObservations": zod.number(),
+  "calibratedSlope": zod.number(),
+  "calibratedIntercept": zod.number(),
+  "slippageBps": zod.number(),
+  "brierScore": zod.number().nullable(),
+  "brierScoreCI": zod.union([zod.null(),zod.object({
+  "low": zod.number(),
+  "high": zod.number()
+})]),
+  "brierIsOos": zod.boolean(),
+  "winsorThresholdPct": zod.number(),
+  "inSampleIC": zod.number(),
+  "outOfSampleIC": zod.number(),
+  "icDegradation": zod.number(),
+  "oosPeriods": zod.array(zod.object({
+  "label": zod.string(),
+  "start": zod.string(),
+  "end": zod.string(),
+  "ic": zod.number(),
+  "n": zod.number()
+})),
+  "regimeIC": zod.object({
+  "riskOn": zod.number().nullable(),
+  "riskOnN": zod.number(),
+  "neutral": zod.number().nullable(),
+  "neutralN": zod.number(),
+  "riskOff": zod.number().nullable(),
+  "riskOffN": zod.number()
+}),
+  "categoryIC": zod.object({
+  "trend": zod.number(),
+  "momentum": zod.number(),
+  "volume": zod.number(),
+  "relativeStrength": zod.number(),
+  "regime": zod.number()
+}),
+  "optimalWeights": zod.union([zod.null(),zod.object({
+  "trend": zod.number(),
+  "momentum": zod.number(),
+  "volume": zod.number(),
+  "relativeStrength": zod.number(),
+  "regime": zod.number()
+})]),
+  "currentWeights": zod.object({
+  "trend": zod.number(),
+  "momentum": zod.number(),
+  "volume": zod.number(),
+  "relativeStrength": zod.number(),
+  "regime": zod.number()
+}),
+  "bull": zod.object({
+  "count": zod.number(),
+  "hitRate": zod.number().nullable(),
+  "hitRateNet": zod.number().nullable(),
+  "avgReturn": zod.number().nullable()
+}),
+  "neutral": zod.object({
+  "count": zod.number(),
+  "hitRate": zod.number().nullable(),
+  "hitRateNet": zod.number().nullable(),
+  "avgReturn": zod.number().nullable()
+}),
+  "bear": zod.object({
+  "count": zod.number(),
+  "hitRate": zod.number().nullable(),
+  "hitRateNet": zod.number().nullable(),
+  "avgReturn": zod.number().nullable()
+}),
+  "deciles": zod.array(zod.object({
+  "bucket": zod.string(),
+  "count": zod.number(),
+  "hitRate": zod.number().nullable(),
+  "avgReturn": zod.number().nullable()
+})),
+  "scatter": zod.array(zod.object({
+  "x": zod.number(),
+  "y": zod.number(),
+  "date": zod.string()
+})),
+  "timeline": zod.array(zod.object({
+  "date": zod.string(),
+  "score": zod.number(),
+  "fwdReturn": zod.number(),
+  "direction": zod.enum(['bull', 'neutral', 'bear']),
+  "correct": zod.boolean()
+})),
+  "cachedAt": zod.string()
+})
+
+
+/**
+ * @summary Multi-horizon IC sweep (1D, 5D, 10D, 20D) for a single ticker
+ */
+export const GetBacktestMultiQueryParams = zod.object({
+  "ticker": zod.coerce.string()
+})
+
+export const GetBacktestMultiResponse = zod.object({
+  "ticker": zod.string(),
+  "horizons": zod.array(zod.object({
+  "horizon": zod.number(),
+  "rankIC": zod.number(),
+  "rankICRating": zod.string(),
+  "icTStat": zod.number(),
+  "totalObservations": zod.number(),
+  "categoryIC": zod.object({
+  "trend": zod.number(),
+  "momentum": zod.number(),
+  "volume": zod.number(),
+  "relativeStrength": zod.number(),
+  "regime": zod.number()
+}),
+  "optimalWeights": zod.union([zod.null(),zod.object({
+  "trend": zod.number(),
+  "momentum": zod.number(),
+  "volume": zod.number(),
+  "relativeStrength": zod.number(),
+  "regime": zod.number()
+})])
+})),
+  "optimalHorizon": zod.number().nullable()
+})
+
+
+/**
+ * @summary Universe-wide cross-sectional Rank IC from signal_log snapshots
+ */
+export const getBacktestCrossSectionalQueryHorizonDefault = 5;
+
+export const GetBacktestCrossSectionalQueryParams = zod.object({
+  "horizon": zod.coerce.number().default(getBacktestCrossSectionalQueryHorizonDefault)
+})
+
+export const GetBacktestCrossSectionalResponse = zod.object({
+  "status": zod.enum(['complete', 'partial', 'accumulating']),
+  "horizon": zod.number(),
+  "snapshotCount": zod.number(),
+  "periodsWithIC": zod.number().nullish(),
+  "meanCrossIC": zod.number().nullable(),
+  "tStat": zod.number().nullish(),
+  "positiveRate": zod.number().nullish(),
+  "note": zod.string().nullish(),
+  "icTimeSeries": zod.array(zod.object({
+  "date": zod.string(),
+  "ic": zod.number(),
+  "n": zod.number()
+}))
+})
+
+
+/**
+ * @summary List all alerts
+ */
+export const GetAlertsResponseItem = zod.object({
+  "id": zod.number(),
+  "ticker": zod.string(),
+  "conditionType": zod.enum(['score_above', 'score_below', 'direction_change']),
+  "threshold": zod.number().nullable(),
+  "lastKnownDir": zod.string().nullable(),
+  "isActive": zod.boolean(),
+  "lastTriggeredAt": zod.string().nullable(),
+  "acknowledgedAt": zod.string().nullable(),
+  "createdAt": zod.string()
+})
+export const GetAlertsResponse = zod.array(GetAlertsResponseItem)
+
+
+/**
+ * @summary Create an alert
+ */
+export const CreateAlertBody = zod.object({
+  "ticker": zod.string(),
+  "conditionType": zod.enum(['score_above', 'score_below', 'direction_change']),
+  "threshold": zod.number().optional().describe('Required for score_above \/ score_below conditions')
+})
+
+
+/**
+ * @summary List triggered-but-unacknowledged alerts
+ */
+export const GetTriggeredAlertsResponseItem = zod.object({
+  "id": zod.number(),
+  "ticker": zod.string(),
+  "conditionType": zod.enum(['score_above', 'score_below', 'direction_change']),
+  "threshold": zod.number().nullable(),
+  "lastKnownDir": zod.string().nullable(),
+  "isActive": zod.boolean(),
+  "lastTriggeredAt": zod.string().nullable(),
+  "acknowledgedAt": zod.string().nullable(),
+  "createdAt": zod.string()
+})
+export const GetTriggeredAlertsResponse = zod.array(GetTriggeredAlertsResponseItem)
+
+
+/**
+ * @summary Delete an alert
+ */
+export const DeleteAlertParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteAlertResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary Acknowledge a triggered alert
+ */
+export const AcknowledgeAlertParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const AcknowledgeAlertResponse = zod.object({
+  "ok": zod.boolean()
 })
 
 

@@ -454,6 +454,10 @@ export interface ScannerResult {
   earningsDaysAway?: number | null;
   /** % distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S/R) */
   keyLevelDist?: number | null;
+  /** equity | etf | leveraged-etf | volatility-etf | bond-etf | commodity-etf | international-etf */
+  assetType?: string;
+  /** True for leveraged ETFs and VIX-futures products with structural decay */
+  isDistorted?: boolean;
 }
 
 export interface ScannerResponse {
@@ -523,6 +527,36 @@ export interface MarketOverview {
   vix: MarketQuote;
   marketRegime: MarketOverviewMarketRegime;
   marketRegimeScore: number;
+  /**
+     * Average Directional Index for SPY — trend strength (>25 = trending)
+     * @nullable
+     */
+  adx?: number | null;
+  /**
+     * True when ADX > 25
+     * @nullable
+     */
+  adxTrending?: boolean | null;
+  /**
+     * SPY 20-day realized volatility (annualized %)
+     * @nullable
+     */
+  realizedVol20?: number | null;
+  /**
+     * Realized vol percentile vs trailing 1Y (0-100)
+     * @nullable
+     */
+  realizedVolPct?: number | null;
+  /**
+     * HYG/LQD 20D momentum mapped 0–100 (100 = tightening spreads = risk-on)
+     * @nullable
+     */
+  creditSpreadFactor?: number | null;
+  /**
+     * VIX3M/VIX ratio mapped 0–100 (100 = strong contango = calm market)
+     * @nullable
+     */
+  vixTermStructureFactor?: number | null;
   /**
      * % of scanner universe with price above SMA50 (null until scanner has run)
      * @nullable
@@ -649,6 +683,224 @@ export interface GapAnalysisResult {
   setupBacktest?: SetupBacktest;
 }
 
+export interface NarrativeResponse {
+  ticker: string;
+  narrative: string;
+}
+
+export type AlertConditionType = typeof AlertConditionType[keyof typeof AlertConditionType];
+
+
+export const AlertConditionType = {
+  score_above: 'score_above',
+  score_below: 'score_below',
+  direction_change: 'direction_change',
+} as const;
+
+export interface Alert {
+  id: number;
+  ticker: string;
+  conditionType: AlertConditionType;
+  /** @nullable */
+  threshold: number | null;
+  /** @nullable */
+  lastKnownDir: string | null;
+  isActive: boolean;
+  /** @nullable */
+  lastTriggeredAt: string | null;
+  /** @nullable */
+  acknowledgedAt: string | null;
+  createdAt: string;
+}
+
+export type AlertInputConditionType = typeof AlertInputConditionType[keyof typeof AlertInputConditionType];
+
+
+export const AlertInputConditionType = {
+  score_above: 'score_above',
+  score_below: 'score_below',
+  direction_change: 'direction_change',
+} as const;
+
+export interface AlertInput {
+  ticker: string;
+  conditionType: AlertInputConditionType;
+  /** Required for score_above / score_below conditions */
+  threshold?: number;
+}
+
+export interface BacktestBucket {
+  count: number;
+  /** @nullable */
+  hitRate: number | null;
+  /** @nullable */
+  hitRateNet: number | null;
+  /** @nullable */
+  avgReturn: number | null;
+}
+
+export interface BacktestDecile {
+  bucket: string;
+  count: number;
+  /** @nullable */
+  hitRate: number | null;
+  /** @nullable */
+  avgReturn: number | null;
+}
+
+export interface BacktestScatterPoint {
+  x: number;
+  y: number;
+  date: string;
+}
+
+export type BacktestTimelineEntryDirection = typeof BacktestTimelineEntryDirection[keyof typeof BacktestTimelineEntryDirection];
+
+
+export const BacktestTimelineEntryDirection = {
+  bull: 'bull',
+  neutral: 'neutral',
+  bear: 'bear',
+} as const;
+
+export interface BacktestTimelineEntry {
+  date: string;
+  score: number;
+  fwdReturn: number;
+  direction: BacktestTimelineEntryDirection;
+  correct: boolean;
+}
+
+export interface OOSPeriod {
+  label: string;
+  start: string;
+  end: string;
+  ic: number;
+  n: number;
+}
+
+export interface RegimeICBreakdown {
+  /** @nullable */
+  riskOn: number | null;
+  riskOnN: number;
+  /** @nullable */
+  neutral: number | null;
+  neutralN: number;
+  /** @nullable */
+  riskOff: number | null;
+  riskOffN: number;
+}
+
+export interface CategoryIC {
+  trend: number;
+  momentum: number;
+  volume: number;
+  relativeStrength: number;
+  regime: number;
+}
+
+export interface ScoreWeights {
+  trend: number;
+  momentum: number;
+  volume: number;
+  relativeStrength: number;
+  regime: number;
+}
+
+export type BacktestOutputBrierScoreCI = null | {
+  low: number;
+  high: number;
+};
+
+export interface BacktestOutput {
+  ticker: string;
+  horizon: number;
+  /** @nullable */
+  marketCap: number | null;
+  marketCapBucket: string;
+  marketCapNote: string;
+  isDistorted: boolean;
+  assetType: string;
+  ic: number;
+  icRating: string;
+  rankIC: number;
+  rankICRating: string;
+  icTStat: number;
+  totalObservations: number;
+  calibratedSlope: number;
+  calibratedIntercept: number;
+  slippageBps: number;
+  /** @nullable */
+  brierScore: number | null;
+  brierScoreCI: BacktestOutputBrierScoreCI;
+  brierIsOos: boolean;
+  winsorThresholdPct: number;
+  inSampleIC: number;
+  outOfSampleIC: number;
+  icDegradation: number;
+  oosPeriods: OOSPeriod[];
+  regimeIC: RegimeICBreakdown;
+  categoryIC: CategoryIC;
+  optimalWeights: null | ScoreWeights;
+  currentWeights: ScoreWeights;
+  bull: BacktestBucket;
+  neutral: BacktestBucket;
+  bear: BacktestBucket;
+  deciles: BacktestDecile[];
+  scatter: BacktestScatterPoint[];
+  timeline: BacktestTimelineEntry[];
+  cachedAt: string;
+}
+
+export interface BacktestMultiHorizon {
+  horizon: number;
+  rankIC: number;
+  rankICRating: string;
+  icTStat: number;
+  totalObservations: number;
+  categoryIC: CategoryIC;
+  optimalWeights: null | ScoreWeights;
+}
+
+export interface BacktestMultiResult {
+  ticker: string;
+  horizons: BacktestMultiHorizon[];
+  /** @nullable */
+  optimalHorizon: number | null;
+}
+
+export interface CrossSectionalICPeriod {
+  date: string;
+  ic: number;
+  n: number;
+}
+
+export type CrossSectionalICResultStatus = typeof CrossSectionalICResultStatus[keyof typeof CrossSectionalICResultStatus];
+
+
+export const CrossSectionalICResultStatus = {
+  complete: 'complete',
+  partial: 'partial',
+  accumulating: 'accumulating',
+} as const;
+
+export interface CrossSectionalICResult {
+  status: CrossSectionalICResultStatus;
+  horizon: number;
+  snapshotCount: number;
+  /** @nullable */
+  periodsWithIC?: number | null;
+  /** @nullable */
+  meanCrossIC: number | null;
+  /** @nullable */
+  tStat?: number | null;
+  /** @nullable */
+  positiveRate?: number | null;
+  /** @nullable */
+  note?: string | null;
+  icTimeSeries: CrossSectionalICPeriod[];
+}
+
 export type GetScannerTopLongsParams = {
 limit?: number;
 };
@@ -699,6 +951,27 @@ limit?: number;
 
 export type GetScannerGapDownParams = {
 limit?: number;
+};
+
+export type GetBacktestIcParams = {
+ticker: string;
+horizon?: number;
+};
+
+export type GetBacktestMultiParams = {
+ticker: string;
+};
+
+export type GetBacktestCrossSectionalParams = {
+horizon?: number;
+};
+
+export type DeleteAlert200 = {
+  ok: boolean;
+};
+
+export type AcknowledgeAlert200 = {
+  ok: boolean;
 };
 
 export type GetGapAnalysisParams = {
