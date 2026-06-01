@@ -1074,8 +1074,8 @@ export default function Dashboard() {
                   priceLines={analysis ? buildPriceLines(analysis) : []}
                   lineSeries={anchoredVwapSeries}
                   signals={
-                    // Only show candle-level signal pins on 3M and shorter (daily bars only)
-                    timeframe.period === "3mo" && displayAnalysis?.chartSignals
+                    // Show candle-level signal pins on 1M and shorter only (3M is too cluttered with pattern overlays)
+                    ["1mo", "5d", "1d"].includes(timeframe.period) && displayAnalysis?.chartSignals
                       ? displayAnalysis.chartSignals as ChartSignalMarker[]
                       : []
                   }
@@ -1099,9 +1099,9 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Signal key — only shown on 3M (candle-level signal view) */}
+          {/* Signal key — shown on 1M and shorter */}
           {displayAnalysis?.chartSignals && displayAnalysis.chartSignals.length > 0 &&
-            timeframe.period === "3mo" && (
+            ["1mo", "5d", "1d"].includes(timeframe.period) && (
             <div className="bg-card border border-border rounded-md p-2.5">
               <div className="text-[9px] font-mono text-muted-foreground/50 tracking-widest font-bold mb-1.5">SIGNAL KEY — hover any candle to see details</div>
               <div className="flex flex-wrap gap-x-5 gap-y-1 text-[10px] font-mono">
