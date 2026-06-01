@@ -15,7 +15,7 @@ export const SCANNER_UNIVERSE: string[] = [
 
   // ── Financials — Banks, Insurance, Asset Managers ─────────────────────────
   "JPM", "BAC", "WFC", "GS", "MS", "C", "AXP", "BLK", "SCHW", "USB",
-  "PNC", "TFC", "COF", "DFS", "ALL", "CB", "PGR", "TRV", "MET", "PRU",
+  "PNC", "TFC", "COF", "SYF", "ALLY", "ALL", "CB", "PGR", "TRV", "MET", "PRU",
   "CME", "ICE", "CBOE", "SPGI", "MCO", "V", "MA", "AJG", "MMC", "WTW",
 
   // ── Healthcare — Pharma, Biotech, MedTech ─────────────────────────────────
@@ -35,7 +35,7 @@ export const SCANNER_UNIVERSE: string[] = [
 
   // ── Energy ────────────────────────────────────────────────────────────────
   "XOM", "CVX", "COP", "EOG", "SLB", "OXY", "DVN", "HAL", "MPC", "VLO",
-  "PSX", "KMI", "WMB", "FANG", "CTRA", "APA", "HES", "BKR",
+  "PSX", "KMI", "WMB", "FANG", "CTRA", "APA", "BKR",
 
   // ── Industrials & Defense ─────────────────────────────────────────────────
   "CAT", "DE", "HON", "UPS", "FDX", "LMT", "RTX", "NOC", "GD", "BA",
@@ -74,7 +74,7 @@ export const SCANNER_UNIVERSE: string[] = [
 
   // ── Communication Services ────────────────────────────────────────────────
   "CHTR",                                          // Cable / broadband
-  "WBD", "PARA", "NWSA", "FOX",                   // Media
+  "WBD", "NWSA", "FOX",                             // Media
   "LYV",                                           // Live events
   "EA", "TTWO",                                    // Video games
   "OMC", "IPG",                                    // Advertising agencies
@@ -90,11 +90,11 @@ export const SCANNER_UNIVERSE: string[] = [
 
   // ── Consumer Staples ──────────────────────────────────────────────────────
   "MKC", "CAG", "CPB", "HRL", "SJM", "CHD",       // Food / household
-  "WBA", "TAP",                                    // Drug retail / beverages
+  "TAP",                                           // Beverages
   "KVUE",                                          // Kenvue (J&J spin-off)
 
   // ── Energy ────────────────────────────────────────────────────────────────
-  "MRO",                                           // Marathon Oil
+  "PR",                                            // Permian Resources — Permian E&P (replaced MRO)
   "OKE", "TRGP",                                  // Midstream
   "LNG",                                           // Cheniere (LNG exports)
   "EQT",                                           // Natural gas E&P
@@ -164,7 +164,7 @@ export const SCANNER_UNIVERSE: string[] = [
   "ZI",    // ZoomInfo — B2B data
   "BRZE",  // Braze — customer engagement
   "TTD",   // The Trade Desk — programmatic ads
-  "SMAR",  // Smartsheet — collaborative work
+  "IOT",     // Samsara — connected operations platform (ticker: IOT)
 
   // Consumer / Retail mid-caps
   "DKNG",  // DraftKings — sports betting

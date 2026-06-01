@@ -147,9 +147,29 @@ interface DataPoint {
   regimeBucket: RegimeBucket;
 }
 
-// Assumed round-trip execution cost in basis points (5bps = 0.05%)
-const SLIPPAGE_BPS = 5;
-const SLIPPAGE_PCT = SLIPPAGE_BPS / 100;
+/**
+ * Tiered round-trip execution cost by market-cap bucket.
+ * Mega/large: tighter spreads; small/unknown: wider spreads.
+ */
+function slippageBpsForCap(bucket: string): number {
+  switch (bucket) {
+    case "mega":    return 3;
+    case "large":   return 5;
+    case "mid":     return 8;
+    case "small":   return 15;
+    default:        return 5;   // ETFs / unknown
+  }
+}
+
+/**
+ * Non-overlapping subsampler.
+ * Returns every `step`-th element — ensures forward-return windows don't
+ * overlap, eliminating the autocorrelation that inflates t-statistics.
+ */
+function nonOverlapping<T>(arr: T[], step: number): T[] {
+  if (step <= 1) return arr;
+  return arr.filter((_, i) => i % step === 0);
+}
 
 // Winsorization percentile used for IC computation (p5/p95)
 const WINSOR_PCT = 0.05;
@@ -206,6 +226,12 @@ export async function runBacktest(ticker: string, horizon: number): Promise<Back
     fetchOHLCV("IWM", "2y", "1d"),
     fetchQuote(sym).catch(() => null),
   ]);
+
+  // Resolve market-cap bucket early so slippage can be tier-aware
+  const marketCap       = quote?.marketCap ?? null;
+  const marketCapBucket = capBucket(marketCap);
+  const slippageBps     = slippageBpsForCap(marketCapBucket);
+  const slippagePct     = slippageBps / 100;
 
   const MIN_BARS = 210;
   if (bars.length < MIN_BARS + horizon) {
@@ -280,10 +306,18 @@ export async function runBacktest(ticker: string, horizon: number): Promise<Back
   ];
 
   // ── IC metrics (winsorized) ───────────────────────────────────────────────
-  const ic      = r3(pearsonIC(scores, winsorizedReturns));
-  const rankIC  = r3(spearmanIC(scores, winsorizedReturns));
-  const icTStat = n > 2
-    ? r3(rankIC * Math.sqrt(n - 2) / Math.sqrt(Math.max(1 - rankIC ** 2, 1e-9)))
+  const ic     = r3(pearsonIC(scores, winsorizedReturns));
+  const rankIC = r3(spearmanIC(scores, winsorizedReturns));
+
+  // t-stat uses non-overlapping subsamples to avoid autocorrelation from
+  // overlapping H-day forward-return windows inflating significance.
+  const niPoints  = nonOverlapping(dataPoints, Math.max(1, horizon));
+  const niScores  = niPoints.map(d => d.score);
+  const niReturns = winsorize(niPoints.map(d => d.fwdReturn), WINSOR_PCT);
+  const niIC      = r3(spearmanIC(niScores, niReturns));
+  const niN       = niPoints.length;
+  const icTStat   = niN > 2
+    ? r3(niIC * Math.sqrt(niN - 2) / Math.sqrt(Math.max(1 - niIC ** 2, 1e-9)))
     : 0;
 
   // ── Regime-conditioned IC ─────────────────────────────────────────────────
@@ -368,7 +402,7 @@ export async function runBacktest(ticker: string, horizon: number): Promise<Back
 
   function hitRateNet(pts: Array<{ fwdReturn: number }>, direction: "long" | "short"): number | null {
     if (!pts.length) return null;
-    const threshold = direction === "long" ? SLIPPAGE_PCT : -SLIPPAGE_PCT;
+    const threshold = direction === "long" ? slippagePct : -slippagePct;
     const hits = direction === "long"
       ? pts.filter(d => d.fwdReturn > threshold).length
       : pts.filter(d => d.fwdReturn < threshold).length;
@@ -402,9 +436,6 @@ export async function runBacktest(ticker: string, horizon: number): Promise<Back
     return { date: d.date, score: d.score, fwdReturn: r2(d.fwdReturn), direction: dir, correct };
   });
 
-  const marketCap       = quote?.marketCap ?? null;
-  const marketCapBucket = capBucket(marketCap);
-
   return {
     ticker: sym,
     horizon,
@@ -421,7 +452,7 @@ export async function runBacktest(ticker: string, horizon: number): Promise<Back
     totalObservations: n,
     calibratedSlope,
     calibratedIntercept,
-    slippageBps:  SLIPPAGE_BPS,
+    slippageBps,
     brierScore,
     brierScoreCI,
     brierIsOos: true,
