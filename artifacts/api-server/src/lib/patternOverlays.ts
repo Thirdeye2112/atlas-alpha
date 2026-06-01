@@ -87,7 +87,7 @@ function detectFlag(
   const tight      = poleRange > 0 && flagRange < poleRange * 0.55;
 
   // ── Bull Flag ────────────────────────────────────────────────────────────
-  if (poleGain > 7 && tight && volDecline) {
+  if (poleGain > 5 && tight && volDecline) {
     const mid      = Math.floor(flagBars / 2);
     const topStart = Math.max(...flagHighs.slice(0, mid));
     const topEnd   = Math.max(...flagHighs.slice(mid));
@@ -157,7 +157,7 @@ function detectFlag(
   }
 
   // ── Bear Flag ────────────────────────────────────────────────────────────
-  if (poleGain < -7 && tight && volDecline) {
+  if (poleGain < -5 && tight && volDecline) {
     const mid      = Math.floor(flagBars / 2);
     const topStart = Math.max(...flagHighs.slice(0, mid));
     const topEnd   = Math.max(...flagHighs.slice(mid));
@@ -224,38 +224,63 @@ function detectFlag(
 }
 
 /**
- * Calculate pattern overlays — angled trendlines and key price levels for
- * the most significant active structural pattern.
+ * Calculate pattern overlays — angled trendlines and key price levels.
  *
- * Tries three time scales (short → medium → longer term) and returns the
- * first match, so it catches both fresh intraday flags and multi-month patterns.
+ * Runs a sliding-window scan across recent history so it catches:
+ *  • Flags that are *actively forming* at the tip of the series
+ *  • Flags that *already broke out/down* in the recent past (up to ~6 weeks back)
+ *
+ * Returns up to MAX_PATTERNS unique patterns, deduplicated by flag-zone price.
  */
 export function calcPatternOverlays(bars: OHLCVBar[]): PatternOverlay[] {
-  if (bars.length < 30) return [];
+  if (bars.length < 15) return [];
 
-  const n       = bars.length;
-  const highs   = bars.map(b => b.high);
-  const lows    = bars.map(b => b.low);
-  const closes  = bars.map(b => b.close);
+  const n = bars.length;
 
   // ── Multi-scale flag detection (short → medium → long) ─────────────────
-  // Each scale = { poleLookback: <bars in pole>, flagBars: <bars in flag> }
   const FLAG_SCALES = [
-    { poleLookback: 25, flagBars: 8  },   // ~1.5 months total
-    { poleLookback: 50, flagBars: 15 },   // ~3 months total
-    { poleLookback: 80, flagBars: 25 },   // ~5 months total
+    { poleLookback:  8, flagBars: 4  },   // 2-week pattern (ETFs, high-beta)
+    { poleLookback: 12, flagBars: 5  },   // 3-week pattern
+    { poleLookback: 25, flagBars: 8  },   // ~1.5 months
+    { poleLookback: 50, flagBars: 15 },   // ~3 months
+    { poleLookback: 80, flagBars: 25 },   // ~5 months
   ];
 
-  for (const scale of FLAG_SCALES) {
-    const overlay = detectFlag(bars, scale.poleLookback, scale.flagBars);
-    if (overlay) return [overlay];
+  // Sliding scan: try the detection at multiple end-offsets so historical
+  // flags (already broken) are visible alongside the current active one.
+  const SCAN_OFFSETS = [0, 5, 10, 15, 20, 25, 30];
+  const MAX_PATTERNS = 3;
+
+  const results: PatternOverlay[] = [];
+  // Dedup: track breakdown/breakout prices already captured; skip if within 4%
+  const seenBreakPrices: number[] = [];
+
+  for (const offset of SCAN_OFFSETS) {
+    if (results.length >= MAX_PATTERNS) break;
+    const slice = offset === 0 ? bars : bars.slice(0, n - offset);
+    if (slice.length < 13) continue;
+
+    for (const scale of FLAG_SCALES) {
+      const overlay = detectFlag(slice, scale.poleLookback, scale.flagBars);
+      if (!overlay) continue;
+
+      const bp = overlay.targets[0].price;
+      const isDup = seenBreakPrices.some(p => Math.abs(p - bp) / p < 0.04);
+      if (!isDup) {
+        seenBreakPrices.push(bp);
+        results.push(overlay);
+      }
+      break; // one pattern per offset — first scale match wins
+    }
   }
+
+  if (results.length > 0) return results;
 
   // ── Ascending Triangle ────────────────────────────────────────────────
   if (n >= 25) {
     const win    = 20;
-    const tH     = highs.slice(-win);
-    const tL     = lows.slice(-win);
+    const tH     = bars.map(b => b.high).slice(-win);
+    const tL     = bars.map(b => b.low).slice(-win);
     const maxH   = Math.max(...tH), minH = Math.min(...tH);
     const maxL   = Math.max(...tL), minL = Math.min(...tL);
 
@@ -307,8 +332,8 @@ export function calcPatternOverlays(bars: OHLCVBar[]): PatternOverlay[] {
   // ── Descending Triangle ───────────────────────────────────────────────
   if (n >= 25) {
     const win   = 20;
-    const tH    = highs.slice(-win);
-    const tL    = lows.slice(-win);
+    const tH    = bars.map(b => b.high).slice(-win);
+    const tL    = bars.map(b => b.low).slice(-win);
     const maxH  = Math.max(...tH), minH = Math.min(...tH);
     const maxL  = Math.max(...tL), minL = Math.min(...tL);
 
