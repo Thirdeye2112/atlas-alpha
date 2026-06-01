@@ -854,7 +854,11 @@ export const GetWatchlistResponseItem = zod.object({
   "atlasLabel": zod.string().nullable(),
   "direction": zod.string().nullable(),
   "bullishProbability": zod.number().nullable(),
-  "confidenceScore": zod.number().nullable()
+  "confidenceScore": zod.number().nullable(),
+  "quantity": zod.number().nullable(),
+  "costBasisTotal": zod.number().nullable(),
+  "avgCostBasis": zod.number().nullable(),
+  "accountName": zod.string().nullable()
 })
 export const GetWatchlistResponse = zod.array(GetWatchlistResponseItem)
 
@@ -865,6 +869,28 @@ export const GetWatchlistResponse = zod.array(GetWatchlistResponseItem)
 export const AddToWatchlistBody = zod.object({
   "ticker": zod.string(),
   "notes": zod.string().optional()
+})
+
+
+/**
+ * @summary Upsert broker position data for a ticker (creates entry if not present)
+ */
+export const UpdateWatchlistPositionParams = zod.object({
+  "ticker": zod.coerce.string()
+})
+
+export const UpdateWatchlistPositionBody = zod.object({
+  "quantity": zod.number().nullish(),
+  "costBasisTotal": zod.number().nullish(),
+  "avgCostBasis": zod.number().nullish(),
+  "accountName": zod.string().nullish()
+})
+
+export const UpdateWatchlistPositionResponse = zod.object({
+  "id": zod.number(),
+  "ticker": zod.string(),
+  "addedAt": zod.string(),
+  "notes": zod.string().nullable()
 })
 
 

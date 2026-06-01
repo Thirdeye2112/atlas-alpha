@@ -417,6 +417,35 @@ paths:
                 $ref: "#/components/schemas/ApiError"
 
   /watchlist/{ticker}:
+    patch:
+      operationId: updateWatchlistPosition
+      tags: [watchlist]
+      summary: Upsert broker position data for a ticker (creates entry if not present)
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WatchlistPositionInput"
+      responses:
+        "200":
+          description: Position data updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WatchlistEntry"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
     delete:
       operationId: removeFromWatchlist
       tags: [watchlist]
@@ -1495,6 +1524,14 @@ components:
           type: ["number", "null"]
         confidenceScore:
           type: ["number", "null"]
+        quantity:
+          type: ["number", "null"]
+        costBasisTotal:
+          type: ["number", "null"]
+        avgCostBasis:
+          type: ["number", "null"]
+        accountName:
+          type: ["string", "null"]
       required:
         - id
         - ticker
@@ -1508,6 +1545,10 @@ components:
         - direction
         - bullishProbability
         - confidenceScore
+        - quantity
+        - costBasisTotal
+        - avgCostBasis
+        - accountName
 
     WatchlistInput:
       type: object
@@ -1518,6 +1559,18 @@ components:
           type: string
       required:
         - ticker
+
+    WatchlistPositionInput:
+      type: object
+      properties:
+        quantity:
+          type: ["number", "null"]
+        costBasisTotal:
+          type: ["number", "null"]
+        avgCostBasis:
+          type: ["number", "null"]
+        accountName:
+          type: ["string", "null"]
 
     MarketQuote:
       type: object

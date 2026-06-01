@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { 
   useGetWatchlist, getGetWatchlistQueryKey,
   useAddToWatchlist,
-  useRemoveFromWatchlist
+  useRemoveFromWatchlist,
+  useUpdateWatchlistPosition,
 } from "@workspace/api-client-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -60,30 +61,92 @@ const CONDITION_LABELS: Record<string, string> = {
   direction_change: "Direction changes",
 };
 
-function parseCsvTickers(text: string): string[] {
-  const lines = text.split(/\r?\n/).filter(l => l.trim());
+interface CsvPosition {
+  ticker: string;
+  quantity: number | null;
+  costBasisTotal: number | null;
+  avgCostBasis: number | null;
+  accountName: string | null;
+}
+
+function parseCsvPositions(text: string): CsvPosition[] {
+  // Strip UTF-8 BOM if present
+  const cleaned = text.replace(/^\uFEFF/, "");
+  const lines = cleaned.split(/\r?\n/).filter(l => l.trim());
   if (lines.length < 2) return [];
 
   const header = lines[0].split(",").map(h => h.replace(/['"]/g, "").trim().toLowerCase());
-  const colIdx = ["symbol", "ticker", "stock symbol", "security"].reduce<number>(
-    (found, name) => found >= 0 ? found : header.indexOf(name),
-    -1
-  );
-  if (colIdx < 0) return [];
 
-  const tickers: string[] = [];
+  const findCol = (...names: string[]): number =>
+    names.reduce<number>((found, name) => found >= 0 ? found : header.indexOf(name), -1);
+
+  const symbolIdx    = findCol("symbol", "ticker", "stock symbol", "security");
+  if (symbolIdx < 0) return [];
+
+  const qtyIdx       = findCol("quantity", "qty", "shares");
+  const costTotalIdx = findCol("cost basis total", "cost basis", "total cost basis", "total cost");
+  const avgCostIdx   = findCol("average cost basis", "avg cost basis per share", "avg cost basis", "avg cost", "average cost");
+  const accountIdx   = findCol("account name", "account");
+
+  const parseNum = (s: string): number | null => {
+    const n = parseFloat(s.replace(/[$%+,'"]/g, "").trim());
+    return isNaN(n) ? null : n;
+  };
+
+  const positionMap = new Map<string, CsvPosition>();
+
   for (let i = 1; i < lines.length; i++) {
     const cols = lines[i].split(",");
-    const raw = (cols[colIdx] ?? "").replace(/['"]/g, "").trim().toUpperCase();
-    if (
-      raw &&
-      /^[A-Z]{1,5}(\.[A-Z]{1,2})?$/.test(raw) &&
-      !["--", "N/A", "CASH", "PENDING"].includes(raw)
-    ) {
-      tickers.push(raw);
+    const raw = (cols[symbolIdx] ?? "").replace(/['"]/g, "").trim().toUpperCase();
+
+    // Validate ticker symbol
+    if (!raw || !/^[A-Z]{1,5}(\.[A-Z]{1,2})?$/.test(raw)) continue;
+    if (["--", "N/A", "CASH", "PENDING"].includes(raw)) continue;
+
+    const qty       = qtyIdx >= 0      ? parseNum(cols[qtyIdx] ?? "")       : null;
+    const costTotal = costTotalIdx >= 0 ? parseNum(cols[costTotalIdx] ?? "") : null;
+    const avgCost   = avgCostIdx >= 0   ? parseNum(cols[avgCostIdx] ?? "")   : null;
+    const account   = accountIdx >= 0
+      ? (cols[accountIdx] ?? "").replace(/['"]/g, "").trim() || null
+      : null;
+
+    // Skip rows without a valid quantity (money market, pending activity, etc.)
+    if (qty === null) continue;
+
+    if (positionMap.has(raw)) {
+      // Aggregate across accounts
+      const prev = positionMap.get(raw)!;
+      const newQty  = (prev.quantity ?? 0) + qty;
+      const newCost = prev.costBasisTotal !== null && costTotal !== null
+        ? prev.costBasisTotal + costTotal
+        : (prev.costBasisTotal ?? costTotal);
+      const newAvg  = newQty > 0 && newCost !== null ? newCost / newQty : avgCost;
+      const accounts = [prev.accountName, account].filter(Boolean).join(" / ");
+      positionMap.set(raw, {
+        ticker: raw,
+        quantity: newQty,
+        costBasisTotal: newCost,
+        avgCostBasis: newAvg,
+        accountName: accounts || null,
+      });
+    } else {
+      positionMap.set(raw, { ticker: raw, quantity: qty, costBasisTotal: costTotal, avgCostBasis: avgCost, accountName: account });
     }
   }
-  return [...new Set(tickers)];
+
+  return [...positionMap.values()];
+}
+
+function formatPnl(val: number | null): string {
+  if (val === null) return "—";
+  const sign = val >= 0 ? "+" : "";
+  return `${sign}${val.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 })}`;
+}
+
+function formatPnlPct(val: number | null): string {
+  if (val === null) return "—";
+  const sign = val >= 0 ? "+" : "";
+  return `${sign}${val.toFixed(1)}%`;
 }
 
 export default function Watchlist() {
@@ -91,7 +154,7 @@ export default function Watchlist() {
   const [alertPanelTicker, setAlertPanelTicker] = useState<string | null>(null);
   const [newCondition, setNewCondition] = useState<"score_above" | "score_below" | "direction_change">("score_above");
   const [newThreshold, setNewThreshold] = useState("70");
-  const [csvStatus, setCsvStatus] = useState<{ added: number; skipped: number } | null>(null);
+  const [csvStatus, setCsvStatus] = useState<{ imported: number; failed: number } | null>(null);
   const [csvImporting, setCsvImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const qc = useQueryClient();
@@ -115,6 +178,7 @@ export default function Watchlist() {
 
   const addMutation = useAddToWatchlist();
   const removeMutation = useRemoveFromWatchlist();
+  const positionMutation = useUpdateWatchlistPosition();
 
   const createAlertMutation = useMutation({
     mutationFn: createAlert,
@@ -151,37 +215,43 @@ export default function Watchlist() {
     setCsvImporting(true);
 
     const text = await file.text();
-    const tickers = parseCsvTickers(text);
-    if (tickers.length === 0) {
+    const positions = parseCsvPositions(text);
+
+    if (positions.length === 0) {
       setCsvImporting(false);
-      setCsvStatus({ added: 0, skipped: 0 });
+      setCsvStatus({ imported: 0, failed: 0 });
       return;
     }
 
-    const existing = new Set((watchlist ?? []).map(w => w.ticker));
-    let added = 0;
-    let skipped = 0;
+    let imported = 0;
+    let failed = 0;
 
-    for (const t of tickers) {
-      if (existing.has(t)) { skipped++; continue; }
+    for (const pos of positions) {
       try {
         await new Promise<void>((resolve, reject) =>
-          addMutation.mutate(
-            { data: { ticker: t } },
-            { onSuccess: () => resolve(), onError: () => { skipped++; resolve(); } }
+          positionMutation.mutate(
+            {
+              ticker: pos.ticker,
+              data: {
+                quantity: pos.quantity,
+                costBasisTotal: pos.costBasisTotal,
+                avgCostBasis: pos.avgCostBasis,
+                accountName: pos.accountName,
+              },
+            },
+            { onSuccess: () => resolve(), onError: () => reject() }
           )
         );
-        added++;
-        existing.add(t);
+        imported++;
       } catch {
-        skipped++;
+        failed++;
       }
     }
 
     await qc.invalidateQueries({ queryKey: getGetWatchlistQueryKey() });
     setCsvImporting(false);
-    setCsvStatus({ added, skipped });
-    setTimeout(() => setCsvStatus(null), 6000);
+    setCsvStatus({ imported, failed });
+    setTimeout(() => setCsvStatus(null), 8000);
   };
 
   const handleRemove = (t: string) => {
@@ -206,8 +276,13 @@ export default function Watchlist() {
 
   const tickerAlerts = (t: string) => alerts.filter(a => a.ticker === t);
 
+  // Determine if any item has broker position data
+  const hasPositions = (watchlist ?? []).some(item => item.quantity !== null);
+  // Total columns for colSpan
+  const totalCols = hasPositions ? 12 : 7;
+
   return (
-    <div className="flex-1 p-6 overflow-hidden flex flex-col h-full max-w-5xl mx-auto w-full">
+    <div className={cn("flex-1 p-6 overflow-hidden flex flex-col h-full mx-auto w-full", hasPositions ? "max-w-7xl" : "max-w-5xl")}>
 
       {/* ── Triggered alert banner ────────────────────────────────────── */}
       {triggered.length > 0 && (
@@ -257,7 +332,7 @@ export default function Watchlist() {
               disabled={csvImporting}
               onClick={() => fileInputRef.current?.click()}
               className="font-mono border-border text-muted-foreground hover:text-foreground"
-              title="Import tickers from a broker CSV (Fidelity, Schwab, TD)"
+              title="Import positions from a broker CSV (Fidelity, Schwab, TD)"
             >
               <Upload className="w-4 h-4 mr-2" />
               {csvImporting ? "IMPORTING…" : "IMPORT CSV"}
@@ -281,13 +356,13 @@ export default function Watchlist() {
           {csvStatus && (
             <div className={cn(
               "text-xs font-mono px-3 py-1 rounded border",
-              csvStatus.added > 0
+              csvStatus.imported > 0
                 ? "bg-success/10 border-success/30 text-success"
                 : "bg-muted/30 border-border text-muted-foreground"
             )}>
-              {csvStatus.added > 0
-                ? `✓ ${csvStatus.added} ticker${csvStatus.added !== 1 ? "s" : ""} added${csvStatus.skipped > 0 ? ` · ${csvStatus.skipped} skipped` : ""}`
-                : "No new tickers found in CSV"}
+              {csvStatus.imported > 0
+                ? `✓ ${csvStatus.imported} position${csvStatus.imported !== 1 ? "s" : ""} imported${csvStatus.failed > 0 ? ` · ${csvStatus.failed} failed` : ""}`
+                : "No valid positions found in CSV"}
             </div>
           )}
         </div>
@@ -308,6 +383,14 @@ export default function Watchlist() {
                 <th className="p-4 font-medium text-center">ATLAS</th>
                 <th className="p-4 font-medium">DIRECTION</th>
                 <th className="p-4 font-medium text-right">CONF</th>
+                {hasPositions && <>
+                  <th className="p-4 font-medium text-right">QTY</th>
+                  <th className="p-4 font-medium text-right">AVG COST</th>
+                  <th className="p-4 font-medium text-right">MKT VAL</th>
+                  <th className="p-4 font-medium text-right">UNREAL P&amp;L</th>
+                  <th className="p-4 font-medium text-right">UNREAL %</th>
+                  <th className="p-4 font-medium">ACCOUNT</th>
+                </>}
                 <th className="p-4 font-medium text-right">ACTIONS</th>
               </tr>
             </thead>
@@ -315,6 +398,15 @@ export default function Watchlist() {
               {watchlist.map((item) => {
                 const ta = tickerAlerts(item.ticker);
                 const isPanelOpen = alertPanelTicker === item.ticker;
+
+                // Computed position metrics
+                const mktVal = item.price !== null && item.quantity !== null
+                  ? item.price * item.quantity : null;
+                const unrealPnl = mktVal !== null && item.costBasisTotal !== null
+                  ? mktVal - item.costBasisTotal : null;
+                const unrealPct = unrealPnl !== null && item.costBasisTotal !== null && item.costBasisTotal > 0
+                  ? (unrealPnl / item.costBasisTotal) * 100 : null;
+
                 return (
                   <React.Fragment key={item.id}>
                     <tr className="hover:bg-muted/30 transition-colors">
@@ -336,6 +428,28 @@ export default function Watchlist() {
                         {item.direction || '-'}
                       </td>
                       <td className="p-4 text-right">{formatPercent(item.bullishProbability)}</td>
+
+                      {hasPositions && <>
+                        <td className="p-4 text-right text-muted-foreground">
+                          {item.quantity !== null ? item.quantity.toLocaleString("en-US", { maximumFractionDigits: 3 }) : "—"}
+                        </td>
+                        <td className="p-4 text-right text-muted-foreground">
+                          {item.avgCostBasis !== null ? formatCurrency(item.avgCostBasis) : "—"}
+                        </td>
+                        <td className="p-4 text-right text-foreground">
+                          {mktVal !== null ? formatCurrency(mktVal) : "—"}
+                        </td>
+                        <td className={cn("p-4 text-right font-medium", unrealPnl === null ? "text-muted-foreground" : unrealPnl >= 0 ? "text-success" : "text-destructive")}>
+                          {formatPnl(unrealPnl)}
+                        </td>
+                        <td className={cn("p-4 text-right font-medium", unrealPct === null ? "text-muted-foreground" : unrealPct >= 0 ? "text-success" : "text-destructive")}>
+                          {formatPnlPct(unrealPct)}
+                        </td>
+                        <td className="p-4 text-xs text-muted-foreground max-w-[120px] truncate" title={item.accountName ?? ""}>
+                          {item.accountName ?? "—"}
+                        </td>
+                      </>}
+
                       <td className="p-4 text-right">
                         <div className="flex items-center justify-end gap-1">
                           <button
@@ -368,7 +482,7 @@ export default function Watchlist() {
                     {/* ── Alert panel (inline, under this row) ── */}
                     {isPanelOpen && (
                       <tr>
-                        <td colSpan={7} className="bg-card/80 border-t border-b border-primary/20">
+                        <td colSpan={totalCols} className="bg-card/80 border-t border-b border-primary/20">
                           <div className="p-4 space-y-3">
                             <div className="flex items-center justify-between">
                               <span className="text-xs font-mono font-bold text-muted-foreground tracking-wider">

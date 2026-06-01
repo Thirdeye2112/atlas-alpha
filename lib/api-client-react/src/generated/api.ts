@@ -55,7 +55,8 @@ import type {
   StockQuote,
   WatchlistEntry,
   WatchlistInput,
-  WatchlistItem
+  WatchlistItem,
+  WatchlistPositionInput
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -1618,6 +1619,78 @@ export const useAddToWatchlist = <TError = ErrorType<ApiError>,
         TContext
       > => {
       return useMutation(getAddToWatchlistMutationOptions(options));
+    }
+
+export const getUpdateWatchlistPositionUrl = (ticker: string,) => {
+
+
+
+
+  return `/api/watchlist/${ticker}`
+}
+
+/**
+ * @summary Upsert broker position data for a ticker (creates entry if not present)
+ */
+export const updateWatchlistPosition = async (ticker: string,
+    watchlistPositionInput: WatchlistPositionInput, options?: RequestInit): Promise<WatchlistEntry> => {
+
+  return customFetch<WatchlistEntry>(getUpdateWatchlistPositionUrl(ticker),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      watchlistPositionInput,)
+  }
+);}
+
+
+
+
+export const getUpdateWatchlistPositionMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateWatchlistPosition>>, TError,{ticker: string;data: BodyType<WatchlistPositionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateWatchlistPosition>>, TError,{ticker: string;data: BodyType<WatchlistPositionInput>}, TContext> => {
+
+const mutationKey = ['updateWatchlistPosition'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateWatchlistPosition>>, {ticker: string;data: BodyType<WatchlistPositionInput>}> = (props) => {
+          const {ticker,data} = props ?? {};
+
+          return  updateWatchlistPosition(ticker,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateWatchlistPositionMutationResult = NonNullable<Awaited<ReturnType<typeof updateWatchlistPosition>>>
+    export type UpdateWatchlistPositionMutationBody = BodyType<WatchlistPositionInput>
+    export type UpdateWatchlistPositionMutationError = ErrorType<ApiError>
+
+    /**
+ * @summary Upsert broker position data for a ticker (creates entry if not present)
+ */
+export const useUpdateWatchlistPosition = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateWatchlistPosition>>, TError,{ticker: string;data: BodyType<WatchlistPositionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateWatchlistPosition>>,
+        TError,
+        {ticker: string;data: BodyType<WatchlistPositionInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateWatchlistPositionMutationOptions(options));
     }
 
 export const getRemoveFromWatchlistUrl = (ticker: string,) => {

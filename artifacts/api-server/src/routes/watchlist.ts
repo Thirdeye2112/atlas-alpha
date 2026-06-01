@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, watchlistTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { AddToWatchlistBody, RemoveFromWatchlistParams } from "@workspace/api-zod";
+import { AddToWatchlistBody, RemoveFromWatchlistParams, UpdateWatchlistPositionBody } from "@workspace/api-zod";
 import { fetchQuote } from "../lib/marketData.js";
 import { analysisCache } from "../lib/cache.js";
 
@@ -52,6 +52,10 @@ router.get("/watchlist", async (req, res): Promise<void> => {
         direction,
         bullishProbability,
         confidenceScore,
+        quantity: entry.quantity ?? null,
+        costBasisTotal: entry.costBasisTotal ?? null,
+        avgCostBasis: entry.avgCostBasis ?? null,
+        accountName: entry.accountName ?? null,
       };
     })
   );
@@ -80,6 +84,57 @@ router.post("/watchlist", async (req, res): Promise<void> => {
   }).returning();
 
   res.status(201).json({
+    id: entry.id,
+    ticker: entry.ticker,
+    addedAt: entry.addedAt.toISOString(),
+    notes: entry.notes ?? null,
+  });
+});
+
+router.patch("/watchlist/:ticker", async (req, res): Promise<void> => {
+  const paramTicker = req.params.ticker?.toUpperCase();
+  if (!paramTicker) {
+    res.status(400).json({ error: "ticker param required" });
+    return;
+  }
+
+  const parsed = UpdateWatchlistPositionBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const { quantity, costBasisTotal, avgCostBasis, accountName } = parsed.data;
+
+  const existing = await db.select().from(watchlistTable).where(eq(watchlistTable.ticker, paramTicker));
+
+  let entry;
+  if (existing.length === 0) {
+    // Upsert: create if not present
+    const [created] = await db.insert(watchlistTable).values({
+      ticker: paramTicker,
+      quantity: quantity ?? null,
+      costBasisTotal: costBasisTotal ?? null,
+      avgCostBasis: avgCostBasis ?? null,
+      accountName: accountName ?? null,
+    }).returning();
+    entry = created;
+  } else {
+    // Update position fields
+    const [updated] = await db
+      .update(watchlistTable)
+      .set({
+        quantity: quantity ?? null,
+        costBasisTotal: costBasisTotal ?? null,
+        avgCostBasis: avgCostBasis ?? null,
+        accountName: accountName ?? null,
+      })
+      .where(eq(watchlistTable.ticker, paramTicker))
+      .returning();
+    entry = updated;
+  }
+
+  res.json({
     id: entry.id,
     ticker: entry.ticker,
     addedAt: entry.addedAt.toISOString(),

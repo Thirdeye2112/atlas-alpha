@@ -107,6 +107,7 @@ export * from './volumeProfileResult';
 export * from './watchlistEntry';
 export * from './watchlistInput';
 export * from './watchlistItem';
+export * from './watchlistPositionInput';
 export * from './weeklyContextResult';
 export * from './weeklyContextResultWeeklyAlignment';
 export * from './weeklyContextResultWeeklyTrend';

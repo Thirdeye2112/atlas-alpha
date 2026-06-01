@@ -592,11 +592,30 @@ export interface WatchlistItem {
   bullishProbability: number | null;
   /** @nullable */
   confidenceScore: number | null;
+  /** @nullable */
+  quantity: number | null;
+  /** @nullable */
+  costBasisTotal: number | null;
+  /** @nullable */
+  avgCostBasis: number | null;
+  /** @nullable */
+  accountName: string | null;
 }
 
 export interface WatchlistInput {
   ticker: string;
   notes?: string;
+}
+
+export interface WatchlistPositionInput {
+  /** @nullable */
+  quantity?: number | null;
+  /** @nullable */
+  costBasisTotal?: number | null;
+  /** @nullable */
+  avgCostBasis?: number | null;
+  /** @nullable */
+  accountName?: string | null;
 }
 
 export interface MarketQuote {
