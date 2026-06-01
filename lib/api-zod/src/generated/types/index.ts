@@ -83,6 +83,7 @@ export * from './patternLinePoint';
 export * from './patternLineStyle';
 export * from './patternOverlay';
 export * from './patternOverlayConfidence';
+export * from './patternOverlayTimeframe';
 export * from './patternOverlayType';
 export * from './patternTarget';
 export * from './patternTargetRole';

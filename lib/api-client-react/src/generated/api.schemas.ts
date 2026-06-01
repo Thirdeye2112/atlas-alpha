@@ -407,6 +407,14 @@ export interface PatternTarget {
   role: PatternTargetRole;
 }
 
+export type PatternOverlayTimeframe = typeof PatternOverlayTimeframe[keyof typeof PatternOverlayTimeframe];
+
+
+export const PatternOverlayTimeframe = {
+  daily: 'daily',
+  weekly: 'weekly',
+} as const;
+
 export interface PatternOverlay {
   type: PatternOverlayType;
   label: string;
@@ -414,6 +422,7 @@ export interface PatternOverlay {
   confidence: PatternOverlayConfidence;
   lines: PatternLine[];
   targets: PatternTarget[];
+  timeframe?: PatternOverlayTimeframe;
 }
 
 export type FibLevelsResultTrend = typeof FibLevelsResultTrend[keyof typeof FibLevelsResultTrend];

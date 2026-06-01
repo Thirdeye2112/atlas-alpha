@@ -215,7 +215,8 @@ export const GetStockAnalysisResponse = zod.object({
   "price": zod.number(),
   "label": zod.string(),
   "role": zod.enum(['breakout', 'target', 'stop'])
-}))
+})),
+  "timeframe": zod.enum(['daily', 'weekly']).optional()
 })),
   "calibration": zod.union([zod.object({
   "status": zod.enum(['none', 'pending', 'fitted', 'error']),

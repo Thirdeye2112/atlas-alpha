@@ -1147,6 +1147,7 @@ export default function Dashboard() {
                   const brkTgt = ov.targets.find(t => t.role === "breakout");
                   const t1Tgt  = ov.targets.find(t => t.role === "target");
                   const slTgt  = ov.targets.find(t => t.role === "stop");
+                  const tf = (ov as PatternOverlay & { timeframe?: string }).timeframe;
                   return (
                     <div key={i} className="bg-card border border-border rounded-md p-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5">
                       <span className={cn("text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border tracking-wider", typeColor)}>
@@ -1155,6 +1156,16 @@ export default function Dashboard() {
                       <span className={cn("text-[9px] font-mono px-1.5 py-0.5 rounded border tracking-widest", confColor)}>
                         {ov.confidence.toUpperCase()}
                       </span>
+                      {tf && (
+                        <span className={cn(
+                          "text-[8px] font-mono font-bold px-1 py-0.5 rounded tracking-widest border",
+                          tf === "weekly"
+                            ? "text-violet-400 border-violet-500/30 bg-violet-500/8"
+                            : "text-sky-400 border-sky-500/30 bg-sky-500/8"
+                        )}>
+                          {tf.toUpperCase()}
+                        </span>
+                      )}
                       <span className="text-[10px] text-muted-foreground/70 font-mono flex-1 min-w-0 truncate">{ov.description}</span>
                       <span className="flex gap-3 text-[10px] font-mono ml-auto">
                         {brkTgt && (

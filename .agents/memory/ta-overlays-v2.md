@@ -36,6 +36,16 @@ description: Architecture and gotchas for the 6 TA quality features added in the
 - Realized vol percentile as IV rank proxy is the best available proxy without real options chain data; it fills the previously-null `ivRank`/`ivPercentile` fields
 - weeklyBars fetch is skipped in lightMode to prevent 373×2 = 746 extra Yahoo requests per scanner cycle
 
+## Pattern engine v2 (peak-anchored multi-TF)
+
+- `calcPatternOverlaysMultiTF(dailyBars, weeklyBars)` is the new main entry point in `patternOverlays.ts`; `calcPatternOverlays` is a backward-compat wrapper
+- `detectPeakAnchoredFlags` uses a "grow-the-flag" approach: finds actual swing highs/lows (pivot window ±3 daily / ±2 weekly), measures pole, then expands the flag bar-by-bar stopping when `flagRange > poleRange * 0.65` — this correctly bounds the flag to just the consolidation period, not the breakdown
+- `PatternOverlay` now has optional `timeframe?: "daily" | "weekly"` — purple chip in the right panel for weekly, blue for daily
+- Daily opts: pivotWindow=3, minPolePct=5, maxPoleBars=12, flagMaxBars=10, lookbackBars=90
+- Weekly opts: pivotWindow=2, minPolePct=5, maxPoleBars=6, flagMaxBars=5, lookbackBars=40
+- Returns up to 4 patterns total; dedup by breakdown price within 4%
+- Falls back to triangle detection (tip-of-series) if no flags found
+
 ## Gotchas
 
 - `rsiOffset = closes.length - rsiArr.length` — RSI has 14 fewer values than the closes array; `toRsiIdx` maps slice-local index back to rsiArr index

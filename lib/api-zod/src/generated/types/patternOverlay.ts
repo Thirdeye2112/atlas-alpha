@@ -7,6 +7,7 @@
  */
 import type { PatternLine } from './patternLine';
 import type { PatternOverlayConfidence } from './patternOverlayConfidence';
+import type { PatternOverlayTimeframe } from './patternOverlayTimeframe';
 import type { PatternOverlayType } from './patternOverlayType';
 import type { PatternTarget } from './patternTarget';
 
@@ -17,4 +18,5 @@ export interface PatternOverlay {
   confidence: PatternOverlayConfidence;
   lines: PatternLine[];
   targets: PatternTarget[];
+  timeframe?: PatternOverlayTimeframe;
 }

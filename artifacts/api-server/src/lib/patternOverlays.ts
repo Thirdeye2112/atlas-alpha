@@ -23,364 +23,377 @@ export interface PatternOverlay {
   label: string;
   description: string;
   confidence: "high" | "medium" | "low";
+  timeframe?: "daily" | "weekly";
   lines: PatternLine[];
   targets: PatternTarget[];
 }
 
-function argmax(arr: number[]): number {
-  return arr.reduce((best, v, i) => (v > arr[best] ? i : best), 0);
-}
-
-function argmin(arr: number[]): number {
-  return arr.reduce((best, v, i) => (v < arr[best] ? i : best), 0);
-}
-
 function r2(v: number) { return Math.round(v * 100) / 100; }
 
-/**
- * Detect bull / bear flag at a specific time scale.
- *
- * @param poleLookback  Number of bars the pole spans (before the flag)
- * @param flagBars      Number of bars in the consolidation flag
- */
-function detectFlag(
-  bars: OHLCVBar[],
-  poleLookback: number,
-  flagBars: number,
-): PatternOverlay | null {
-  const n       = bars.length;
-  if (n < poleLookback + flagBars) return null;
+// ─────────────────────────────────────────────────────────────────────────────
+// Peak-anchored flag detection
+//
+// Classic fixed-window approaches fail because the window start is arbitrary —
+// it may include the pre-peak rally or the post-breakdown continuation.
+// This function finds actual swing highs/lows first (the real pattern anchor),
+// then measures the pole from that point, and "grows" the flag bar-by-bar,
+// stopping as soon as the range exceeds the tightness threshold.  That way the
+// flag boundary is determined by the price action itself, not a hard bar count.
+// ─────────────────────────────────────────────────────────────────────────────
+interface PeakAnchorOpts {
+  pivotWindow:     number;   // bars each side for swing point (daily=3, weekly=2)
+  minPolePct:      number;   // minimum pole move in %  (5)
+  maxPoleBars:     number;   // max bars the pole can span (daily=12, weekly=6)
+  flagMaxBars:     number;   // max bars allowed in flag   (daily=10, weekly=5)
+  tightThreshold:  number;   // flagRange < poleRange * this (0.65)
+  lookbackBars:    number;   // how far back to scan        (daily=80, weekly=40)
+  maxPatterns:     number;   // cap on returned patterns    (3)
+}
 
+function detectPeakAnchoredFlags(
+  bars:  OHLCVBar[],
+  opts:  PeakAnchorOpts,
+): PatternOverlay[] {
+  const { pivotWindow, minPolePct, maxPoleBars, flagMaxBars,
+          tightThreshold, lookbackBars, maxPatterns } = opts;
+
+  const n       = bars.length;
   const closes  = bars.map(b => b.close);
   const highs   = bars.map(b => b.high);
   const lows    = bars.map(b => b.low);
   const volumes = bars.map(b => b.volume);
 
-  const poleStartIdx = n - poleLookback - flagBars;
-  const poleEndIdx   = n - flagBars - 1;
-  const flagStartIdx = n - flagBars;
-  const flagEndIdx   = n - 1;
+  const results:       PatternOverlay[] = [];
+  const seenBreakPrices: number[]       = [];
 
-  const poleCloses  = closes.slice(poleStartIdx, poleEndIdx + 1);
-  const poleHighs   = highs.slice(poleStartIdx, poleEndIdx + 1);
-  const poleLows    = lows.slice(poleStartIdx, poleEndIdx + 1);
-  const flagHighs   = highs.slice(flagStartIdx, flagEndIdx + 1);
-  const flagLows    = lows.slice(flagStartIdx, flagEndIdx + 1);
-
-  const poleGain    = (poleCloses[poleCloses.length - 1] - poleCloses[0]) / poleCloses[0] * 100;
-  const poleTop     = Math.max(...poleHighs);
-  const poleBase    = Math.min(...poleLows);
-  // Net close-to-close move used for target projection (more accurate than H-L range)
-  const poleNetMove = Math.abs(poleCloses[poleCloses.length - 1] - poleCloses[0]);
-  // Full H-L range used only for "tight" ratio check
-  const poleHeight  = poleTop - poleBase;
-
-  const flagHigh  = Math.max(...flagHighs);
-  const flagLow   = Math.min(...flagLows);
-  const flagRange = flagHigh - flagLow;
-  const poleRange = poleHeight;
-
-  const volFlagAvg = volumes.slice(flagStartIdx).reduce((a, b) => a + b, 0) / flagBars;
-  const volPoleAvg = volumes.slice(poleStartIdx, poleEndIdx + 1).reduce((a, b) => a + b, 0)
-                   / (poleEndIdx - poleStartIdx + 1);
-  const volDecline = volFlagAvg < volPoleAvg * 0.85;
-  const tight      = poleRange > 0 && flagRange < poleRange * 0.55;
-
-  // ── Bull Flag ────────────────────────────────────────────────────────────
-  if (poleGain > 5 && tight && volDecline) {
-    const mid      = Math.floor(flagBars / 2);
-    const topStart = Math.max(...flagHighs.slice(0, mid));
-    const topEnd   = Math.max(...flagHighs.slice(mid));
-    const botStart = Math.min(...flagLows.slice(0, mid));
-    const botEnd   = Math.min(...flagLows.slice(mid));
-
-    const polePeakLocalIdx  = argmax(poleHighs);
-    const polePeakDate      = bars[poleStartIdx + polePeakLocalIdx].time;
-    const poleBaseDate      = bars[poleStartIdx + argmin(poleLows)].time;
-    const flagStartDate     = bars[flagStartIdx].time;
-    const flagEndDate       = bars[flagEndIdx].time;
-
-    const breakoutPrice = r2(topEnd);
-    const targetPrice   = r2(breakoutPrice + poleNetMove);
-    const stopPrice     = r2(botEnd);
-
-    const flagSlope  = ((topEnd - topStart) / topStart) * 100;
-    const isTight    = flagRange < poleRange * 0.35;
-
-    const confidence: PatternOverlay["confidence"] =
-      poleGain > 25 ? "high" : poleGain > 12 ? "medium" : "low";
-
-    return {
-      type: "bull-flag",
-      label: "Bull Flag",
-      description:
-        `+${poleGain.toFixed(1)}% pole · flag ${flagSlope >= 0 ? "+" : ""}${flagSlope.toFixed(1)}%${isTight ? " (tight)" : ""} · B/O ${breakoutPrice.toFixed(2)} · Target ${targetPrice.toFixed(2)}`,
-      confidence,
-      lines: [
-        // Pole context — base to peak
-        {
-          points: [
-            { date: poleBaseDate, price: poleBase    },
-            { date: polePeakDate, price: poleTop     },
-          ],
-          style: "dotted",
-          color: "rgba(34,197,94,0.28)",
-          label: "Pole",
-        },
-        // Upper channel (breakout trigger)
-        {
-          points: [
-            { date: flagStartDate, price: topStart },
-            { date: flagEndDate,   price: topEnd   },
-          ],
-          style: "solid",
-          color: "#22c55e",
-          label: "Upper Channel",
-        },
-        // Lower channel (stop reference)
-        {
-          points: [
-            { date: flagStartDate, price: botStart },
-            { date: flagEndDate,   price: botEnd   },
-          ],
-          style: "solid",
-          color: "rgba(34,197,94,0.45)",
-          label: "Lower Channel",
-        },
-      ],
-      targets: [
-        { price: breakoutPrice, label: `B/O ${breakoutPrice.toFixed(2)}`,  role: "breakout" },
-        { price: targetPrice,   label: `T1  ${targetPrice.toFixed(2)}`,    role: "target"   },
-        { price: stopPrice,     label: `SL  ${stopPrice.toFixed(2)}`,      role: "stop"     },
-      ],
-    };
+  function addIfUnique(ov: PatternOverlay) {
+    const bp = ov.targets[0].price;
+    if (!seenBreakPrices.some(p => Math.abs(p - bp) / p < 0.04)) {
+      seenBreakPrices.push(bp);
+      results.push(ov);
+    }
   }
 
-  // ── Bear Flag ────────────────────────────────────────────────────────────
-  if (poleGain < -5 && tight && volDecline) {
-    const mid      = Math.floor(flagBars / 2);
-    const topStart = Math.max(...flagHighs.slice(0, mid));
-    const topEnd   = Math.max(...flagHighs.slice(mid));
-    const botStart = Math.min(...flagLows.slice(0, mid));
-    const botEnd   = Math.min(...flagLows.slice(mid));
+  const scanStart = Math.max(pivotWindow, n - lookbackBars);
+  // Reserve enough room for a full pole + flag after the pivot bar.
+  const scanEnd   = n - 4;
 
-    const poleTroughLocalIdx = argmin(poleLows);
-    const poleTroughDate     = bars[poleStartIdx + poleTroughLocalIdx].time;
-    const polePeakDate       = bars[poleStartIdx + argmax(poleHighs)].time;
-    const flagStartDate      = bars[flagStartIdx].time;
-    const flagEndDate        = bars[flagEndIdx].time;
+  for (let i = scanStart; i < scanEnd; i++) {
+    if (results.length >= maxPatterns) break;
 
-    const breakdownPrice = r2(botEnd);
-    const targetPrice    = r2(breakdownPrice - poleNetMove);
-    const stopPrice      = r2(topEnd);
+    const lo = Math.max(0, i - pivotWindow);
+    const hi = Math.min(n - 1, i + pivotWindow);
 
-    const confidence: PatternOverlay["confidence"] =
-      poleGain < -25 ? "high" : poleGain < -12 ? "medium" : "low";
+    // ── Bear flag: bar i is a swing HIGH ──────────────────────────────────
+    const localMax = Math.max(...highs.slice(lo, hi + 1));
+    if (highs[i] === localMax) {
+      // Find deepest low in the next maxPoleBars bars
+      let poleEndIdx = -1;
+      let poleBottom = highs[i];
+      const poleSearchEnd = Math.min(i + maxPoleBars, n - 3);
+      for (let j = i + 1; j <= poleSearchEnd; j++) {
+        if (lows[j] < poleBottom) { poleBottom = lows[j]; poleEndIdx = j; }
+      }
 
-    return {
-      type: "bear-flag",
-      label: "Bear Flag",
-      description:
-        `${poleGain.toFixed(1)}% pole · B/D ${breakdownPrice.toFixed(2)} · Target ${targetPrice.toFixed(2)}`,
-      confidence,
-      lines: [
-        {
-          points: [
-            { date: polePeakDate,    price: poleTop    },
-            { date: poleTroughDate,  price: poleBase   },
-          ],
-          style: "dotted",
-          color: "rgba(239,68,68,0.28)",
-          label: "Pole",
-        },
-        {
-          points: [
-            { date: flagStartDate, price: botStart },
-            { date: flagEndDate,   price: botEnd   },
-          ],
-          style: "solid",
-          color: "#ef4444",
-          label: "Lower Channel",
-        },
-        {
-          points: [
-            { date: flagStartDate, price: topStart },
-            { date: flagEndDate,   price: topEnd   },
-          ],
-          style: "solid",
-          color: "rgba(239,68,68,0.45)",
-          label: "Upper Channel",
-        },
-      ],
-      targets: [
-        { price: breakdownPrice, label: `B/D ${breakdownPrice.toFixed(2)}`, role: "breakout" },
-        { price: targetPrice,    label: `T1  ${targetPrice.toFixed(2)}`,    role: "target"   },
-        { price: stopPrice,      label: `SL  ${stopPrice.toFixed(2)}`,      role: "stop"     },
-      ],
-    };
+      if (poleEndIdx > 0) {
+        const poleGain = (closes[poleEndIdx] - closes[i]) / closes[i] * 100;
+        if (poleGain < -minPolePct) {
+          const poleRange = highs[i] - poleBottom;
+
+          // Grow the flag until it exceeds tightness limit
+          let flagHigh = -Infinity, flagLow = Infinity, flagEnd = -1;
+          const flagSearchEnd = Math.min(poleEndIdx + flagMaxBars, n - 1);
+          for (let k = poleEndIdx + 1; k <= flagSearchEnd; k++) {
+            const nH = Math.max(flagHigh, highs[k]);
+            const nL = Math.min(flagLow,  lows[k]);
+            if (poleRange > 0 && (nH - nL) > poleRange * tightThreshold) break;
+            flagHigh = nH; flagLow = nL; flagEnd = k;
+          }
+
+          if (flagEnd >= poleEndIdx + 2) {  // need ≥ 2 flag bars
+            const flagStart = poleEndIdx + 1;
+            const fH = highs.slice(flagStart, flagEnd + 1);
+            const fL = lows.slice(flagStart, flagEnd + 1);
+            const mid = Math.max(1, Math.floor(fH.length / 2));
+
+            const volPole = volumes.slice(i, poleEndIdx + 1).reduce((s, v) => s + v, 0)
+                          / (poleEndIdx - i + 1);
+            const volFlag = volumes.slice(flagStart, flagEnd + 1).reduce((s, v) => s + v, 0)
+                          / (flagEnd - flagStart + 1);
+
+            if (volFlag <= volPole * 1.1) {  // volume not significantly increasing
+              const breakdownPx = r2(Math.min(...fL.slice(mid)));
+              const netMove     = Math.abs(closes[poleEndIdx] - closes[i]);
+              const targetPx    = r2(breakdownPx - netMove);
+              const stopPx      = r2(Math.max(...fH.slice(mid)));
+
+              addIfUnique({
+                type:        "bear-flag",
+                label:       "Bear Flag",
+                description: `${poleGain.toFixed(1)}% pole · B/D ${breakdownPx.toFixed(2)} · Target ${targetPx.toFixed(2)}`,
+                confidence:  Math.abs(poleGain) > 15 ? "high" : Math.abs(poleGain) > 8 ? "medium" : "low",
+                lines: [
+                  {
+                    points: [
+                      { date: bars[i].time,        price: highs[i]   },
+                      { date: bars[poleEndIdx].time, price: poleBottom },
+                    ],
+                    style: "dotted", color: "rgba(239,68,68,0.28)", label: "Pole",
+                  },
+                  {
+                    points: [
+                      { date: bars[flagStart].time, price: Math.max(...fH.slice(0, mid)) },
+                      { date: bars[flagEnd].time,   price: Math.max(...fH.slice(mid))    },
+                    ],
+                    style: "solid", color: "rgba(239,68,68,0.45)", label: "Upper Channel",
+                  },
+                  {
+                    points: [
+                      { date: bars[flagStart].time, price: Math.min(...fL.slice(0, mid)) },
+                      { date: bars[flagEnd].time,   price: Math.min(...fL.slice(mid))    },
+                    ],
+                    style: "solid", color: "#ef4444", label: "Lower Channel",
+                  },
+                ],
+                targets: [
+                  { price: breakdownPx, label: `B/D ${breakdownPx.toFixed(2)}`, role: "breakout" },
+                  { price: targetPx,    label: `T1  ${targetPx.toFixed(2)}`,    role: "target"   },
+                  { price: stopPx,      label: `SL  ${stopPx.toFixed(2)}`,      role: "stop"     },
+                ],
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // ── Bull flag: bar i is a swing LOW ───────────────────────────────────
+    const localMin = Math.min(...lows.slice(lo, hi + 1));
+    if (lows[i] === localMin) {
+      let poleEndIdx = -1;
+      let polePeak   = lows[i];
+      const poleSearchEnd = Math.min(i + maxPoleBars, n - 3);
+      for (let j = i + 1; j <= poleSearchEnd; j++) {
+        if (highs[j] > polePeak) { polePeak = highs[j]; poleEndIdx = j; }
+      }
+
+      if (poleEndIdx > 0) {
+        const poleGain = (closes[poleEndIdx] - closes[i]) / closes[i] * 100;
+        if (poleGain > minPolePct) {
+          const poleRange = polePeak - lows[i];
+
+          let flagHigh = -Infinity, flagLow = Infinity, flagEnd = -1;
+          const flagSearchEnd = Math.min(poleEndIdx + flagMaxBars, n - 1);
+          for (let k = poleEndIdx + 1; k <= flagSearchEnd; k++) {
+            const nH = Math.max(flagHigh, highs[k]);
+            const nL = Math.min(flagLow,  lows[k]);
+            if (poleRange > 0 && (nH - nL) > poleRange * tightThreshold) break;
+            flagHigh = nH; flagLow = nL; flagEnd = k;
+          }
+
+          if (flagEnd >= poleEndIdx + 2) {
+            const flagStart = poleEndIdx + 1;
+            const fH = highs.slice(flagStart, flagEnd + 1);
+            const fL = lows.slice(flagStart, flagEnd + 1);
+            const mid = Math.max(1, Math.floor(fH.length / 2));
+
+            const volPole = volumes.slice(i, poleEndIdx + 1).reduce((s, v) => s + v, 0)
+                          / (poleEndIdx - i + 1);
+            const volFlag = volumes.slice(flagStart, flagEnd + 1).reduce((s, v) => s + v, 0)
+                          / (flagEnd - flagStart + 1);
+
+            if (volFlag <= volPole * 1.1) {
+              const breakoutPx = r2(Math.max(...fH.slice(mid)));
+              const netMove    = Math.abs(closes[poleEndIdx] - closes[i]);
+              const targetPx   = r2(breakoutPx + netMove);
+              const stopPx     = r2(Math.min(...fL.slice(mid)));
+
+              addIfUnique({
+                type:        "bull-flag",
+                label:       "Bull Flag",
+                description: `+${poleGain.toFixed(1)}% pole · B/O ${breakoutPx.toFixed(2)} · Target ${targetPx.toFixed(2)}`,
+                confidence:  poleGain > 25 ? "high" : poleGain > 12 ? "medium" : "low",
+                lines: [
+                  {
+                    points: [
+                      { date: bars[i].time,        price: lows[i]  },
+                      { date: bars[poleEndIdx].time, price: polePeak },
+                    ],
+                    style: "dotted", color: "rgba(34,197,94,0.28)", label: "Pole",
+                  },
+                  {
+                    points: [
+                      { date: bars[flagStart].time, price: Math.max(...fH.slice(0, mid)) },
+                      { date: bars[flagEnd].time,   price: Math.max(...fH.slice(mid))    },
+                    ],
+                    style: "solid", color: "#22c55e", label: "Upper Channel",
+                  },
+                  {
+                    points: [
+                      { date: bars[flagStart].time, price: Math.min(...fL.slice(0, mid)) },
+                      { date: bars[flagEnd].time,   price: Math.min(...fL.slice(mid))    },
+                    ],
+                    style: "solid", color: "rgba(34,197,94,0.45)", label: "Lower Channel",
+                  },
+                ],
+                targets: [
+                  { price: breakoutPx, label: `B/O ${breakoutPx.toFixed(2)}`, role: "breakout" },
+                  { price: targetPx,   label: `T1  ${targetPx.toFixed(2)}`,   role: "target"   },
+                  { price: stopPx,     label: `SL  ${stopPx.toFixed(2)}`,     role: "stop"     },
+                ],
+              });
+            }
+          }
+        }
+      }
+    }
   }
 
-  return null;
+  return results;
 }
 
-/**
- * Calculate pattern overlays — angled trendlines and key price levels.
- *
- * Runs a sliding-window scan across recent history so it catches:
- *  • Flags that are *actively forming* at the tip of the series
- *  • Flags that *already broke out/down* in the recent past (up to ~6 weeks back)
- *
- * Returns up to MAX_PATTERNS unique patterns, deduplicated by flag-zone price.
- */
-export function calcPatternOverlays(bars: OHLCVBar[]): PatternOverlay[] {
-  if (bars.length < 15) return [];
-
+// ─────────────────────────────────────────────────────────────────────────────
+// Triangle / other structure detection (tip-of-series only)
+// ─────────────────────────────────────────────────────────────────────────────
+function detectTriangles(bars: OHLCVBar[]): PatternOverlay[] {
   const n = bars.length;
+  if (n < 25) return [];
 
-  // ── Multi-scale flag detection (short → medium → long) ─────────────────
-  const FLAG_SCALES = [
-    { poleLookback:  8, flagBars: 4  },   // 2-week pattern (ETFs, high-beta)
-    { poleLookback: 12, flagBars: 5  },   // 3-week pattern
-    { poleLookback: 25, flagBars: 8  },   // ~1.5 months
-    { poleLookback: 50, flagBars: 15 },   // ~3 months
-    { poleLookback: 80, flagBars: 25 },   // ~5 months
-  ];
+  const highs  = bars.map(b => b.high);
+  const lows   = bars.map(b => b.low);
 
-  // Sliding scan: try the detection at multiple end-offsets so historical
-  // flags (already broken) are visible alongside the current active one.
-  const SCAN_OFFSETS = [0, 5, 10, 15, 20, 25, 30];
-  const MAX_PATTERNS = 3;
+  const win  = 20;
+  const tH   = highs.slice(-win);
+  const tL   = lows.slice(-win);
+  const maxH = Math.max(...tH), minH = Math.min(...tH);
+  const maxL = Math.max(...tL), minL = Math.min(...tL);
 
-  const results: PatternOverlay[] = [];
-  // Dedup: track breakdown/breakout prices already captured; skip if within 4%
-  const seenBreakPrices: number[] = [];
+  const startIdx  = n - win;
+  const endIdx    = n - 1;
+  const startDate = bars[startIdx].time;
+  const endDate   = bars[endIdx].time;
 
-  for (const offset of SCAN_OFFSETS) {
-    if (results.length >= MAX_PATTERNS) break;
-    const slice = offset === 0 ? bars : bars.slice(0, n - offset);
-    if (slice.length < 13) continue;
-
-    for (const scale of FLAG_SCALES) {
-      const overlay = detectFlag(slice, scale.poleLookback, scale.flagBars);
-      if (!overlay) continue;
-
-      const bp = overlay.targets[0].price;
-      const isDup = seenBreakPrices.some(p => Math.abs(p - bp) / p < 0.04);
-      if (!isDup) {
-        seenBreakPrices.push(bp);
-        results.push(overlay);
-      }
-      break; // one pattern per offset — first scale match wins
-    }
+  // Ascending triangle: flat top + rising lows
+  if (maxH > 0 && (maxH - minH) / maxH < 0.025
+      && tL[tL.length - 1] > tL[0] + (maxL - minL) * 0.35) {
+    const resistance = r2(maxH);
+    const curSupport = r2(tL[tL.length - 1]);
+    const target     = r2(resistance + (resistance - tL[0]));
+    return [{
+      type: "ascending-triangle", label: "Ascending Triangle", confidence: "medium",
+      description: `Flat top ${resistance.toFixed(2)} · Rising support · B/O target ${target.toFixed(2)}`,
+      lines: [
+        { points: [{ date: startDate, price: resistance }, { date: endDate, price: resistance }],
+          style: "solid", color: "#ef4444", label: "Resistance" },
+        { points: [{ date: startDate, price: r2(tL[0]) }, { date: endDate, price: curSupport }],
+          style: "solid", color: "#22c55e", label: "Rising Support" },
+      ],
+      targets: [
+        { price: resistance, label: `B/O ${resistance.toFixed(2)}`, role: "breakout" },
+        { price: target,     label: `T1  ${target.toFixed(2)}`,     role: "target"   },
+      ],
+    }];
   }
 
-  if (results.length > 0) return results;
-
-  // ── Ascending Triangle ────────────────────────────────────────────────
-  if (n >= 25) {
-    const win    = 20;
-    const tH     = bars.map(b => b.high).slice(-win);
-    const tL     = bars.map(b => b.low).slice(-win);
-    const maxH   = Math.max(...tH), minH = Math.min(...tH);
-    const maxL   = Math.max(...tL), minL = Math.min(...tL);
-
-    const flatTop    = maxH > 0 && (maxH - minH) / maxH < 0.025;
-    const risingLows = tL[tL.length - 1] > tL[0] + (maxL - minL) * 0.35;
-
-    if (flatTop && risingLows) {
-      const startIdx   = n - win;
-      const endIdx     = n - 1;
-      const startDate  = bars[startIdx].time;
-      const endDate    = bars[endIdx].time;
-      const resistance = r2(maxH);
-      const curSupport = r2(tL[tL.length - 1]);
-      const target     = r2(resistance + (resistance - tL[0]));
-
-      return [{
-        type: "ascending-triangle",
-        label: "Ascending Triangle",
-        description: `Flat top ${resistance.toFixed(2)} · Rising support · B/O target ${target.toFixed(2)}`,
-        confidence: "medium",
-        lines: [
-          {
-            points: [
-              { date: startDate, price: resistance },
-              { date: endDate,   price: resistance },
-            ],
-            style: "solid",
-            color: "#ef4444",
-            label: "Resistance",
-          },
-          {
-            points: [
-              { date: startDate, price: r2(tL[0]) },
-              { date: endDate,   price: curSupport },
-            ],
-            style: "solid",
-            color: "#22c55e",
-            label: "Rising Support",
-          },
-        ],
-        targets: [
-          { price: resistance, label: `B/O ${resistance.toFixed(2)}`, role: "breakout" },
-          { price: target,     label: `T1  ${target.toFixed(2)}`,     role: "target"   },
-        ],
-      }];
-    }
-  }
-
-  // ── Descending Triangle ───────────────────────────────────────────────
-  if (n >= 25) {
-    const win   = 20;
-    const tH    = bars.map(b => b.high).slice(-win);
-    const tL    = bars.map(b => b.low).slice(-win);
-    const maxH  = Math.max(...tH), minH = Math.min(...tH);
-    const maxL  = Math.max(...tL), minL = Math.min(...tL);
-
-    const flatBot      = maxL > 0 && (maxL - minL) / maxL < 0.025;
-    const fallingHighs = tH[tH.length - 1] < tH[0] - (maxH - minH) * 0.35;
-
-    if (flatBot && fallingHighs) {
-      const startIdx  = n - win;
-      const endIdx    = n - 1;
-      const startDate = bars[startIdx].time;
-      const endDate   = bars[endIdx].time;
-      const support   = r2(minL);
-      const curResist = r2(tH[tH.length - 1]);
-      const target    = r2(support - (tH[0] - support));
-
-      return [{
-        type: "descending-triangle",
-        label: "Descending Triangle",
-        description: `Flat support ${support.toFixed(2)} · Falling highs · B/D target ${target.toFixed(2)}`,
-        confidence: "medium",
-        lines: [
-          {
-            points: [
-              { date: startDate, price: support },
-              { date: endDate,   price: support },
-            ],
-            style: "solid",
-            color: "#22c55e",
-            label: "Support",
-          },
-          {
-            points: [
-              { date: startDate, price: r2(tH[0]) },
-              { date: endDate,   price: curResist  },
-            ],
-            style: "solid",
-            color: "#ef4444",
-            label: "Falling Resistance",
-          },
-        ],
-        targets: [
-          { price: support, label: `B/D ${support.toFixed(2)}`, role: "breakout" },
-          { price: target,  label: `T1  ${target.toFixed(2)}`,  role: "target"   },
-        ],
-      }];
-    }
+  // Descending triangle: flat support + falling highs
+  if (maxL > 0 && (maxL - minL) / maxL < 0.025
+      && tH[tH.length - 1] < tH[0] - (maxH - minH) * 0.35) {
+    const support   = r2(minL);
+    const curResist = r2(tH[tH.length - 1]);
+    const target    = r2(support - (tH[0] - support));
+    return [{
+      type: "descending-triangle", label: "Descending Triangle", confidence: "medium",
+      description: `Flat support ${support.toFixed(2)} · Falling highs · B/D target ${target.toFixed(2)}`,
+      lines: [
+        { points: [{ date: startDate, price: support }, { date: endDate, price: support }],
+          style: "solid", color: "#22c55e", label: "Support" },
+        { points: [{ date: startDate, price: r2(tH[0]) }, { date: endDate, price: curResist }],
+          style: "solid", color: "#ef4444", label: "Falling Resistance" },
+      ],
+      targets: [
+        { price: support, label: `B/D ${support.toFixed(2)}`, role: "breakout" },
+        { price: target,  label: `T1  ${target.toFixed(2)}`,  role: "target"   },
+      ],
+    }];
   }
 
   return [];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Public API
+// ─────────────────────────────────────────────────────────────────────────────
+
+const DAILY_OPTS: PeakAnchorOpts = {
+  pivotWindow:    3,
+  minPolePct:     5,
+  maxPoleBars:    12,
+  flagMaxBars:    10,
+  tightThreshold: 0.65,
+  lookbackBars:   90,
+  maxPatterns:    3,
+};
+
+const WEEKLY_OPTS: PeakAnchorOpts = {
+  pivotWindow:    2,
+  minPolePct:     5,
+  maxPoleBars:    6,
+  flagMaxBars:    5,
+  tightThreshold: 0.65,
+  lookbackBars:   40,
+  maxPatterns:    2,
+};
+
+/**
+ * Multi-timeframe pattern detection.
+ * Runs peak-anchored flag detection on daily and weekly bars separately,
+ * merges results (dedup by price zone), and labels each with its timeframe.
+ * Returns up to 4 patterns total, ordered by recency (most recent pole first).
+ */
+export function calcPatternOverlaysMultiTF(
+  dailyBars:  OHLCVBar[],
+  weeklyBars: OHLCVBar[],
+): PatternOverlay[] {
+  const out:   PatternOverlay[] = [];
+  const seen:  number[]         = [];
+
+  function merge(ov: PatternOverlay, tf: "daily" | "weekly") {
+    const bp = ov.targets[0].price;
+    if (!seen.some(p => Math.abs(p - bp) / p < 0.04)) {
+      seen.push(bp);
+      out.push({ ...ov, timeframe: tf });
+    }
+  }
+
+  // Daily first (higher resolution / more recent detail)
+  if (dailyBars.length >= 20) {
+    for (const ov of detectPeakAnchoredFlags(dailyBars, DAILY_OPTS)) {
+      if (out.length >= 4) break;
+      merge(ov, "daily");
+    }
+  }
+
+  // Weekly (catches longer-term setups the daily might miss)
+  if (weeklyBars.length >= 15) {
+    for (const ov of detectPeakAnchoredFlags(weeklyBars, WEEKLY_OPTS)) {
+      if (out.length >= 4) break;
+      merge(ov, "weekly");
+    }
+  }
+
+  // If no flags found on either timeframe, fall back to tip-of-series triangles
+  if (out.length === 0 && dailyBars.length >= 25) {
+    for (const ov of detectTriangles(dailyBars)) {
+      out.push({ ...ov, timeframe: "daily" });
+    }
+  }
+
+  return out;
+}
+
+/**
+ * Single-timeframe entry point kept for backward compatibility.
+ */
+export function calcPatternOverlays(bars: OHLCVBar[]): PatternOverlay[] {
+  return calcPatternOverlaysMultiTF(bars, []);
 }

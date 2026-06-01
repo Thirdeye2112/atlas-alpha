@@ -10,7 +10,7 @@ import {
   type WeeklyContextResult,
 } from "./indicators.js";
 import { calcAtlasScore, type AtlasAlphaScore } from "./scoring.js";
-import { calcPatternOverlays, type PatternOverlay } from "./patternOverlays.js";
+import { calcPatternOverlaysMultiTF, type PatternOverlay } from "./patternOverlays.js";
 import { analysisCache } from "./cache.js";
 import { SCANNER_UNIVERSE } from "./scannerUniverse.js";
 import { calibrationStore } from "./calibrationStore.js";
@@ -72,7 +72,7 @@ function buildResult(
     ? { patterns: [], marketStructure: "ranging" as const, supportLevel: 0, resistanceLevel: 0 }
     : calcPatterns(bars, trend, volatility);
   const chartSignals     = lightMode ? [] : calcChartSignals(bars);
-  const patternOverlays  = lightMode ? [] : calcPatternOverlays(bars);
+  const patternOverlays  = lightMode ? [] : calcPatternOverlaysMultiTF(bars, weeklyBars);
 
   // TA overlays — always computed (fast, ≤1ms each); omitted from scanner light-mode paths
   const fibLevels     = lightMode ? null : calcFibLevels(bars);

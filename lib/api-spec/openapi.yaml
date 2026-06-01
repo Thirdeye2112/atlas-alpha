@@ -1347,6 +1347,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PatternTarget"
+        timeframe:
+          type: string
+          enum: [daily, weekly]
       required: [type, label, description, confidence, lines, targets]
 
     ScannerResponse:
