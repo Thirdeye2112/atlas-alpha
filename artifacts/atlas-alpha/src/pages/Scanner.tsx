@@ -14,13 +14,15 @@ import {
   useGetScannerGapUp,                getGetScannerGapUpQueryKey,
   useGetScannerGapDown,              getGetScannerGapDownQueryKey,
   useGetScannerKeyLevels,            getGetScannerKeyLevelsQueryKey,
+  useGetStockOhlcv,                  getGetStockOhlcvQueryKey,
   type ScannerResponse,
   type ScannerResult,
 } from "@workspace/api-client-react";
+import LightweightChart from "@/components/charts/LightweightChart";
 import { formatCurrency, formatPercent, getBgColorForScore } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 import { Link } from "wouter";
-import { ChevronUp, ChevronDown, ChevronsUpDown, FlaskConical, RotateCcw } from "lucide-react";
+import { ChevronUp, ChevronDown, ChevronsUpDown, FlaskConical, RotateCcw, X } from "lucide-react";
 
 type SortCol =
   | "ticker" | "name" | "price" | "changePercent" | "gapPercent"
@@ -81,6 +83,60 @@ function ScanProgress({ done, total }: { done: number; total: number }) {
   );
 }
 
+// ── Scanner chart preview ─────────────────────────────────────────────────────
+
+function ScannerChartPreview({ row, onClose }: { row: ScannerResult; onClose: () => void }) {
+  const { data: bars = [], isLoading } = useGetStockOhlcv(row.ticker, {
+    query: {
+      queryKey: getGetStockOhlcvQueryKey(row.ticker),
+      staleTime: 5 * 60 * 1000,
+    },
+  });
+
+  const up = row.changePercent >= 0;
+  return (
+    <div className="border-t border-border bg-zinc-950 shrink-0">
+      <div className="flex items-center gap-3 px-3 py-2 border-b border-border/40">
+        <span className="font-mono font-bold text-sm text-foreground">{row.ticker}</span>
+        <span className="text-muted-foreground text-xs font-mono truncate max-w-[160px]">{row.name}</span>
+        <span className="font-mono tabular-nums text-sm">{formatCurrency(row.price)}</span>
+        <span className={cn("font-mono tabular-nums text-xs", up ? "text-emerald-400" : "text-red-400")}>
+          {formatPercent(row.changePercent)}
+        </span>
+        <span className={cn("text-xs font-bold px-1.5 py-0.5 rounded", getBgColorForScore(row.atlasScore))}>
+          {row.atlasScore}
+        </span>
+        <div className="flex-1" />
+        <Link
+          href={`/?ticker=${row.ticker}`}
+          className="text-xs font-mono text-primary/70 hover:text-primary border border-primary/25 hover:border-primary/50 rounded px-2 py-0.5 transition-colors whitespace-nowrap"
+        >
+          OPEN ON DASHBOARD →
+        </Link>
+        <button
+          onClick={onClose}
+          className="text-muted-foreground/40 hover:text-muted-foreground transition-colors p-0.5 ml-1"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      <div>
+        {isLoading ? (
+          <div className="h-[200px] flex items-center justify-center text-muted-foreground font-mono text-xs animate-pulse">
+            LOADING CHART…
+          </div>
+        ) : bars.length > 0 ? (
+          <LightweightChart data={bars} height={200} />
+        ) : (
+          <div className="h-[200px] flex items-center justify-center text-muted-foreground font-mono text-xs">
+            NO DATA
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── IC entry type ─────────────────────────────────────────────────────────────
 
 interface IcEntry { rankIC: number; rankICRating: string; icTStat: number; }
@@ -108,6 +164,7 @@ function ScannerTable({
 }) {
   const [sortCol, setSortCol] = useState<SortCol | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [previewRow, setPreviewRow] = useState<ScannerResult | null>(null);
 
   // ── Backtest state ──────────────────────────────────────────────────────────
   const [icMap, setIcMap]     = useState<Map<string, IcEntry>>(new Map());
@@ -230,7 +287,8 @@ function ScannerTable({
   const btNoise    = [...icMap.values()].filter(v => v.rankICRating === "noise").length;
 
   return (
-    <div className="overflow-auto border border-border rounded-md bg-card flex flex-col">
+    <div className="border border-border rounded-md bg-card flex flex-col overflow-hidden">
+      <div className="overflow-auto flex-1 flex flex-col">
       {/* Live progress bar while scanning */}
       {!complete && progress && progress.total > 0 && (
         <ScanProgress done={progress.done} total={progress.total} />
@@ -320,10 +378,21 @@ function ScannerTable({
             {sorted.map(row => {
               const ic = icMap.get(row.ticker);
               return (
-                <tr key={row.ticker} className="hover:bg-muted/30 transition-colors cursor-pointer">
+                <tr
+                  key={row.ticker}
+                  className={cn(
+                    "hover:bg-muted/30 transition-colors cursor-pointer",
+                    previewRow?.ticker === row.ticker && "bg-muted/20 border-l-2 border-l-primary"
+                  )}
+                  onClick={() => setPreviewRow(previewRow?.ticker === row.ticker ? null : row)}
+                >
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-1.5">
-                      <Link href={`/?ticker=${row.ticker}`} className="text-primary font-bold hover:underline">
+                      <Link
+                        href={`/?ticker=${row.ticker}`}
+                        className="text-primary font-bold hover:underline"
+                        onClick={e => e.stopPropagation()}
+                      >
                         {row.ticker}
                       </Link>
                       {(row as ScannerResult & { isDistorted?: boolean; assetType?: string }).isDistorted && (
@@ -437,6 +506,13 @@ function ScannerTable({
           </tbody>
         </table>
       )}
+      </div>
+      {previewRow && (
+        <ScannerChartPreview
+          row={previewRow}
+          onClose={() => setPreviewRow(null)}
+        />
+      )}
     </div>
   );
 }
@@ -448,6 +524,8 @@ export default function Scanner() {
   const qOpts = (qk: readonly unknown[]) => ({
     queryKey: qk,
     refetchInterval,
+    staleTime: 29 * 60 * 1000,  // treat server results as fresh for 29 min — avoids refetch on back-nav
+    gcTime:    32 * 60 * 1000,  // keep in memory 2 min beyond stale window
   });
 
   const { data: longs,        isLoading: lLoading    } = useGetScannerTopLongs({ limit },    { query: qOpts(getGetScannerTopLongsQueryKey({ limit }))    });
