@@ -1,15 +1,12 @@
 /**
  * Persistent OHLCV history store.
  *
- * The existing `ohlcv_cache` table is a short-lived JSONB blob store (15-min TTL).
- * This module adds `ohlcv_history` — a normalized per-bar table (ticker + date PK)
- * that persists indefinitely and enables incremental "gap-fill" updates:
+ * The `ohlcv_history` table stores per-bar data with a composite PK of
+ * (ticker, date, interval).  Supported intervals: "1d", "1wk", "1mo".
  *
- *   getOrFetchDailyBars() — serve from DB, pull only missing tail from Yahoo
- *   runOhlcvBackfill()    — initial 2Y seeding + subsequent incremental sync
- *
- * `fetchYahoo` is injected as a callback by callers to avoid a circular import
- * with marketData.ts.
+ * Public surface:
+ *   getOrFetchBars()   — DB-first smart fetch; pulls only the missing edges from Yahoo
+ *   runOhlcvBackfill() — initial 2Y daily seeding + incremental daily gap-fill
  */
 import { db, ohlcvHistoryTable } from "@workspace/db";
 import { eq, gte, lte, and, sql } from "drizzle-orm";
@@ -29,23 +26,33 @@ function todayStr(): string {
 }
 
 /**
- * Is the stored data fresh enough to skip a Yahoo call?
- * Within 3 calendar days handles Fri close → Mon open, plus US market holidays.
+ * Freshness window varies by interval:
+ *   "1d"  — stale after 3 calendar days (handles weekends + US holidays)
+ *   "1wk" — stale after 7 days (a full trading week)
+ *   "1mo" — stale after 35 days (a full calendar month)
  */
-function isCurrent(lastDate: string): boolean {
+function isCurrent(lastDate: string, interval = "1d"): boolean {
   const diffMs = Date.now() - new Date(lastDate + "T12:00:00Z").getTime();
-  return diffMs <= 3 * 86_400_000;
+  const windowMs =
+    interval === "1mo" ? 35 * 86_400_000 :
+    interval === "1wk" ?  7 * 86_400_000 :
+                          3 * 86_400_000;
+  return diffMs <= windowMs;
 }
 
 // ── Core DB operations ─────────────────────────────────────────────────────────
 
-/** Read bars from the persistent store for a given ticker and optional date range. */
+/** Read bars from the persistent store for a given ticker, interval and optional date range. */
 export async function getHistory(
-  ticker:   string,
+  ticker:    string,
+  interval = "1d",
   fromDate?: string,
   toDate?:   string,
 ): Promise<OHLCVBar[]> {
-  const conds = [eq(ohlcvHistoryTable.ticker, ticker)];
+  const conds = [
+    eq(ohlcvHistoryTable.ticker,   ticker),
+    eq(ohlcvHistoryTable.interval, interval),
+  ];
   if (fromDate) conds.push(gte(ohlcvHistoryTable.date, fromDate));
   if (toDate)   conds.push(lte(ohlcvHistoryTable.date, toDate));
 
@@ -65,26 +72,35 @@ export async function getHistory(
   }));
 }
 
-/** Most recently stored date for a ticker, or null if no rows exist. */
-export async function getLastDate(ticker: string): Promise<string | null> {
+/** Most recently stored date for a (ticker, interval) pair. */
+export async function getLastDate(ticker: string, interval = "1d"): Promise<string | null> {
   const result = await db
     .select({ maxDate: sql<string | null>`MAX(${ohlcvHistoryTable.date})` })
     .from(ohlcvHistoryTable)
-    .where(eq(ohlcvHistoryTable.ticker, ticker));
+    .where(and(
+      eq(ohlcvHistoryTable.ticker,   ticker),
+      eq(ohlcvHistoryTable.interval, interval),
+    ));
   return result[0]?.maxDate ?? null;
 }
 
-/** Earliest stored date for a ticker, or null if no rows exist. */
-export async function getFirstDate(ticker: string): Promise<string | null> {
+/** Earliest stored date for a (ticker, interval) pair. */
+export async function getFirstDate(ticker: string, interval = "1d"): Promise<string | null> {
   const result = await db
     .select({ minDate: sql<string | null>`MIN(${ohlcvHistoryTable.date})` })
     .from(ohlcvHistoryTable)
-    .where(eq(ohlcvHistoryTable.ticker, ticker));
+    .where(and(
+      eq(ohlcvHistoryTable.ticker,   ticker),
+      eq(ohlcvHistoryTable.interval, interval),
+    ));
   return result[0]?.minDate ?? null;
 }
 
-/** Bar counts for a list of tickers — used to decide what needs backfilling. */
-export async function getBarCounts(tickers: string[]): Promise<Map<string, number>> {
+/** Bar counts for a list of tickers at a given interval — used by the backfill job. */
+export async function getBarCounts(
+  tickers:  string[],
+  interval = "1d",
+): Promise<Map<string, number>> {
   if (!tickers.length) return new Map();
   const rows = await db
     .select({
@@ -92,26 +108,33 @@ export async function getBarCounts(tickers: string[]): Promise<Map<string, numbe
       count:  sql<number>`COUNT(*)::int`,
     })
     .from(ohlcvHistoryTable)
-    .where(sql`${ohlcvHistoryTable.ticker} = ANY(ARRAY[${sql.join(tickers.map(t => sql`${t}`), sql`, `)}])`);
+    .where(and(
+      sql`${ohlcvHistoryTable.ticker} = ANY(ARRAY[${sql.join(tickers.map(t => sql`${t}`), sql`, `)}])`,
+      eq(ohlcvHistoryTable.interval, interval),
+    ));
   return new Map(rows.map(r => [r.ticker, r.count]));
 }
 
 /**
- * Upsert a batch of daily bars for a ticker.
+ * Upsert a batch of bars for (ticker, interval).
  * Processes in chunks of 500 to stay within PostgreSQL parameter limits.
- * On conflict (same ticker + date) updates OHLCV in case of adjustments.
  */
-export async function upsertBars(ticker: string, bars: OHLCVBar[]): Promise<void> {
+export async function upsertBars(
+  ticker:   string,
+  interval: string,
+  bars:     OHLCVBar[],
+): Promise<void> {
   if (!bars.length) return;
 
   const values = bars.map(b => ({
     ticker,
-    date:   b.time,
-    open:   b.open,
-    high:   b.high,
-    low:    b.low,
-    close:  b.close,
-    volume: b.volume,
+    date:     b.time,
+    interval,
+    open:     b.open,
+    high:     b.high,
+    low:      b.low,
+    close:    b.close,
+    volume:   b.volume,
   }));
 
   const CHUNK = 500;
@@ -120,7 +143,7 @@ export async function upsertBars(ticker: string, bars: OHLCVBar[]): Promise<void
       .insert(ohlcvHistoryTable)
       .values(values.slice(i, i + CHUNK))
       .onConflictDoUpdate({
-        target: [ohlcvHistoryTable.ticker, ohlcvHistoryTable.date],
+        target: [ohlcvHistoryTable.ticker, ohlcvHistoryTable.date, ohlcvHistoryTable.interval],
         set: {
           open:   sql`excluded.open`,
           high:   sql`excluded.high`,
@@ -132,30 +155,31 @@ export async function upsertBars(ticker: string, bars: OHLCVBar[]): Promise<void
   }
 }
 
-// ── Smart fetch: DB-first, Yahoo gap-fill ─────────────────────────────────────
+// ── Smart fetch: DB-first, Yahoo gap-fill ──────────────────────────────────────
 
 type YahooFetcher = (ticker: string, period1: Date, period2: Date) => Promise<OHLCVBar[]>;
 
 /**
- * Return daily bars for [fromDate, toDate] using a DB-first strategy:
- *   1. Check tail freshness (recent end of data)
- *   2. Check head coverage (old end of data) — if DB doesn't go back far enough, fetch the gap
- *   3. Upsert any missing bars, then serve from DB
- *   4. If DB ops fail → fall back to a direct Yahoo call
+ * Return bars for [fromDate, toDate] at the given interval using a DB-first strategy:
+ *   1. Check tail freshness — if stale, pull the missing tail from Yahoo and upsert
+ *   2. Check head coverage — if DB doesn't go back far enough, fetch the historical gap
+ *   3. Serve from DB
+ *   4. On any DB error, fall back to a direct Yahoo call
  */
-export async function getOrFetchDailyBars(
+export async function getOrFetchBars(
   ticker:     string,
+  interval:   string,
   fromDate:   string,
   toDate:     string,
   fetchYahoo: YahooFetcher,
 ): Promise<OHLCVBar[]> {
   try {
     const [lastDate, firstDate] = await Promise.all([
-      getLastDate(ticker),
-      getFirstDate(ticker),
+      getLastDate(ticker, interval),
+      getFirstDate(ticker, interval),
     ]);
 
-    const tailFresh = lastDate !== null && isCurrent(lastDate);
+    const tailFresh = lastDate !== null && isCurrent(lastDate, interval);
 
     // ── Gap at the TAIL (recent data missing) ──────────────────────────────
     if (!tailFresh) {
@@ -168,8 +192,8 @@ export async function getOrFetchDailyBars(
           new Date(fetchTo   + "T12:00:00Z"),
         );
         if (newBars.length > 0) {
-          await upsertBars(ticker, newBars);
-          logger.debug({ ticker, count: newBars.length, from: fetchFrom }, "OHLCV history: tail upsert");
+          await upsertBars(ticker, interval, newBars);
+          logger.debug({ ticker, interval, count: newBars.length, from: fetchFrom }, "OHLCV history: tail upsert");
         }
       }
     }
@@ -181,20 +205,20 @@ export async function getOrFetchDailyBars(
       const fetchFrom = fromDate;
       const fetchTo   = firstDate ? addDays(firstDate, -1) : addDays(todayStr(), 1);
       if (fetchFrom < fetchTo) {
-        logger.debug({ ticker, from: fetchFrom, to: fetchTo }, "OHLCV history: fetching historical gap");
+        logger.debug({ ticker, interval, from: fetchFrom, to: fetchTo }, "OHLCV history: fetching historical gap");
         const oldBars = await fetchYahoo(
           ticker,
           new Date(fetchFrom + "T12:00:00Z"),
           new Date(fetchTo   + "T12:00:00Z"),
         );
         if (oldBars.length > 0) {
-          await upsertBars(ticker, oldBars);
-          logger.debug({ ticker, count: oldBars.length, from: fetchFrom }, "OHLCV history: head upsert");
+          await upsertBars(ticker, interval, oldBars);
+          logger.debug({ ticker, interval, count: oldBars.length, from: fetchFrom }, "OHLCV history: head upsert");
         }
       }
     }
 
-    const bars = await getHistory(ticker, fromDate, toDate);
+    const bars = await getHistory(ticker, interval, fromDate, toDate);
     if (bars.length > 0) return bars;
 
     // DB came back empty after upserts (e.g. ticker had no Yahoo data for range)
@@ -204,7 +228,7 @@ export async function getOrFetchDailyBars(
       new Date(toDate   + "T12:00:00Z"),
     );
   } catch (err) {
-    logger.warn({ err, ticker }, "OHLCV history store error — falling back to Yahoo");
+    logger.warn({ err, ticker, interval }, "OHLCV history store error — falling back to Yahoo");
     return fetchYahoo(
       ticker,
       new Date(fromDate + "T12:00:00Z"),
@@ -213,7 +237,19 @@ export async function getOrFetchDailyBars(
   }
 }
 
-// ── Background backfill job ────────────────────────────────────────────────────
+// ── Legacy alias (daily only) ──────────────────────────────────────────────────
+
+/** @deprecated Use getOrFetchBars with interval="1d" */
+export async function getOrFetchDailyBars(
+  ticker:     string,
+  fromDate:   string,
+  toDate:     string,
+  fetchYahoo: YahooFetcher,
+): Promise<OHLCVBar[]> {
+  return getOrFetchBars(ticker, "1d", fromDate, toDate, fetchYahoo);
+}
+
+// ── Background backfill job (daily bars only) ──────────────────────────────────
 
 export interface BackfillState {
   running:   boolean;
@@ -239,10 +275,8 @@ const BATCH_DELAY_MS = 1500;
  * Background job: seeds every ticker in `tickers` with 2Y of daily bars and
  * keeps the history current via incremental gap-fills.
  *
- * Strategy per ticker:
- *  - Already current (≤3 days stale, ≥400 bars) → skip
- *  - Stale but has enough bars              → incremental fetch (lastDate+1 → today)
- *  - Missing / too few bars                 → full 2Y fetch
+ * Only operates on interval="1d". Weekly / monthly bars are populated
+ * on-demand by getOrFetchBars when a user first views that timeframe.
  */
 export async function runOhlcvBackfill(
   tickers:    string[],
@@ -263,7 +297,7 @@ export async function runOhlcvBackfill(
   const today     = todayStr();
   const twoYrsAgo = addDays(today, -TWO_YEARS_DAYS);
 
-  const barCounts = await getBarCounts(tickers).catch(() => new Map<string, number>());
+  const barCounts = await getBarCounts(tickers, "1d").catch(() => new Map<string, number>());
 
   logger.info({ total: tickers.length }, "OHLCV backfill: starting");
 
@@ -273,7 +307,7 @@ export async function runOhlcvBackfill(
     await Promise.allSettled(batch.map(async ticker => {
       try {
         const count    = barCounts.get(ticker) ?? 0;
-        const lastDate = count > 0 ? await getLastDate(ticker) : null;
+        const lastDate = count > 0 ? await getLastDate(ticker, "1d") : null;
         const staleDays = lastDate
           ? Math.floor((Date.now() - new Date(lastDate + "T12:00:00Z").getTime()) / 86_400_000)
           : 999;
@@ -293,7 +327,7 @@ export async function runOhlcvBackfill(
           new Date(fetchFrom + "T12:00:00Z"),
           new Date(fetchTo   + "T12:00:00Z"),
         );
-        if (bars.length > 0) await upsertBars(ticker, bars);
+        if (bars.length > 0) await upsertBars(ticker, "1d", bars);
         backfillState.done++;
         logger.debug({ ticker, bars: bars.length, from: fetchFrom }, "OHLCV backfill: ticker done");
       } catch (err) {

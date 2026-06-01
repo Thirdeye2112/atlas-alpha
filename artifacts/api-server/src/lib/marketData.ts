@@ -1,7 +1,7 @@
 import YahooFinanceClass from "yahoo-finance2";
 import { quoteCache, ohlcvCache } from "./cache.js";
 import { persistQuote, persistOhlcv } from "./dbCache.js";
-import { getOrFetchDailyBars } from "./ohlcvStore.js";
+import { getOrFetchBars } from "./ohlcvStore.js";
 import { logger } from "./logger.js";
 
 const yahooFinance = new YahooFinanceClass({ suppressNotices: ["yahooSurvey"] });
@@ -330,19 +330,17 @@ export async function fetchOHLCV(ticker: string, period = "3mo", interval = "1d"
   const toDate   = end.toISOString().split("T")[0];
 
   if (isIntraday) {
-    // Intraday: no persistent store — always fetch from Yahoo
+    // Intraday: no persistent store — always fetch live from Yahoo
     bars = await fetchYahooRaw(ticker, start, end, interval);
-  } else if (interval === "1d") {
-    // Daily: DB-first strategy — persistent store handles gap-fills on both ends
-    bars = await getOrFetchDailyBars(
-      ticker, fromDate, toDate,
-      (t, p1, p2) => fetchYahooRaw(t, p1, p2, "1d"),
-    );
   } else {
-    // Weekly / monthly: fetch natively from Yahoo with the correct interval.
-    // The DB store only holds daily bars, so we can't reuse it here.
-    // Yahoo Finance supports up to 20Y for weekly and the full history for monthly.
-    bars = await fetchYahooRaw(ticker, start, end, interval);
+    // Daily / weekly / monthly: DB-first strategy.
+    // Each interval is stored separately (PK: ticker + date + interval).
+    // getOrFetchBars handles gap-fills on both the tail AND the historical head,
+    // so 5Y/ALL timeframes populate the DB on first request and serve from it after.
+    bars = await getOrFetchBars(
+      ticker, interval, fromDate, toDate,
+      (t, p1, p2) => fetchYahooRaw(t, p1, p2, interval),
+    );
   }
 
   ohlcvCache.set(key, bars);
