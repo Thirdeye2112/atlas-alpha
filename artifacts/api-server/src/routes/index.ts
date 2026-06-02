@@ -8,6 +8,7 @@ import backtestRouter from "./backtest";
 import cacheRouter from "./cache";
 import researchRouter from "./research";
 import alertsRouter from "./alerts";
+import botRouter from "./bot";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(backtestRouter);
 router.use(cacheRouter);
 router.use(researchRouter);
 router.use(alertsRouter);
+router.use(botRouter);
 
 export default router;

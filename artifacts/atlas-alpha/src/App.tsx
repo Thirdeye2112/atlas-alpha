@@ -7,6 +7,7 @@ import Scanner from "@/pages/Scanner";
 import Watchlist from "@/pages/Watchlist";
 import Research from "@/pages/Research";
 import BacktestLab from "@/pages/BacktestLab";
+import BotLab from "@/pages/BotLab";
 import AppLayout from "@/components/layout/AppLayout";
 import NotFound from "@/pages/not-found";
 import { useEffect } from "react";
@@ -37,6 +38,7 @@ function App() {
               <Route path="/watchlist" component={Watchlist} />
               <Route path="/research" component={Research} />
               <Route path="/backtest" component={BacktestLab} />
+              <Route path="/bot" component={BotLab} />
               <Route component={NotFound} />
             </Switch>
           </AppLayout>

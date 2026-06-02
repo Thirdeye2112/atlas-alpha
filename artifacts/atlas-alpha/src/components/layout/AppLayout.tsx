@@ -4,7 +4,7 @@ import {
   useGetMarketOverview, 
   getGetMarketOverviewQueryKey 
 } from "@workspace/api-client-react";
-import { Activity, LayoutDashboard, Radar, ListTree, FlaskConical, TestTube2, Bell } from "lucide-react";
+import { Activity, LayoutDashboard, Radar, ListTree, FlaskConical, TestTube2, Bell, BotIcon } from "lucide-react";
 import { formatCurrency, formatPercent } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 
@@ -111,6 +111,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     { href: "/watchlist", label: "Watchlist", icon: ListTree },
     { href: "/research", label: "Research", icon: FlaskConical },
     { href: "/backtest", label: "Backtest Lab", icon: TestTube2 },
+    { href: "/bot",     label: "Bot Lab",      icon: BotIcon },
   ];
 
   return (
