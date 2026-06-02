@@ -373,7 +373,11 @@ export async function getIntelligenceVerdict(
 
 // ── 5. Self-learning adaptation ───────────────────────────────────────────────
 
+let selfLearningRunning = false;
+
 export async function runSelfLearning(): Promise<AdaptationResult | null> {
+  if (selfLearningRunning) return null;
+  selfLearningRunning = true;
   try {
     const closed = await db
       .select()
@@ -429,9 +433,11 @@ export async function runSelfLearning(): Promise<AdaptationResult | null> {
 
     if (newScoreMin === currentMin) return null;
 
-    const updatedCriteria = criteria.map(c =>
-      c.field === "score" && c.operator === "gte" ? { ...c, value: newScoreMin } : c
-    );
+    // Update existing criterion or inject a new one so the change actually takes effect
+    const updatedCriteria: Crit[] = scoreCrit
+      ? criteria.map(c =>
+          c.field === "score" && c.operator === "gte" ? { ...c, value: newScoreMin } : c)
+      : [...criteria, { field: "score", operator: "gte", value: newScoreMin }];
 
     await db.update(botConfigTable)
       .set({ entryCriteria: updatedCriteria as unknown as Record<string, unknown>[], updatedAt: new Date() })
@@ -459,6 +465,8 @@ export async function runSelfLearning(): Promise<AdaptationResult | null> {
   } catch (err) {
     logger.error({ err }, "Bot intelligence: self-learning failed");
     return null;
+  } finally {
+    selfLearningRunning = false;
   }
 }
 

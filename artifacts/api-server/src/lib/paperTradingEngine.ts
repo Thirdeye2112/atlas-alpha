@@ -581,10 +581,15 @@ export async function runBotCycle(): Promise<BotCycleResult> {
           // Apply scanner-category-based stop widening and position sizing
           const { categories, positionMultiplier, stopMultiplier } = verdict.scannerInfo;
           if (stopMultiplier !== 1.0 && levels.stopPrice) {
-            const quotePrice  = a.quote.price as number;
-            const stopDist    = levels.stopPrice - quotePrice;
-            const newStopDist = stopDist * stopMultiplier;
-            levels.stopPrice  = quotePrice + newStopDist;
+            const quotePrice = a.quote.price as number;
+            // riskDist is positive (distance from entry down to stop)
+            const riskDist    = quotePrice - levels.stopPrice;
+            const newRiskDist = riskDist * stopMultiplier;
+            levels.stopPrice  = quotePrice - newRiskDist;
+            // Preserve 3:1 R:R by widening target proportionally
+            if (levels.targetPrice) {
+              levels.targetPrice = quotePrice + newRiskDist * 3;
+            }
           }
 
           await openPosition(a, config, levels, aiNotes, categories, positionMultiplier);

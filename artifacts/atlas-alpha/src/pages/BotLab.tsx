@@ -1634,7 +1634,7 @@ function AdaptationLogSection() {
         <div className="px-4 py-4 text-xs font-mono text-muted-foreground/40">Loading…</div>
       ) : log.length === 0 ? (
         <div className="px-4 py-4 text-xs font-mono text-muted-foreground/40 text-center">
-          No threshold adaptations yet — the bot needs ≥30 closed paper trades to compare against sim expectations.
+          No threshold adaptations yet — the bot needs ≥10 closed paper trades to compare against sim expectations.
         </div>
       ) : (
         <div className="overflow-x-auto">

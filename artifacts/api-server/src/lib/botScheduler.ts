@@ -43,18 +43,26 @@ export function getSchedulerState(): SchedulerState {
   return { ...state };
 }
 
-// ── ET time helper (shared with warmup.ts) ────────────────────────────────────
+// ── ET time helper — uses IANA tz so DST is always correct on any host ────────
+
+const ET_PARTS_FMT = new Intl.DateTimeFormat("en-US", {
+  timeZone:  "America/New_York",
+  weekday:   "short",
+  hour:      "numeric",
+  minute:    "numeric",
+  hour12:    false,
+});
+
+const ET_DAY_MAP: Record<string, number> = {
+  Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
+};
 
 function etNow(): { day: number; h: number; m: number } {
-  const now    = new Date();
-  const isDST  = (() => {
-    const jan = new Date(now.getFullYear(), 0, 1).getTimezoneOffset();
-    const jul = new Date(now.getFullYear(), 6, 1).getTimezoneOffset();
-    return now.getTimezoneOffset() < Math.max(jan, jul);
-  })();
-  const offsetH = isDST ? 4 : 5;
-  const et      = new Date(now.getTime() - offsetH * 3600 * 1000);
-  return { day: et.getUTCDay(), h: et.getUTCHours(), m: et.getUTCMinutes() };
+  const parts = ET_PARTS_FMT.formatToParts(new Date());
+  const get = (t: string): number =>
+    parseInt(parts.find(p => p.type === t)?.value ?? "0", 10);
+  const dayStr = parts.find(p => p.type === "weekday")?.value ?? "Mon";
+  return { day: ET_DAY_MAP[dayStr] ?? 1, h: get("hour"), m: get("minute") };
 }
 
 function isMarketHours(): boolean {
