@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { useSearch } from "wouter";
+import Research from "./Research";
 import { FlaskConical, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, CheckCircle2, XCircle, ArrowUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -798,6 +799,7 @@ export default function BacktestLab() {
   const [multiOptimalHorizon, setMultiOptimalHorizon] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [labMode, setLabMode] = useState<"backtest" | "research">("backtest");
   const abortRef = useRef<AbortController | null>(null);
 
   const run = useCallback(async (ticker: string, h: number) => {
@@ -846,11 +848,24 @@ export default function BacktestLab() {
       <div className="border-b border-border bg-card/30">
         <div className="px-6 py-4">
           <div className="flex items-center gap-3 mb-4">
-            <FlaskConical className="w-5 h-5 text-primary" />
-            <h1 className="text-lg font-bold tracking-wider font-mono">BACKTEST LAB</h1>
-            <span className="text-xs text-muted-foreground font-mono">2Y walk-forward · candle-by-candle IC analysis</span>
+            <div className="flex gap-1">
+              {(["backtest", "research"] as const).map(m => (
+                <button key={m} onClick={() => setLabMode(m)} className={cn(
+                  "px-3 py-1.5 text-xs font-mono font-bold rounded transition-colors",
+                  labMode === m
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                )}>
+                  {m === "backtest" ? "IC BACKTEST" : "RESEARCH"}
+                </button>
+              ))}
+            </div>
+            {labMode === "backtest" && (
+              <span className="text-xs text-muted-foreground font-mono">2Y walk-forward · candle-by-candle IC analysis</span>
+            )}
           </div>
 
+          {labMode === "backtest" && (
           <div className="flex items-center gap-3 flex-wrap">
             <input
               type="text"
@@ -884,19 +899,22 @@ export default function BacktestLab() {
               </span>
             )}
           </div>
+          )}
         </div>
       </div>
 
-      {/* ── Universe-wide cross-sectional IC ── */}
-      <CrossSectionalICCard />
+      {labMode === "research" && <Research />}
 
-      {error && (
+      {/* ── Universe-wide cross-sectional IC ── */}
+      {labMode === "backtest" && <CrossSectionalICCard />}
+
+      {labMode === "backtest" && error && (
         <div className="mx-6 mt-4 p-3 bg-destructive/10 border border-destructive/30 rounded text-xs font-mono text-destructive">
           {error}
         </div>
       )}
 
-      {result && (
+      {labMode === "backtest" && result && (
         <div className="px-6 py-4 space-y-6">
 
           {/* ── Signal Quality Header ── */}
@@ -1252,7 +1270,7 @@ export default function BacktestLab() {
         </div>
       )}
 
-      {!result && !loading && !error && (
+      {labMode === "backtest" && !result && !loading && !error && (
         <div className="flex flex-col items-center justify-center py-24 text-muted-foreground font-mono space-y-3">
           <FlaskConical className="w-10 h-10 opacity-20" />
           <div className="text-sm">Enter a ticker and run the backtest to begin</div>

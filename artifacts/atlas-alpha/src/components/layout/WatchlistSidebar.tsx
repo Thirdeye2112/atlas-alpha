@@ -122,16 +122,15 @@ export default function WatchlistSidebar() {
         )}
       </div>
 
-      <div className="p-3 border-y border-border bg-muted/30">
-        <h2 className="text-sm font-bold tracking-wider text-muted-foreground">SCANNERS</h2>
-      </div>
-      <div className="p-2 space-y-1">
-        {["Top Longs", "Top Shorts", "Breakouts", "Breakdowns", "Gamma Squeeze", "Short Squeeze", "Inst Accum"].map(scan => (
-          <Link key={scan} href="/scanner" className="flex justify-between items-center px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-md">
-            {scan}
-            <ExternalLink className="w-3 h-3 opacity-50" />
-          </Link>
-        ))}
+      <div className="p-2 border-t border-border space-y-1">
+        <Link href="/scanner" className="flex justify-between items-center px-2 py-1.5 text-xs font-mono font-semibold text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-md">
+          SCANNER
+          <ExternalLink className="w-3 h-3 opacity-50" />
+        </Link>
+        <Link href="/watchlist" className="flex justify-between items-center px-2 py-1.5 text-xs font-mono font-semibold text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-md">
+          CSV IMPORT / MANAGE
+          <ExternalLink className="w-3 h-3 opacity-50" />
+        </Link>
       </div>
     </div>
   );

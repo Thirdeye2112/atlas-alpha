@@ -4,7 +4,7 @@ import {
   useGetMarketOverview, 
   getGetMarketOverviewQueryKey 
 } from "@workspace/api-client-react";
-import { Activity, LayoutDashboard, Radar, ListTree, FlaskConical, TestTube2, Bell, BotIcon } from "lucide-react";
+import { Activity, LayoutDashboard, Radar, TestTube2, Bell, BotIcon } from "lucide-react";
 import { formatCurrency, formatPercent } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 
@@ -106,12 +106,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
 
   const navItems = [
-    { href: "/", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/scanner", label: "Scanner", icon: Radar },
-    { href: "/watchlist", label: "Watchlist", icon: ListTree },
-    { href: "/research", label: "Research", icon: FlaskConical },
-    { href: "/backtest", label: "Backtest Lab", icon: TestTube2 },
-    { href: "/bot",     label: "Bot Lab",      icon: BotIcon },
+    { href: "/",        label: "Dashboard", icon: LayoutDashboard },
+    { href: "/scanner", label: "Scanner",   icon: Radar },
+    { href: "/backtest",label: "Lab",       icon: TestTube2 },
+    { href: "/bot",     label: "Bot Lab",   icon: BotIcon },
   ];
 
   return (

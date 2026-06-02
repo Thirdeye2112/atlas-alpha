@@ -1080,6 +1080,8 @@ function CustomScanTab({ onTickerClick }: { onTickerClick?: (ticker: string) => 
 
 export default function Scanner() {
   const limit = 25;
+  const [longSignal, setLongSignal] = useState<string>("longs");
+  const [shortSignal, setShortSignal] = useState<string>("shorts");
   const qOpts = (qk: readonly unknown[]) => ({
     queryKey: qk,
     refetchInterval,
@@ -1137,80 +1139,95 @@ export default function Scanner() {
         </p>
       </div>
 
-      <Tabs defaultValue="longs" className="flex-1 flex flex-col min-h-0">
-        <TabsList className="bg-card border border-border w-full justify-start h-auto flex-wrap p-1 gap-1">
-          <TabsTrigger value="longs"      className="font-mono text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">HIGH PROB LONGS</TabsTrigger>
-          <TabsTrigger value="shorts"     className="font-mono text-xs data-[state=active]:bg-destructive data-[state=active]:text-destructive-foreground">HIGH PROB SHORTS</TabsTrigger>
-          <TabsTrigger value="breakouts"  className="font-mono text-xs data-[state=active]:bg-success data-[state=active]:text-success-foreground">BREAKOUTS</TabsTrigger>
-          <TabsTrigger value="breakdowns" className="font-mono text-xs data-[state=active]:bg-destructive data-[state=active]:text-destructive-foreground">BREAKDOWNS</TabsTrigger>
-          <TabsTrigger value="gap-setup-long"  className="font-mono text-xs data-[state=active]:bg-warning data-[state=active]:text-warning-foreground">GAP SETUP ↑</TabsTrigger>
-          <TabsTrigger value="gap-setup-short" className="font-mono text-xs data-[state=active]:bg-warning data-[state=active]:text-warning-foreground">GAP SETUP ↓</TabsTrigger>
-          <TabsTrigger value="gap-up"     className="font-mono text-xs data-[state=active]:bg-success data-[state=active]:text-success-foreground">GAP UP ↑</TabsTrigger>
-          <TabsTrigger value="gap-down"   className="font-mono text-xs data-[state=active]:bg-destructive data-[state=active]:text-destructive-foreground">GAP DOWN ↓</TabsTrigger>
-          <TabsTrigger value="gamma"      className="font-mono text-xs data-[state=active]:bg-warning data-[state=active]:text-warning-foreground">GAMMA SQUEEZE</TabsTrigger>
-          <TabsTrigger value="ss"         className="font-mono text-xs data-[state=active]:bg-warning data-[state=active]:text-warning-foreground">SHORT SQUEEZE</TabsTrigger>
-          <TabsTrigger value="inst"       className="font-mono text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">INST ACCUM</TabsTrigger>
-          <TabsTrigger value="mean"       className="font-mono text-xs data-[state=active]:bg-muted-foreground data-[state=active]:text-background">MEAN REVERSION</TabsTrigger>
-          <TabsTrigger value="key-levels"     className="font-mono text-xs data-[state=active]:bg-cyan-700 data-[state=active]:text-white">KEY LEVELS</TabsTrigger>
-          <TabsTrigger value="reversal-short" className="font-mono text-xs data-[state=active]:bg-rose-700 data-[state=active]:text-white">⚠ REVERSAL SHORT</TabsTrigger>
-          <TabsTrigger value="custom" className="font-mono text-xs data-[state=active]:bg-violet-700 data-[state=active]:text-white">✦ CUSTOM SCAN</TabsTrigger>
+      <Tabs defaultValue="longs-group" className="flex-1 flex flex-col min-h-0">
+        <TabsList className="bg-card border border-border w-full justify-start h-auto p-1 gap-1">
+          <TabsTrigger value="longs-group"  className="font-mono text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">▲ LONG IDEAS</TabsTrigger>
+          <TabsTrigger value="shorts-group" className="font-mono text-xs data-[state=active]:bg-destructive data-[state=active]:text-destructive-foreground">▼ SHORT IDEAS</TabsTrigger>
+          <TabsTrigger value="key-levels"   className="font-mono text-xs data-[state=active]:bg-cyan-700 data-[state=active]:text-white">KEY LEVELS</TabsTrigger>
+          <TabsTrigger value="custom"       className="font-mono text-xs data-[state=active]:bg-violet-700 data-[state=active]:text-white">✦ CUSTOM SCAN</TabsTrigger>
         </TabsList>
 
         <div className="flex-1 overflow-auto mt-4">
-          <TabsContent value="longs"      className="m-0 h-full"><ScannerTable response={longs}      isLoading={lLoading}    autoFetch /></TabsContent>
-          <TabsContent value="shorts"     className="m-0 h-full"><ScannerTable response={shorts}     isLoading={sLoading}    autoFetch /></TabsContent>
-          <TabsContent value="breakouts"  className="m-0 h-full"><ScannerTable response={breakouts}  isLoading={bLoading}    /></TabsContent>
-          <TabsContent value="breakdowns" className="m-0 h-full"><ScannerTable response={breakdowns} isLoading={bdLoading}   /></TabsContent>
-          <TabsContent value="gap-setup-long" className="m-0 h-full flex flex-col gap-3">
-            <div className="border border-warning/30 rounded-md bg-warning/5 px-4 py-2.5 text-xs font-mono text-muted-foreground leading-relaxed shrink-0">
-              <span className="text-warning font-bold mr-2">GAP SETUP — LONG</span>
-              Stocks primed to gap UP based on research from 771 historical gaps.
-              Filter: <span className="text-foreground">ATR ≥ 3.2%</span> · <span className="text-foreground">BB Width ≥ 15%</span> · <span className="text-foreground">RVOL ≥ 1.2×</span> · RSI &lt; 70 · not already gapping · direction not bearish.
-              Sorted by <span className="text-foreground">ATR% × RVOL</span> (most volatility-primed first). Check RVOL column — elevated volume is the second-strongest predictor.{" "}
-              <Link href="/research" className="text-warning/80 hover:text-warning underline decoration-dotted underline-offset-2 whitespace-nowrap">→ Gap Factor Research</Link>
+
+          {/* ── LONG IDEAS ──────────────────────────────────────────────────── */}
+          <TabsContent value="longs-group" className="m-0 h-full flex flex-col">
+            <div className="flex items-center gap-1 px-3 py-2 border-b border-border bg-muted/20 flex-wrap shrink-0">
+              {([["longs","HIGH PROB"],["breakouts","BREAKOUTS"],["gap-setup-long","GAP SETUP ↑"],["gap-up","GAP UP ↑"],["inst","INST ACCUM"],["ss","SQUEEZE"],["mean","MEAN REV"]] as [string,string][]).map(([key,label]) => (
+                <button key={key} onClick={() => setLongSignal(key)} className={cn(
+                  "px-2.5 py-0.5 text-[11px] font-mono font-bold rounded transition-colors",
+                  longSignal === key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                )}>{label}</button>
+              ))}
             </div>
-            <ScannerTable response={gapSetupLong} isLoading={gslLoading} showGapScore />
-          </TabsContent>
-          <TabsContent value="gap-setup-short" className="m-0 h-full flex flex-col gap-3">
-            <div className="border border-warning/30 rounded-md bg-warning/5 px-4 py-2.5 text-xs font-mono text-muted-foreground leading-relaxed shrink-0">
-              <span className="text-warning font-bold mr-2">GAP SETUP — SHORT</span>
-              Stocks primed to gap DOWN based on research from 771 historical gaps.
-              Filter: <span className="text-foreground">ATR ≥ 3.2%</span> · <span className="text-foreground">BB Width ≥ 15%</span> · <span className="text-foreground">RVOL ≥ 1.2×</span> · <span className="text-foreground">SMA200 extended &gt; 5%</span> · not already gapping · direction not bullish.
-              Extended-above-SMA200 is the <span className="text-foreground">strongest directional predictor</span> (+0.64σ) for gap-downs. Sorted by SMA200 extension × ATR.{" "}
-              <Link href="/research" className="text-warning/80 hover:text-warning underline decoration-dotted underline-offset-2 whitespace-nowrap">→ Gap Factor Research</Link>
+            <div className="flex-1 min-h-0">
+              {longSignal === "longs"          && <ScannerTable response={longs}        isLoading={lLoading}    autoFetch />}
+              {longSignal === "breakouts"      && <ScannerTable response={breakouts}     isLoading={bLoading}    />}
+              {longSignal === "gap-setup-long" && (
+                <div className="flex flex-col h-full">
+                  <div className="border-b border-warning/30 bg-warning/5 px-4 py-2.5 text-xs font-mono text-muted-foreground leading-relaxed shrink-0">
+                    <span className="text-warning font-bold mr-2">GAP SETUP — LONG</span>
+                    Stocks primed to gap UP · ATR ≥ 3.2% · BB Width ≥ 15% · RVOL ≥ 1.2× · RSI &lt; 70 · sorted by ATR% × RVOL.{" "}
+                    <Link href="/backtest" className="text-warning/80 hover:text-warning underline decoration-dotted underline-offset-2">→ Gap Factor Research in Lab</Link>
+                  </div>
+                  <ScannerTable response={gapSetupLong} isLoading={gslLoading} showGapScore />
+                </div>
+              )}
+              {longSignal === "gap-up"  && <ScannerTable response={gapUp}  isLoading={guLoading}   showGap />}
+              {longSignal === "inst"    && <ScannerTable response={inst}    isLoading={instLoading} />}
+              {longSignal === "ss"      && <ScannerTable response={ss}      isLoading={ssLoading}   />}
+              {longSignal === "mean"    && <ScannerTable response={mean}    isLoading={meanLoading} />}
             </div>
-            <ScannerTable response={gapSetupShort} isLoading={gssLoading} showGapScore />
           </TabsContent>
-          <TabsContent value="gap-up"     className="m-0 h-full"><ScannerTable response={gapUp}      isLoading={guLoading}   showGap /></TabsContent>
-          <TabsContent value="gap-down"   className="m-0 h-full"><ScannerTable response={gapDown}    isLoading={gdLoading}   showGap /></TabsContent>
-          <TabsContent value="gamma"      className="m-0 h-full"><ScannerTable response={gamma}      isLoading={gLoading}    /></TabsContent>
-          <TabsContent value="ss"         className="m-0 h-full"><ScannerTable response={ss}         isLoading={ssLoading}   /></TabsContent>
-          <TabsContent value="inst"       className="m-0 h-full"><ScannerTable response={inst}       isLoading={instLoading} /></TabsContent>
-          <TabsContent value="mean"       className="m-0 h-full"><ScannerTable response={mean}       isLoading={meanLoading} /></TabsContent>
+
+          {/* ── SHORT IDEAS ─────────────────────────────────────────────────── */}
+          <TabsContent value="shorts-group" className="m-0 h-full flex flex-col">
+            <div className="flex items-center gap-1 px-3 py-2 border-b border-border bg-muted/20 flex-wrap shrink-0">
+              {([["shorts","HIGH PROB"],["breakdowns","BREAKDOWNS"],["gap-setup-short","GAP SETUP ↓"],["gap-down","GAP DOWN ↓"],["gamma","GAMMA SQUEEZE"],["reversal","⚠ REVERSAL"]] as [string,string][]).map(([key,label]) => (
+                <button key={key} onClick={() => setShortSignal(key)} className={cn(
+                  "px-2.5 py-0.5 text-[11px] font-mono font-bold rounded transition-colors",
+                  shortSignal === key ? "bg-destructive text-destructive-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                )}>{label}</button>
+              ))}
+            </div>
+            <div className="flex-1 min-h-0">
+              {shortSignal === "shorts"          && <ScannerTable response={shorts}      isLoading={sLoading}    autoFetch />}
+              {shortSignal === "breakdowns"      && <ScannerTable response={breakdowns}   isLoading={bdLoading}   />}
+              {shortSignal === "gap-setup-short" && (
+                <div className="flex flex-col h-full">
+                  <div className="border-b border-warning/30 bg-warning/5 px-4 py-2.5 text-xs font-mono text-muted-foreground leading-relaxed shrink-0">
+                    <span className="text-warning font-bold mr-2">GAP SETUP — SHORT</span>
+                    Stocks primed to gap DOWN · extended above SMA200 is the strongest predictor (+0.64σ) · ATR ≥ 3.2% · BB ≥ 15% · RVOL ≥ 1.2×.{" "}
+                    <Link href="/backtest" className="text-warning/80 hover:text-warning underline decoration-dotted underline-offset-2">→ Gap Factor Research in Lab</Link>
+                  </div>
+                  <ScannerTable response={gapSetupShort} isLoading={gssLoading} showGapScore />
+                </div>
+              )}
+              {shortSignal === "gap-down" && <ScannerTable response={gapDown}      isLoading={gdLoading}   showGap />}
+              {shortSignal === "gamma"    && <ScannerTable response={gamma}        isLoading={gLoading}    />}
+              {shortSignal === "reversal" && (
+                <div className="flex flex-col h-full">
+                  <div className="border-b border-rose-700/30 bg-rose-700/5 px-4 py-2.5 text-xs font-mono text-muted-foreground leading-relaxed shrink-0">
+                    <span className="text-rose-400 font-bold mr-2">⚠ REVERSAL SHORT DETECTION</span>
+                    Tops forming <span className="text-foreground">before</span> the Atlas Score flips. Signals: Double Top · Distribution · H&amp;S · Parabolic Rise · RSI divergence · BB extension.
+                    Tiers: <span className="text-warning">FORMING ≥45</span> · <span className="text-rose-400">CONFIRMED ≥60</span> · <span className="text-destructive font-bold">EXTENDED ≥78</span>.
+                  </div>
+                  <ReversalShortTable response={reversalShort} isLoading={rsLoading} />
+                </div>
+              )}
+            </div>
+          </TabsContent>
+
+          {/* ── KEY LEVELS ──────────────────────────────────────────────────── */}
           <TabsContent value="key-levels" className="m-0 h-full flex flex-col gap-3">
             <div className="border border-cyan-700/30 rounded-md bg-cyan-700/5 px-4 py-2.5 text-xs font-mono text-muted-foreground leading-relaxed shrink-0">
               <span className="text-cyan-400 font-bold mr-2">KEY S/R LEVELS</span>
-              Stocks within <span className="text-foreground">2%</span> of a major support or resistance level — sorted closest first.
-              Levels checked: <span className="text-foreground">SMA50</span> · <span className="text-foreground">SMA200</span> · <span className="text-foreground">BB+ (upper band)</span> · <span className="text-foreground">BB− (lower band)</span> · <span className="text-foreground">20-day swing high/low</span>.
-              DIST% column shows distance to the nearest level — <span className="text-warning">amber ≤ 0.5%</span>, <span className="text-primary">blue ≤ 1%</span>.
+              Stocks within <span className="text-foreground">2%</span> of SMA50 · SMA200 · BB± · 20-day swing high/low — sorted closest first.
+              DIST% column: <span className="text-warning">amber ≤ 0.5%</span> · <span className="text-primary">blue ≤ 1%</span>.
             </div>
             <ScannerTable response={keyLevels} isLoading={klLoading} showKeyLevel />
           </TabsContent>
-          <TabsContent value="reversal-short" className="m-0 h-full flex flex-col gap-3">
-            <div className="border border-rose-700/30 rounded-md bg-rose-700/5 px-4 py-2.5 text-xs font-mono text-muted-foreground leading-relaxed shrink-0">
-              <span className="text-rose-400 font-bold mr-2">⚠ REVERSAL SHORT DETECTION</span>
-              Stocks forming potential <span className="text-foreground">tops</span> based on structural exhaustion signals — identified{" "}
-              <span className="text-foreground">before</span> the Atlas Score direction flips bearish. Signals: Double Top ·
-              Distribution Top · Head &amp; Shoulders · Parabolic Rise · Bearish candlestick reversal · RSI divergence ·
-              BB extension · Wick rejection ratio. Sorted by <span className="text-foreground">Reversal Score</span> (min 45 to appear).
-              Conviction tiers: <span className="text-warning">FORMING ≥45</span> · <span className="text-rose-400">CONFIRMED ≥60</span> · <span className="text-destructive font-bold">EXTENDED ≥78</span>.
-              <br />
-              <span className="text-muted-foreground/60">
-                Urgency and triggers are shown in the Catalysts column. Use alongside the Dashboard backtest strip to size entries — short at resistance, stop above the recent peak.
-              </span>
-            </div>
-            <ReversalShortTable response={reversalShort} isLoading={rsLoading} />
-          </TabsContent>
+
+          {/* ── CUSTOM SCAN ─────────────────────────────────────────────────── */}
           <TabsContent value="custom" className="m-0 h-full flex flex-col gap-4">
             <div className="border border-violet-700/30 rounded-md bg-violet-700/5 px-4 py-2.5 text-xs font-mono text-muted-foreground leading-relaxed shrink-0">
               <span className="text-violet-400 font-bold mr-2">✦ CUSTOM SCAN</span>
@@ -1219,6 +1236,7 @@ export default function Scanner() {
             </div>
             <CustomScanTab />
           </TabsContent>
+
         </div>
       </Tabs>
     </div>
