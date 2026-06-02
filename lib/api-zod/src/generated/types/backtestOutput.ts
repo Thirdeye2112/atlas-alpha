@@ -13,6 +13,7 @@ import type { BacktestTimelineEntry } from './backtestTimelineEntry';
 import type { CategoryIC } from './categoryIC';
 import type { OOSPeriod } from './oOSPeriod';
 import type { RegimeICBreakdown } from './regimeICBreakdown';
+import type { RollingICPoint } from './rollingICPoint';
 import type { ScoreWeights } from './scoreWeights';
 
 export interface BacktestOutput {
@@ -41,6 +42,7 @@ export interface BacktestOutput {
   inSampleIC: number;
   outOfSampleIC: number;
   icDegradation: number;
+  rollingIC: RollingICPoint[];
   oosPeriods: OOSPeriod[];
   regimeIC: RegimeICBreakdown;
   categoryIC: CategoryIC;

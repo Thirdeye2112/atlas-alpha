@@ -15,6 +15,8 @@ interface RegimeIC {
   riskOff: number | null; riskOffN: number;
 }
 
+interface RollingICPoint { date: string; ic: number; n: number; }
+
 interface BacktestResult {
   ticker: string; horizon: number;
   marketCap: number | null; marketCapBucket: string; marketCapNote: string;
@@ -27,6 +29,7 @@ interface BacktestResult {
   brierScoreCI: { low: number; high: number } | null;
   brierIsOos: boolean; winsorThresholdPct: number;
   inSampleIC: number; outOfSampleIC: number; icDegradation: number;
+  rollingIC: RollingICPoint[];
   oosPeriods: Array<{ label: string; start: string; end: string; ic: number; n: number }>;
   regimeIC: RegimeIC;
   categoryIC: CatIC; optimalWeights: Weights | null; currentWeights: Weights;
@@ -130,6 +133,75 @@ function HorizonBar({ data, optimalHorizon }: { data: MultiHorizon[]; optimalHor
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ── Rolling IC Stability Chart ────────────────────────────────────────────────
+// Shows IC over 3-month rolling windows so decay or improvement is visible.
+
+function RollingICChart({ data }: { data: RollingICPoint[] }) {
+  if (!data || data.length < 2) {
+    return <div className="text-xs font-mono text-muted-foreground/50 py-4 text-center">Not enough data for rolling windows</div>;
+  }
+
+  const maxAbs = Math.max(...data.map(d => Math.abs(d.ic)), 0.01);
+  const H = 72; // total chart height in px
+  const midY = H / 2;
+  const barW = Math.max(4, Math.floor(520 / data.length) - 2);
+
+  // Trend line: is the last 3 values' average IC higher than the first 3?
+  const first3 = data.slice(0, 3).reduce((s, d) => s + d.ic, 0) / Math.min(3, data.length);
+  const last3  = data.slice(-3).reduce((s, d) => s + d.ic, 0) / Math.min(3, data.length);
+  const trend  = last3 > first3 + 0.01 ? "improving" : last3 < first3 - 0.01 ? "decaying" : "stable";
+
+  return (
+    <div className="space-y-2">
+      <svg
+        viewBox={`0 0 ${data.length * (barW + 2) + 4} ${H + 20}`}
+        className="w-full"
+        style={{ height: H + 20 }}
+        aria-label="Rolling IC stability chart"
+      >
+        {/* Zero line */}
+        <line x1={0} y1={midY} x2={data.length * (barW + 2) + 4} y2={midY} stroke="rgba(255,255,255,0.1)" strokeWidth={1} />
+
+        {data.map((d, i) => {
+          const barH  = Math.max(2, (Math.abs(d.ic) / maxAbs) * (midY - 4));
+          const pos   = d.ic >= 0;
+          const x     = i * (barW + 2) + 2;
+          const y     = pos ? midY - barH : midY;
+          const fill  = pos
+            ? `rgba(52,211,153,${0.3 + 0.5 * (Math.abs(d.ic) / maxAbs)})`
+            : `rgba(248,113,113,${0.3 + 0.5 * (Math.abs(d.ic) / maxAbs)})`;
+          const label = d.date.slice(0, 7); // YYYY-MM
+          const showLabel = i === 0 || i === Math.floor(data.length / 2) || i === data.length - 1;
+          return (
+            <g key={d.date}>
+              <rect x={x} y={y} width={barW} height={barH} fill={fill} rx={1} />
+              {showLabel && (
+                <text x={x + barW / 2} y={H + 16} textAnchor="middle" fontSize={9} fill="rgba(255,255,255,0.35)" fontFamily="monospace">
+                  {label}
+                </text>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+
+      <div className="flex items-center justify-between text-xs font-mono">
+        <span className="text-muted-foreground/60">
+          {data.length} windows · ~3M each · monthly step
+        </span>
+        <span className={cn(
+          "px-2 py-0.5 rounded border text-xs font-mono font-bold",
+          trend === "improving" ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" :
+          trend === "decaying"  ? "bg-red-500/10 border-red-500/30 text-red-400" :
+          "bg-zinc-800/30 border-border text-muted-foreground"
+        )}>
+          {trend === "improving" ? "▲ IMPROVING" : trend === "decaying" ? "▼ DECAYING" : "● STABLE"}
+        </span>
+      </div>
     </div>
   );
 }
@@ -1058,6 +1130,30 @@ export default function BacktestLab() {
               First ~1Y of data trains the model (IS); second ~1Y tests it (OOS). Degradation &gt; 0.05 suggests the score pattern may not generalize.
             </div>
           </div>
+
+          {/* ── Rolling IC Stability ── */}
+          {result.rollingIC && result.rollingIC.length >= 2 && (
+            <div className="p-4 bg-card/30 border border-border rounded space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-mono font-bold text-muted-foreground tracking-wider">
+                  ROLLING IC STABILITY — signal edge over time (3-month windows)
+                </div>
+                <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <span className="inline-block w-2 h-2 rounded-sm bg-emerald-500/60" /> positive IC
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="inline-block w-2 h-2 rounded-sm bg-red-500/60" /> negative IC
+                  </span>
+                </div>
+              </div>
+              <RollingICChart data={result.rollingIC} />
+              <div className="text-xs text-muted-foreground font-mono">
+                Each bar = Rank IC for a 63-day (~3M) window, stepped monthly. Bar height scales to magnitude.
+                A consistently green chart = durable edge. Mixed or trending red = signal may be decaying.
+              </div>
+            </div>
+          )}
 
           {/* ── Regime-Conditioned IC ── */}
           {result.regimeIC && (

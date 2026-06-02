@@ -1006,6 +1006,12 @@ export interface BacktestTimelineEntry {
   correct: boolean;
 }
 
+export interface RollingICPoint {
+  date: string;
+  ic: number;
+  n: number;
+}
+
 export interface OOSPeriod {
   label: string;
   start: string;
@@ -1073,6 +1079,7 @@ export interface BacktestOutput {
   inSampleIC: number;
   outOfSampleIC: number;
   icDegradation: number;
+  rollingIC: RollingICPoint[];
   oosPeriods: OOSPeriod[];
   regimeIC: RegimeICBreakdown;
   categoryIC: CategoryIC;

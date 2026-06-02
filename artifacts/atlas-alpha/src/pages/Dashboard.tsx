@@ -1236,7 +1236,7 @@ export default function Dashboard() {
                 <MiniGauge title="Trend" score={displayAnalysis.atlasScore.trendScore} />
                 <MiniGauge title="Momentum" score={displayAnalysis.atlasScore.momentumScore} />
                 <MiniGauge title="Volume" score={displayAnalysis.atlasScore.volumeScore} />
-                <MiniGauge title="Vol Squeeze" score={displayAnalysis.atlasScore.optionsScore} />
+                <MiniGauge title="Opts Proxy" score={displayAnalysis.atlasScore.optionsScore} />
                 <MiniGauge title="Rel Str" score={displayAnalysis.atlasScore.relativeStrengthScore} />
                 <MiniGauge title="Gap Prob" score={calcGapProbScore(
                   displayAnalysis.volatility.atrPercent,

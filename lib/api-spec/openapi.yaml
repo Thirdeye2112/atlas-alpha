@@ -2100,6 +2100,17 @@ components:
           type: boolean
       required: [date, score, fwdReturn, direction, correct]
 
+    RollingICPoint:
+      type: object
+      properties:
+        date:
+          type: string
+        ic:
+          type: number
+        n:
+          type: integer
+      required: [date, ic, n]
+
     OOSPeriod:
       type: object
       properties:
@@ -2219,6 +2230,10 @@ components:
           type: number
         icDegradation:
           type: number
+        rollingIC:
+          type: array
+          items:
+            $ref: "#/components/schemas/RollingICPoint"
         oosPeriods:
           type: array
           items:
@@ -2277,6 +2292,7 @@ components:
         - inSampleIC
         - outOfSampleIC
         - icDegradation
+        - rollingIC
         - oosPeriods
         - regimeIC
         - categoryIC

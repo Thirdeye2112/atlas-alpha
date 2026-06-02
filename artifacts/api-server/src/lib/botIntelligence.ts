@@ -422,6 +422,20 @@ export async function getIntelligenceVerdict(
 }
 
 // ── 5. Self-learning adaptation ───────────────────────────────────────────────
+// Anti-overfitting guardrails:
+//   • MIN_TRADES_TO_ADAPT  — minimum closed trades in the recent window
+//   • RECENT_WINDOW_DAYS   — only trades from the last N days count
+//   • FROZEN_BASELINE      — the original production-calibrated score floor
+//   • HARD_FLOOR / HARD_CEILING — absolute limits self-learning cannot cross
+//   • Rollback check — if the last adaptation raised the threshold but win
+//     rate is still degrading, revert rather than compounding the mistake
+//   • Per-cycle step limits (±3 up / ±2 down) prevent large one-shot drifts
+
+const FROZEN_BASELINE     = 65;   // production-calibrated reference
+const HARD_FLOOR          = 57;   // FROZEN_BASELINE − 8: never relax below this
+const HARD_CEILING        = 77;   // FROZEN_BASELINE + 12: never tighten above this
+const MIN_TRADES_TO_ADAPT = 20;   // raised from 10 — need statistical significance
+const RECENT_WINDOW_DAYS  = 90;   // ignore trades older than 90 days
 
 let selfLearningRunning = false;
 
@@ -429,16 +443,27 @@ export async function runSelfLearning(): Promise<AdaptationResult | null> {
   if (selfLearningRunning) return null;
   selfLearningRunning = true;
   try {
-    const closed = await db
+    const windowStart = new Date(Date.now() - RECENT_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+
+    const allClosed = await db
       .select()
       .from(paperTradesTable)
       .where(eq(paperTradesTable.status, "closed"))
       .orderBy(desc(paperTradesTable.exitAt))
-      .limit(30);
+      .limit(50);
 
-    if (closed.length < 10) return null;
+    // Only count trades closed within the recent window for adaptation decisions
+    const closed = allClosed.filter(t => t.exitAt && t.exitAt >= windowStart);
 
-    const winners      = closed.filter(t => (t.pnlPercent ?? 0) > 0).length;
+    if (closed.length < MIN_TRADES_TO_ADAPT) {
+      logger.info(
+        { recentTrades: closed.length, required: MIN_TRADES_TO_ADAPT, windowDays: RECENT_WINDOW_DAYS },
+        "Bot self-learning: insufficient recent trades — skipping adaptation"
+      );
+      return null;
+    }
+
+    const winners       = closed.filter(t => (t.pnlPercent ?? 0) > 0).length;
     const actualWinRate = (winners / closed.length) * 100;
 
     // Compute expected win rate from sim data for the same score-bucket mix
@@ -463,19 +488,66 @@ export async function runSelfLearning(): Promise<AdaptationResult | null> {
     if (!config) return null;
 
     type Crit = { field: string; operator: string; value?: number; value2?: number };
-    const criteria    = (config.entryCriteria ?? []) as Crit[];
-    const scoreCrit   = criteria.find(c => c.field === "score" && c.operator === "gte");
-    const currentMin  = scoreCrit?.value ?? 65;
-    const gap         = expectedWinRate - actualWinRate;
+    const criteria   = (config.entryCriteria ?? []) as Crit[];
+    const scoreCrit  = criteria.find(c => c.field === "score" && c.operator === "gte");
+    const currentMin = scoreCrit?.value ?? FROZEN_BASELINE;
+    const gap        = expectedWinRate - actualWinRate;
 
+    // ── Rollback guard ─────────────────────────────────────────────────────
+    // Check the last adaptation: if it raised the threshold and the win rate
+    // is *still* below expected by the same gap, that raise didn't help.
+    // Roll back instead of raising further (avoid compounding the error).
+    const lastAdaptations = await db
+      .select()
+      .from(botAdaptationLogTable)
+      .orderBy(desc(botAdaptationLogTable.adaptedAt))
+      .limit(2);
+
+    const lastAdapt = lastAdaptations[0];
+    const shouldRollback =
+      lastAdapt &&
+      lastAdapt.newScoreMin > lastAdapt.oldScoreMin &&  // last move raised threshold
+      gap > 10 &&                                        // still underperforming
+      currentMin > FROZEN_BASELINE;                     // already above baseline
+
+    if (shouldRollback) {
+      const rollbackTarget = Math.max(FROZEN_BASELINE, currentMin - 3);
+      const rollbackCriteria: Crit[] = scoreCrit
+        ? criteria.map(c =>
+            c.field === "score" && c.operator === "gte" ? { ...c, value: rollbackTarget } : c)
+        : [...criteria, { field: "score", operator: "gte", value: rollbackTarget }];
+
+      await db.update(botConfigTable)
+        .set({ entryCriteria: rollbackCriteria as unknown as Record<string, unknown>[], updatedAt: new Date() })
+        .where(eq(botConfigTable.id, config.id));
+
+      const rollbackReason = `raised threshold last cycle (${lastAdapt.oldScoreMin}→${lastAdapt.newScoreMin}) but performance still degrading (${actualWinRate.toFixed(0)}% vs expected ${expectedWinRate.toFixed(0)}%) — rolling back`;
+      await db.insert(botAdaptationLogTable).values({
+        trigger: "self_learning_rollback", oldScoreMin: currentMin, newScoreMin: rollbackTarget,
+        actualWinRate, expectedWinRate, tradesAnalyzed: closed.length, notes: rollbackReason,
+      });
+
+      const result: AdaptationResult = {
+        adapted: true, oldScoreMin: currentMin, newScoreMin: rollbackTarget,
+        actualWinRate, expectedWinRate, tradesAnalyzed: closed.length, reason: rollbackReason,
+      };
+      state.lastAdaptation = result;
+      state.lastAdaptedAt  = new Date().toISOString();
+      logger.info({ currentMin, rollbackTarget, actualWinRate, expectedWinRate }, "Bot intelligence: rolling back — last raise didn't improve performance");
+      return result;
+    }
+
+    // ── Standard adaptation ────────────────────────────────────────────────
     let newScoreMin = currentMin;
-    let reason:    string;
+    let reason:     string;
 
     if (gap > 12) {
-      newScoreMin = Math.min(currentMin + 3, 82);
+      // Underperforming — raise threshold (hard ceiling enforced)
+      newScoreMin = Math.min(currentMin + 3, HARD_CEILING);
       reason = `actual ${actualWinRate.toFixed(0)}% vs sim-expected ${expectedWinRate.toFixed(0)}% — raising score threshold`;
     } else if (gap < -8 && actualWinRate > 62) {
-      newScoreMin = Math.max(currentMin - 2, 60);
+      // Outperforming — relax threshold slightly (hard floor enforced)
+      newScoreMin = Math.max(currentMin - 2, HARD_FLOOR);
       reason = `outperforming sim (${actualWinRate.toFixed(0)}% vs ${expectedWinRate.toFixed(0)}%) — relaxing threshold slightly`;
     } else {
       return null;
@@ -510,7 +582,7 @@ export async function runSelfLearning(): Promise<AdaptationResult | null> {
     state.lastAdaptation = result;
     state.lastAdaptedAt  = new Date().toISOString();
 
-    logger.info({ oldScoreMin: currentMin, newScoreMin, actualWinRate, expectedWinRate }, "Bot intelligence: self-learning adaptation applied");
+    logger.info({ oldScoreMin: currentMin, newScoreMin, actualWinRate, expectedWinRate, frozenBaseline: FROZEN_BASELINE }, "Bot intelligence: self-learning adaptation applied");
     return result;
   } catch (err) {
     logger.error({ err }, "Bot intelligence: self-learning failed");

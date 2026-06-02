@@ -1172,6 +1172,11 @@ export const GetBacktestIcResponse = zod.object({
   "inSampleIC": zod.number(),
   "outOfSampleIC": zod.number(),
   "icDegradation": zod.number(),
+  "rollingIC": zod.array(zod.object({
+  "date": zod.string(),
+  "ic": zod.number(),
+  "n": zod.number()
+})),
   "oosPeriods": zod.array(zod.object({
   "label": zod.string(),
   "start": zod.string(),

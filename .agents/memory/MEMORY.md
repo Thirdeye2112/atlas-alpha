@@ -7,6 +7,7 @@
 - [Platform upgrades v1.3](platform-upgrades-v1.3.md) — regime v1.3 field names, IS/OOS split design, alert DB schema, AI narrative toggle, and AnalysisResult field gotchas.
 - [Adaptive scoring architecture](adaptive-scoring.md) — optimalWeights stored in CalibrationEntry; calcAtlasScore accepts ScoreOpts; IC quality caps confidence; contrarian flag propagates to narrative and Dashboard badge
 - [Paper trading bot architecture](paper-trading-bot.md) — BotLab page at /bot; 8 API endpoints at /api/bot/*; bot_config + paper_trades tables; Claude claude-sonnet-4-6 for AI analysis
+- [Self-learning guardrails](self-learning-guardrails.md) — FROZEN_BASELINE=65, HARD_FLOOR=57, HARD_CEILING=77; min 20 recent trades in 90-day window; rollback if last raise didn't help
 - [Pattern overlays architecture](pattern-overlays.md) — multi-scale bull/bear flag detection; use poleNetMove (not H-L range) for target projection; 3M signals, 6M+ swing points
 - [OHLCV cache architecture](ohlcv-cache-architecture.md) — weekly/monthly must go direct to Yahoo (not DB store); blob cache needs coverage validation or stale 2Y data serves for 5Y/ALL
 - [TA overlays v2](ta-overlays-v2.md) — Fib/VolumeProfile/WeeklyContext added to AnalysisResult; calcOptions now takes optional bars param; pivot RSI divergence uses findPivotLows/Highs helpers; LightweightChart lineSeries prop for full-width time-series

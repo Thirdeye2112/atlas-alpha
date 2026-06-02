@@ -99,6 +99,7 @@ export * from './pullbackReversalResultKeySignalsItemSentiment';
 export * from './refreshWatchlistPrices200';
 export * from './regimeICBreakdown';
 export * from './relativeStrength';
+export * from './rollingICPoint';
 export * from './scannerResponse';
 export * from './scannerResponseProgress';
 export * from './scannerResult';

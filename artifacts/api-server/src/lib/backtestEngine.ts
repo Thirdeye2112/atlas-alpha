@@ -174,6 +174,12 @@ function nonOverlapping<T>(arr: T[], step: number): T[] {
 // Winsorization percentile used for IC computation (p5/p95)
 const WINSOR_PCT = 0.05;
 
+export interface RollingICPoint {
+  date: string;
+  ic: number;
+  n: number;
+}
+
 export interface BacktestOutput {
   ticker: string;
   horizon: number;
@@ -198,6 +204,7 @@ export interface BacktestOutput {
   inSampleIC: number;
   outOfSampleIC: number;
   icDegradation: number;
+  rollingIC: RollingICPoint[];
   oosPeriods: Array<{ label: string; start: string; end: string; ic: number; n: number }>;
   regimeIC: {
     riskOn:   number | null; riskOnN:  number;
@@ -304,6 +311,23 @@ export async function runBacktest(ticker: string, horizon: number): Promise<Back
     { label: "In-sample",     start: isPoints[0]?.date  ?? "", end: isPoints[isPoints.length - 1]?.date   ?? "", ic: inSampleIC,    n: isPoints.length  },
     { label: "Out-of-sample", start: oosPoints[0]?.date ?? "", end: oosPoints[oosPoints.length - 1]?.date ?? "", ic: outOfSampleIC, n: oosPoints.length },
   ];
+
+  // ── Rolling IC (63-bar / ~3-month windows, 21-bar / ~1-month step) ───────
+  // Produces a time series of IC quality — shows whether signal edge is
+  // improving, stable, or decaying over the backtest period.
+  const ROLL_WIN  = 63;  // ~3 months of trading days
+  const ROLL_STEP = 21;  // ~1 month step (monthly resolution)
+  const rollingIC: RollingICPoint[] = [];
+  for (let start = 0; start + ROLL_WIN <= dataPoints.length; start += ROLL_STEP) {
+    const w        = dataPoints.slice(start, start + ROLL_WIN);
+    const wScores  = w.map(d => d.score);
+    const wReturns = winsorize(w.map(d => d.fwdReturn), WINSOR_PCT);
+    rollingIC.push({
+      date: w[w.length - 1]?.date ?? "",
+      ic:   w.length >= 10 ? r3(spearmanIC(wScores, wReturns)) : 0,
+      n:    w.length,
+    });
+  }
 
   // ── IC metrics (winsorized) ───────────────────────────────────────────────
   const ic     = r3(pearsonIC(scores, winsorizedReturns));
@@ -460,6 +484,7 @@ export async function runBacktest(ticker: string, horizon: number): Promise<Back
     inSampleIC,
     outOfSampleIC,
     icDegradation,
+    rollingIC,
     oosPeriods,
     regimeIC,
     categoryIC,
