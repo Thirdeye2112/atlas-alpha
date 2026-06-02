@@ -41,6 +41,7 @@ interface PaperTrade {
   entryBullishProb: number | null;
   entryRsi: number | null;
   entryRvol: number | null;
+  entryPatterns?: string[] | null;
   entryAt: string;
   exitPrice: number | null;
   exitScore: number | null;
@@ -56,6 +57,25 @@ interface PaperTrade {
   unrealizedPnlPct?: number;
   unrealizedPnlDollar?: number;
   holdDays?: number;
+}
+
+interface SignalGroup {
+  label: string;
+  trades: number;
+  winRate: number;
+  avgPnl: number;
+  bestPnl: number;
+  worstPnl: number;
+}
+
+interface SignalPerformance {
+  byScoreBucket: SignalGroup[];
+  byRsiRange: SignalGroup[];
+  byRvol: SignalGroup[];
+  byPattern: SignalGroup[];
+  totalClosed: number;
+  bestSignal: string;
+  worstSignal: string;
 }
 
 interface BotStats {
@@ -277,6 +297,12 @@ function ScoreChip({ score, dim }: { score: number | null; dim?: boolean }) {
 
 function ConfigTab({ config, onSaved }: { config: BotConfig; onSaved: () => void }) {
   const qc = useQueryClient();
+
+  const { data: availablePatterns = [] } = useQuery<string[]>({
+    queryKey: ["bot-patterns"],
+    queryFn:  () => apiFetch("bot/patterns"),
+    staleTime: Infinity,
+  });
   const [rows, setRows]             = useState<FilterRow[]>(() => criteriaToRows(config.entryCriteria));
   const [exitScore, setExitScore]   = useState(config.exitScoreThreshold);
   const [dirFlip, setDirFlip]       = useState(config.exitOnDirectionFlip);
@@ -376,9 +402,15 @@ function ConfigTab({ config, onSaved }: { config: BotConfig; onSaved: () => void
                   <option value="">— select —</option>
                   {fc.options?.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
+              ) : fc.type === "array" ? (
+                <select value={row.value} onChange={e => updateRow(row.id, { value: e.target.value })}
+                  className="bg-background border border-border rounded px-2 py-1 text-xs font-mono focus:outline-none focus:border-primary min-w-[160px]">
+                  <option value="">— select pattern —</option>
+                  {availablePatterns.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
               ) : (
                 <>
-                  <input type={fc.type === "array" ? "text" : "number"} placeholder={isBetw ? "min" : (fc.hint ?? "value")}
+                  <input type="number" placeholder={isBetw ? "min" : (fc.hint ?? "value")}
                     value={row.value} onChange={e => updateRow(row.id, { value: e.target.value })}
                     className="bg-background border border-border rounded px-2 py-1 text-xs font-mono focus:outline-none focus:border-primary w-[88px] placeholder:text-muted-foreground/40" />
                   {isBetw && <>
@@ -655,7 +687,44 @@ function HistoryTab({ trades }: { trades: PaperTrade[] }) {
 
 // ── AI BRAIN TAB ──────────────────────────────────────────────────────────────
 
-function AiBrainTab({ stats }: { stats: BotStats | undefined }) {
+function SignalTable({ title, groups }: { title: string; groups: SignalGroup[] }) {
+  if (groups.length === 0) return null;
+  return (
+    <div>
+      <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-1.5">{title}</div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs font-mono">
+          <thead>
+            <tr className="text-muted-foreground/60 text-[10px]">
+              <th className="text-left pb-1 pr-3">Signal</th>
+              <th className="text-right pb-1 pr-3">Trades</th>
+              <th className="text-right pb-1 pr-3">Win %</th>
+              <th className="text-right pb-1 pr-3">Avg P&L</th>
+              <th className="text-right pb-1">Best</th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map(g => (
+              <tr key={g.label} className="border-t border-border/20">
+                <td className="py-1 pr-3 text-foreground/80">{g.label}</td>
+                <td className="py-1 pr-3 text-right text-muted-foreground">{g.trades}</td>
+                <td className={cn("py-1 pr-3 text-right font-bold", g.winRate >= 55 ? "text-success" : g.winRate >= 45 ? "text-warning" : "text-destructive")}>
+                  {g.winRate.toFixed(0)}%
+                </td>
+                <td className={cn("py-1 pr-3 text-right font-bold", g.avgPnl >= 0 ? "text-success" : "text-destructive")}>
+                  {g.avgPnl >= 0 ? "+" : ""}{g.avgPnl.toFixed(2)}%
+                </td>
+                <td className="py-1 text-right text-success/80">+{g.bestPnl.toFixed(2)}%</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function AiBrainTab({ stats, signalPerformance }: { stats: BotStats | undefined; signalPerformance: SignalPerformance | undefined }) {
   const [analysis, setAnalysis] = useState<string | null>(null);
 
   const analyzeMutation = useMutation({
@@ -688,7 +757,34 @@ function AiBrainTab({ stats }: { stats: BotStats | undefined }) {
             <StatCard label="Total P&L"   value={`${stats.totalPnlPct >= 0 ? "+" : ""}${stats.totalPnlPct.toFixed(2)}%`} icon={TrendingUp} color={stats.totalPnlPct >= 0 ? "text-success" : "text-destructive"} />
           </div>
 
-          {Object.keys(stats.byExitReason).length > 0 && (
+          {signalPerformance && signalPerformance.totalClosed >= 2 && (
+            <div className="bg-card border border-primary/20 rounded-md p-4 flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-mono text-primary uppercase tracking-wider font-bold">Signal Performance Learning</div>
+                {signalPerformance.bestSignal && (
+                  <div className="text-[10px] font-mono text-muted-foreground">
+                    Best: <span className="text-success font-bold">{signalPerformance.bestSignal}</span>
+                    &nbsp;·&nbsp;Worst: <span className="text-destructive font-bold">{signalPerformance.worstSignal}</span>
+                  </div>
+                )}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <SignalTable title="By Entry Score" groups={signalPerformance.byScoreBucket} />
+                <SignalTable title="By RSI at Entry" groups={signalPerformance.byRsiRange} />
+                <SignalTable title="By Relative Volume" groups={signalPerformance.byRvol} />
+                {signalPerformance.byPattern.length > 0 && (
+                  <SignalTable title="By Entry Pattern" groups={signalPerformance.byPattern.slice(0, 8)} />
+                )}
+              </div>
+              {signalPerformance.byPattern.length === 0 && (
+                <div className="text-[10px] font-mono text-muted-foreground/40 italic">
+                  Pattern data accumulates as new trades are opened — add a Pattern filter to your entry criteria to start tracking.
+                </div>
+              )}
+            </div>
+          )}
+
+        {Object.keys(stats.byExitReason).length > 0 && (
             <div className="bg-card border border-border rounded-md p-3">
               <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2">Exit Reason Breakdown</div>
               <div className="flex flex-wrap gap-3">
@@ -775,6 +871,12 @@ export default function BotLab() {
     queryKey:       ["bot-stats"],
     queryFn:        () => apiFetch("bot/stats"),
     refetchInterval: 30000,
+  });
+
+  const { data: signalPerformance } = useQuery<SignalPerformance>({
+    queryKey:       ["bot-signal-performance"],
+    queryFn:        () => apiFetch("bot/signal-performance"),
+    refetchInterval: 60000,
   });
 
   const toggleEnabled = useMutation({
@@ -918,7 +1020,7 @@ export default function BotLab() {
             <HistoryTab trades={trades} />
           </TabsContent>
           <TabsContent value="ai-brain"  className="m-0">
-            <AiBrainTab stats={stats} />
+            <AiBrainTab stats={stats} signalPerformance={signalPerformance} />
           </TabsContent>
         </div>
       </Tabs>

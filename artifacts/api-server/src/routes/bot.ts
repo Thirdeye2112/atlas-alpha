@@ -9,8 +9,44 @@ import {
   getBotStats,
   generateAiAnalysis,
   getBotRunState,
+  computeSignalPerformance,
 } from "../lib/paperTradingEngine.js";
 import { logger } from "../lib/logger.js";
+
+// ── All pattern names produced by calcPatterns() in indicators.ts ─────────────
+const ALL_PATTERNS: string[] = [
+  // Structural / MA-based
+  "Golden Cross", "Death Cross", "Volatility Squeeze",
+  "BB Breakout", "BB Breakdown",
+  "Bull Flag", "Bear Flag",
+  "Bullish Pennant", "Bearish Pennant",
+  "Ascending Triangle", "Descending Triangle", "Symmetrical Triangle",
+  "Rising Wedge", "Falling Wedge",
+  "Cup and Handle",
+  "Double Bottom", "Double Top",
+  "Rectangle Base",
+  "Head and Shoulders", "Inv Head and Shoulders",
+  "Bearish Island Reversal", "Bullish Island Reversal",
+  "Inside Day", "NR7 Compression",
+  // Single-bar candlestick
+  "Doji", "Dragonfly Doji", "Gravestone Doji",
+  "Hammer", "Inverted Hammer", "Hanging Man", "Shooting Star",
+  "Bullish Marubozu", "Bearish Marubozu",
+  "Bullish Inv Hammer", "Bearish Inv Hammer",
+  "Bullish Spinning Top", "Bearish Spinning Top",
+  // Two-bar
+  "Bullish Engulfing", "Bearish Engulfing",
+  "Bullish Harami", "Bearish Harami",
+  "Bullish Harami Cross", "Bearish Harami Cross",
+  "Piercing Line", "Dark Cloud Cover",
+  "Tweezer Top", "Tweezer Bottom",
+  "Downside Tasuki Gap",
+  // Three-bar
+  "Three White Soldiers", "Three Black Crows",
+  "Morning Star", "Evening Star",
+  "Morning Doji Star", "Evening Doji Star",
+  "Abandoned Baby",
+];
 
 const router = Router();
 
@@ -114,6 +150,23 @@ router.post("/bot/trades/:id/close", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "POST /bot/trades/:id/close failed");
     res.status(500).json({ error: "Failed to close trade" });
+  }
+});
+
+// ── Pattern catalogue ─────────────────────────────────────────────────────────
+
+router.get("/bot/patterns", (_req, res): void => {
+  res.json(ALL_PATTERNS);
+});
+
+// ── Signal performance learning ───────────────────────────────────────────────
+
+router.get("/bot/signal-performance", async (req, res): Promise<void> => {
+  try {
+    res.json(await computeSignalPerformance());
+  } catch (err) {
+    req.log.error({ err }, "GET /bot/signal-performance failed");
+    res.status(500).json({ error: "Failed to compute signal performance" });
   }
 });
 

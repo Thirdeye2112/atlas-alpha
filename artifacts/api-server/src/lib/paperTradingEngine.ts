@@ -45,6 +45,25 @@ export interface BotStats {
   virtualPortfolioValue: number;
 }
 
+export interface SignalGroup {
+  label: string;
+  trades: number;
+  winRate: number;
+  avgPnl: number;
+  bestPnl: number;
+  worstPnl: number;
+}
+
+export interface SignalPerformance {
+  byScoreBucket: SignalGroup[];
+  byRsiRange: SignalGroup[];
+  byRvol: SignalGroup[];
+  byPattern: SignalGroup[];
+  totalClosed: number;
+  bestSignal: string;
+  worstSignal: string;
+}
+
 // ── Field accessor (mirrors scanner.ts for filter evaluation) ─────────────────
 
 type FieldValue = number | string | string[];
@@ -147,6 +166,7 @@ async function openPosition(a: AnalysisResult, config: BotConfig): Promise<void>
     entryMomentumScore: a.atlasScore.momentumScore,
     entryTrendScore:    a.atlasScore.trendScore,
     entryCriteria:      config.entryCriteria as unknown as Record<string, unknown>,
+    entryPatterns:      (a.patterns?.patterns ?? []) as unknown as Record<string, unknown>,
     positionValue:      posValue,
     shares,
     status:             "open",
@@ -478,4 +498,92 @@ Be direct and data-driven. No hedging. Format with clear sections.`;
 
   logger.info({ closedTrades: closed.length }, "AI analysis generated");
   return analysis;
+}
+
+// ── Signal Performance Learning ───────────────────────────────────────────────
+
+function tradeGroupStats(trades: PaperTrade[], label: string): SignalGroup {
+  const withPnl = trades.filter(t => t.pnlPercent !== null);
+  const pnls    = withPnl.map(t => t.pnlPercent!);
+  const winners = pnls.filter(p => p > 0);
+  return {
+    label,
+    trades:   withPnl.length,
+    winRate:  withPnl.length > 0 ? (winners.length / withPnl.length) * 100 : 0,
+    avgPnl:   pnls.length > 0 ? pnls.reduce((a, b) => a + b, 0) / pnls.length : 0,
+    bestPnl:  pnls.length > 0 ? Math.max(...pnls) : 0,
+    worstPnl: pnls.length > 0 ? Math.min(...pnls) : 0,
+  };
+}
+
+export async function computeSignalPerformance(): Promise<SignalPerformance> {
+  const closed = await db.select().from(paperTradesTable).where(eq(paperTradesTable.status, "closed"));
+
+  if (closed.length === 0) {
+    return { byScoreBucket: [], byRsiRange: [], byRvol: [], byPattern: [], totalClosed: 0, bestSignal: "", worstSignal: "" };
+  }
+
+  // ── Score buckets ────────────────────────────────────────────────────────
+  const scoreBuckets = new Map<string, PaperTrade[]>();
+  for (const t of closed) {
+    const s = t.entryScore;
+    const b = s >= 90 ? "Score 90+" : s >= 80 ? "Score 80-90" : s >= 70 ? "Score 70-80" : s >= 60 ? "Score 60-70" : "Score < 60";
+    if (!scoreBuckets.has(b)) scoreBuckets.set(b, []);
+    scoreBuckets.get(b)!.push(t);
+  }
+  const byScoreBucket = ["Score < 60", "Score 60-70", "Score 70-80", "Score 80-90", "Score 90+"]
+    .filter(b => scoreBuckets.has(b))
+    .map(b => tradeGroupStats(scoreBuckets.get(b)!, b));
+
+  // ── RSI ranges ───────────────────────────────────────────────────────────
+  const rsiBuckets = new Map<string, PaperTrade[]>();
+  for (const t of closed) {
+    const r = t.entryRsi ?? 50;
+    const b = r >= 70 ? "RSI ≥70" : r >= 60 ? "RSI 60-70" : r >= 50 ? "RSI 50-60" : r >= 40 ? "RSI 40-50" : "RSI <40";
+    if (!rsiBuckets.has(b)) rsiBuckets.set(b, []);
+    rsiBuckets.get(b)!.push(t);
+  }
+  const byRsiRange = ["RSI <40", "RSI 40-50", "RSI 50-60", "RSI 60-70", "RSI ≥70"]
+    .filter(b => rsiBuckets.has(b))
+    .map(b => tradeGroupStats(rsiBuckets.get(b)!, b));
+
+  // ── RVOL ranges ──────────────────────────────────────────────────────────
+  const rvolBuckets = new Map<string, PaperTrade[]>();
+  for (const t of closed) {
+    const r = t.entryRvol ?? 1;
+    const b = r >= 2 ? "RVOL ≥2×" : r >= 1.5 ? "RVOL 1.5-2×" : r >= 1 ? "RVOL 1-1.5×" : "RVOL <1×";
+    if (!rvolBuckets.has(b)) rvolBuckets.set(b, []);
+    rvolBuckets.get(b)!.push(t);
+  }
+  const byRvol = ["RVOL <1×", "RVOL 1-1.5×", "RVOL 1.5-2×", "RVOL ≥2×"]
+    .filter(b => rvolBuckets.has(b))
+    .map(b => tradeGroupStats(rvolBuckets.get(b)!, b));
+
+  // ── Pattern performance (accumulated from new trades) ────────────────────
+  const patternBuckets = new Map<string, PaperTrade[]>();
+  for (const t of closed) {
+    const patterns = (t.entryPatterns ?? []) as string[];
+    if (patterns.length === 0) {
+      const k = "No Pattern";
+      if (!patternBuckets.has(k)) patternBuckets.set(k, []);
+      patternBuckets.get(k)!.push(t);
+    } else {
+      for (const p of patterns) {
+        if (!patternBuckets.has(p)) patternBuckets.set(p, []);
+        patternBuckets.get(p)!.push(t);
+      }
+    }
+  }
+  const byPattern = Array.from(patternBuckets.entries())
+    .map(([p, trades]) => tradeGroupStats(trades, p))
+    .filter(g => g.trades >= 2)
+    .sort((a, b) => b.avgPnl - a.avgPnl);
+
+  // ── Best / worst signal (by avg P&L, min 2 trades) ──────────────────────
+  const allGroups = [...byScoreBucket, ...byRsiRange, ...byRvol].filter(g => g.trades >= 2);
+  const sorted    = [...allGroups].sort((a, b) => b.avgPnl - a.avgPnl);
+  const bestSignal  = sorted[0]?.label ?? "";
+  const worstSignal = sorted[sorted.length - 1]?.label ?? "";
+
+  return { byScoreBucket, byRsiRange, byRvol, byPattern, totalClosed: closed.length, bestSignal, worstSignal };
 }

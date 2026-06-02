@@ -218,6 +218,90 @@ export const SCANNER_UNIVERSE: string[] = [
 
   // ── International & Emerging ─────────────────────────────────────────────
   "EEM", "IEMG", "EFA", "VEA", "ARKK",
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ── S&P 500 / NASDAQ 100 COMPLETIONS (ROUND 2) ────────────────────────────
+  // Tickers confirmed in S&P 500 or NASDAQ 100 not yet in universe above.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ── Financials (missing S&P 500) ─────────────────────────────────────────
+  "GOOG",   // Alphabet Class C (NASDAQ 100 — distinct from GOOGL)
+  "AFL",    // Aflac — supplemental insurance
+  "GL",     // Globe Life — life & health insurance
+  "UNM",    // Unum Group — employee benefits
+  "CMA",    // Comerica — Texas-based regional bank
+  "CINF",   // Cincinnati Financial — P&C insurance
+  "FDS",    // FactSet Research Systems — financial data (NASDAQ 100)
+  "ERIE",   // Erie Indemnity — property & casualty insurance
+
+  // ── Healthcare (missing S&P 500) ─────────────────────────────────────────
+  "TECH",   // Bio-Techne — life science reagents
+  "DGX",    // Quest Diagnostics — lab services
+  "LH",     // LabCorp — diagnostics & drug development
+  "XRAY",   // Dentsply Sirona — dental products
+  "BIO",    // Bio-Rad Laboratories — life science tools
+  "STE",    // STERIS — healthcare sterilization
+  "SOLV",   // Solventum — 3M Health spin-off
+
+  // ── Technology (missing S&P 500 / NASDAQ 100) ────────────────────────────
+  "STX",    // Seagate Technology — HDD storage (NASDAQ)
+  "ANSS",   // Ansys — simulation software (NASDAQ 100)
+  "CSGP",   // CoStar Group — commercial real estate data (NASDAQ 100)
+  "GFS",    // GlobalFoundries — semiconductor foundry (NASDAQ)
+  "MTCH",   // Match Group — online dating apps (NASDAQ 100)
+  "WEX",    // WEX Inc. — fleet / health payment solutions
+
+  // ── Consumer Discretionary (missing S&P 500) ─────────────────────────────
+  "PARA",   // Paramount Global — media & streaming
+  "LW",     // Lamb Weston — frozen potato products
+  "POOL",   // Pool Corporation — pool supply distribution
+  "LKQ",    // LKQ Corporation — auto parts
+  "RHI",    // Robert Half International — staffing
+
+  // ── Consumer Staples (missing S&P 500) ───────────────────────────────────
+  "KMB",    // Kimberly-Clark — tissue & personal care
+  "ADM",    // Archer-Daniels-Midland — agricultural commodities
+  "KDP",    // Keurig Dr Pepper — beverages (NASDAQ 100)
+
+  // ── Industrials (missing S&P 500) ────────────────────────────────────────
+  "PCAR",   // Paccar — truck manufacturer (NASDAQ 100)
+  "GWW",    // W.W. Grainger — industrial distribution
+  "MAS",    // Masco Corporation — home improvement products
+  "OC",     // Owens Corning — building insulation & composites
+  "SNA",    // Snap-on — professional tools
+  "JCI",    // Johnson Controls International — building tech
+  "PNR",    // Pentair — water treatment
+  "IR",     // Ingersoll Rand — industrial equipment
+  "NVT",    // nVent Electric — electrical enclosures
+  "NDSN",   // Nordson Corporation — precision dispensing
+  "JKHY",   // Jack Henry & Associates — fintech for banks
+  "FLS",    // Flowserve — flow control equipment
+  "ROL",    // Rollins — pest control services
+  "HWM",    // Howmet Aerospace — engineered components
+
+  // ── Materials (missing S&P 500) ──────────────────────────────────────────
+  "STLD",   // Steel Dynamics — electric arc furnace steel
+  "RS",     // Reliance Steel & Aluminum — metals service center
+  "LYB",    // LyondellBasell Industries — polyolefins & chemicals
+
+  // ── Real Estate (missing S&P 500) ────────────────────────────────────────
+  "DOC",    // Healthpeak Properties — medical office & life science REITs
+  "HST",    // Host Hotels & Resorts — hotel REIT
+
+  // ── Utilities (missing S&P 500) ──────────────────────────────────────────
+  "PCG",    // PG&E Corporation — California electric & gas
+  "ED",     // Consolidated Edison — NYC utility
+  "DTE",    // DTE Energy — Michigan electric & gas
+  "ATO",    // Atmos Energy — natural gas distribution
+
+  // ── Defense / Government Tech (completing S&P 500 coverage) ──────────────
+  "DRS",    // Leonardo DRS — defense electronics
+  "BWXT",   // BWX Technologies — nuclear components for US Navy
+  "MRCY",   // Mercury Systems — aerospace & defense processing
+
+  // ── ADR Mega-caps (NASDAQ-listed, high liquidity) ─────────────────────────
+  "ASML",   // ASML Holding — EUV lithography (essential NASDAQ 100 component)
+  "AZN",    // AstraZeneca — UK pharma giant (NASDAQ-listed ADR)
 ];
 
 // ── Asset-type metadata ────────────────────────────────────────────────────

@@ -36,6 +36,7 @@ export const paperTradesTable = pgTable("paper_trades", {
   entryMomentumScore: integer("entry_momentum_score"),
   entryTrendScore:    integer("entry_trend_score"),
   entryCriteria:      jsonb("entry_criteria").notNull().default([]),
+  entryPatterns:      jsonb("entry_patterns").notNull().default([]),
   entryAt:            timestamp("entry_at", { withTimezone: true }).notNull().defaultNow(),
   exitPrice:          doublePrecision("exit_price"),
   exitScore:          integer("exit_score"),
