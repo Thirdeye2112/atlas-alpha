@@ -11,3 +11,4 @@
 - [OHLCV cache architecture](ohlcv-cache-architecture.md) — weekly/monthly must go direct to Yahoo (not DB store); blob cache needs coverage validation or stale 2Y data serves for 5Y/ALL
 - [TA overlays v2](ta-overlays-v2.md) — Fib/VolumeProfile/WeeklyContext added to AnalysisResult; calcOptions now takes optional bars param; pivot RSI divergence uses findPivotLows/Highs helpers; LightweightChart lineSeries prop for full-width time-series
 - [Market cycle detection](market-cycle-detection.md) — Weinstein Stage Analysis in calcMarketCycle(); scan job is lightMode (no marketCycle); getEnrichedTrades prefers full cache analysis:${ticker} over scan job for cycle data
+- [Continuous learning system](continuous-learning-system.md) — signal_snapshots table; snapshotEngine.ts saves+resolves+mines; smartEntryGate extracted to entryGate.ts; CalibrationEntry.isContrarian = rankIC < 0 (not stored)

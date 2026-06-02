@@ -105,6 +105,32 @@ interface BotStatus {
   virtualPortfolioValue: number;
 }
 
+interface LearningStats {
+  totalSnapshots:      number;
+  resolvedSnapshots:   number;
+  unresolvedSnapshots: number;
+  oldestSnapshotDate:  string | null;
+  newestSnapshotDate:  string | null;
+  avgHitRate10d:       number | null;
+  avgReturn10d:        number | null;
+}
+
+interface LearnedPattern {
+  scoreBucket:     string;
+  rsiZone:         string;
+  isContrarian:    boolean | null;
+  distributionTop: boolean | null;
+  hasExhaustion:   boolean;
+  cyclePhase:      string;
+  smartGateEnter:  boolean | null;
+  observations:    number;
+  avgReturn10d:    number;
+  stdReturn10d:    number;
+  hitRate10d:      number;
+  avgReturn20d:    number | null;
+  hitRate20d:      number | null;
+}
+
 // ── Filter-builder constants (mirrors Scanner.tsx) ────────────────────────────
 
 type CsFieldType = "number" | "enum" | "string" | "array" | "pattern";
@@ -792,6 +818,181 @@ function HistoryTab({ trades }: { trades: PaperTrade[] }) {
   );
 }
 
+// ── LEARNING TAB ──────────────────────────────────────────────────────────────
+
+function LearningTab() {
+  const { data: stats } = useQuery<LearningStats>({
+    queryKey:  ["bot-learning-stats"],
+    queryFn:   () => apiFetch("bot/learning-stats"),
+    staleTime: 60_000,
+  });
+
+  const { data: patternsData } = useQuery<{ patterns: LearnedPattern[] }>({
+    queryKey:  ["bot-learned-patterns"],
+    queryFn:   () => apiFetch("bot/learned-patterns"),
+    staleTime: 60_000,
+  });
+
+  const patterns  = patternsData?.patterns ?? [];
+  const hasData   = (stats?.resolvedSnapshots ?? 0) >= 3;
+
+  const statCards = [
+    { label: "OBSERVATIONS",      value: stats?.totalSnapshots?.toLocaleString()      ?? "—" },
+    { label: "RESOLVED OUTCOMES", value: stats?.resolvedSnapshots?.toLocaleString()   ?? "—" },
+    {
+      label: "10D HIT RATE",
+      value: stats?.avgHitRate10d != null
+        ? `${(stats.avgHitRate10d * 100).toFixed(1)}%` : "—",
+      color: stats?.avgHitRate10d != null
+        ? stats.avgHitRate10d >= 0.55 ? "text-success" : stats.avgHitRate10d < 0.45 ? "text-destructive" : undefined
+        : undefined,
+    },
+    {
+      label: "AVG 10D RETURN",
+      value: stats?.avgReturn10d != null
+        ? `${stats.avgReturn10d > 0 ? "+" : ""}${stats.avgReturn10d.toFixed(2)}%` : "—",
+      color: stats?.avgReturn10d != null
+        ? stats.avgReturn10d > 0 ? "text-success" : "text-destructive"
+        : undefined,
+    },
+  ];
+
+  return (
+    <div className="flex flex-col gap-4 p-1">
+      {/* Stats row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {statCards.map(({ label, value, color }) => (
+          <div key={label} className="bg-card border border-border rounded p-3">
+            <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">{label}</div>
+            <div className={cn("text-lg font-mono font-bold mt-1", color ?? "text-foreground")}>{value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Building state */}
+      {!hasData && (
+        <div className="bg-card border border-border rounded p-4 space-y-2.5">
+          <div className="text-sm font-mono font-bold text-foreground flex items-center gap-2">
+            <span className="text-primary animate-pulse">⟳</span> Building knowledge base
+          </div>
+          <p className="text-xs font-mono text-muted-foreground leading-relaxed">
+            Every scan cycle (every 30 min), the system photographs the full signal state of every stock — score,
+            RSI, candle structure, IC calibration, exhaustion, cycle phase, and smart gate verdict.
+            7 days later, it fetches actual closing prices and calculates forward returns to score each prediction.
+          </p>
+          <p className="text-xs font-mono text-muted-foreground leading-relaxed">
+            After a few weeks of data, pattern clusters emerge: signal combinations that consistently produce
+            strong forward returns get surfaced here, and eventually feed back into the confidence scores you see
+            on the dashboard and scanner.
+          </p>
+          {stats && stats.totalSnapshots > 0 && (
+            <div className="text-xs font-mono text-primary/70 pt-1 border-t border-border">
+              {stats.totalSnapshots.toLocaleString()} observations collected
+              {stats.unresolvedSnapshots > 0 && ` · ${stats.unresolvedSnapshots.toLocaleString()} pending outcome resolution (7-day window)`}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Patterns table */}
+      {hasData && patterns.length > 0 && (
+        <div className="bg-card border border-border rounded">
+          <div className="px-4 py-2.5 border-b border-border flex items-baseline gap-2">
+            <span className="text-xs font-mono font-bold text-foreground">Learned Patterns</span>
+            <span className="text-[10px] font-mono text-muted-foreground">sorted by |avg 10D return| · min 3 observations per cluster</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs font-mono">
+              <thead>
+                <tr className="border-b border-border/60 text-muted-foreground text-[10px] uppercase tracking-wider">
+                  <th className="px-3 py-2 text-left">Score</th>
+                  <th className="px-3 py-2 text-left">RSI Zone</th>
+                  <th className="px-3 py-2 text-left">IC Mode</th>
+                  <th className="px-3 py-2 text-left">Exhaust</th>
+                  <th className="px-3 py-2 text-left">Cycle</th>
+                  <th className="px-3 py-2 text-right">Obs</th>
+                  <th className="px-3 py-2 text-right">Hit% 10D</th>
+                  <th className="px-3 py-2 text-right">Avg Ret 10D</th>
+                  <th className="px-3 py-2 text-right">Hit% 20D</th>
+                  <th className="px-3 py-2 text-right">Avg Ret 20D</th>
+                </tr>
+              </thead>
+              <tbody>
+                {patterns.map((p, i) => (
+                  <tr key={i} className="border-b border-border/30 hover:bg-muted/10 transition-colors">
+                    <td className="px-3 py-1.5">
+                      <span className={cn(
+                        "px-1.5 py-0.5 rounded text-[10px] font-bold",
+                        p.scoreBucket === "very_low" ? "bg-destructive/20 text-destructive" :
+                        p.scoreBucket === "low"      ? "bg-warning/20 text-warning" :
+                        p.scoreBucket === "mid"      ? "bg-muted text-muted-foreground" :
+                                                       "bg-success/20 text-success"
+                      )}>
+                        {p.scoreBucket === "very_low" ? "≤30" :
+                         p.scoreBucket === "low"      ? "31–50" :
+                         p.scoreBucket === "mid"      ? "51–70" : "71+"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-1.5 text-muted-foreground">{p.rsiZone}</td>
+                    <td className="px-3 py-1.5">
+                      {p.isContrarian == null ? <span className="text-muted-foreground">—</span>
+                        : p.isContrarian
+                          ? <span className="text-warning text-[10px] font-bold">CONTRARIAN</span>
+                          : <span className="text-blue-400 text-[10px]">momentum</span>}
+                    </td>
+                    <td className="px-3 py-1.5">
+                      {p.hasExhaustion
+                        ? <span className="text-destructive">yes</span>
+                        : <span className="text-muted-foreground/50">no</span>}
+                    </td>
+                    <td className="px-3 py-1.5 text-muted-foreground text-[10px]">{p.cyclePhase}</td>
+                    <td className="px-3 py-1.5 text-right text-muted-foreground">{p.observations}</td>
+                    <td className={cn("px-3 py-1.5 text-right font-bold",
+                      p.hitRate10d >= 0.6  ? "text-success" :
+                      p.hitRate10d <= 0.4  ? "text-destructive" : "text-muted-foreground")}>
+                      {(p.hitRate10d * 100).toFixed(1)}%
+                    </td>
+                    <td className={cn("px-3 py-1.5 text-right font-bold",
+                      p.avgReturn10d > 0 ? "text-success" : "text-destructive")}>
+                      {p.avgReturn10d > 0 ? "+" : ""}{p.avgReturn10d.toFixed(2)}%
+                    </td>
+                    <td className={cn("px-3 py-1.5 text-right",
+                      p.hitRate20d != null && p.hitRate20d >= 0.6  ? "text-success" :
+                      p.hitRate20d != null && p.hitRate20d <= 0.4  ? "text-destructive" : "text-muted-foreground")}>
+                      {p.hitRate20d != null ? `${(p.hitRate20d * 100).toFixed(1)}%` : "—"}
+                    </td>
+                    <td className={cn("px-3 py-1.5 text-right",
+                      p.avgReturn20d != null && p.avgReturn20d > 0 ? "text-success" :
+                      p.avgReturn20d != null                       ? "text-destructive" : "text-muted-foreground")}>
+                      {p.avgReturn20d != null ? `${p.avgReturn20d > 0 ? "+" : ""}${p.avgReturn20d.toFixed(2)}%` : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {hasData && patterns.length === 0 && (
+        <div className="text-xs font-mono text-muted-foreground text-center py-6">
+          Resolved outcomes exist but no pattern clusters yet (need ≥3 observations per combination).
+          More data will surface clusters over time.
+        </div>
+      )}
+
+      {/* Data range footer */}
+      {stats?.oldestSnapshotDate && (
+        <div className="text-[10px] font-mono text-muted-foreground/40 pt-1">
+          Data range: {stats.oldestSnapshotDate} → {stats.newestSnapshotDate ?? "today"}
+          {" · "} outcomes resolve 7 days after snapshot
+          {" · "} min 3 obs per cluster
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── AI BRAIN TAB ──────────────────────────────────────────────────────────────
 
 function SignalTable({ title, groups }: { title: string; groups: SignalGroup[] }) {
@@ -1114,6 +1315,9 @@ export default function BotLab() {
           <TabsTrigger value="ai-brain"  className="font-mono text-xs data-[state=active]:bg-violet-700 data-[state=active]:text-white">
             ✦ AI BRAIN
           </TabsTrigger>
+          <TabsTrigger value="learning"  className="font-mono text-xs data-[state=active]:bg-cyan-700 data-[state=active]:text-white">
+            ◈ LEARNING
+          </TabsTrigger>
         </TabsList>
 
         <div className="flex-1 overflow-auto mt-4">
@@ -1128,6 +1332,9 @@ export default function BotLab() {
           </TabsContent>
           <TabsContent value="ai-brain"  className="m-0">
             <AiBrainTab stats={stats} signalPerformance={signalPerformance} />
+          </TabsContent>
+          <TabsContent value="learning"  className="m-0">
+            <LearningTab />
           </TabsContent>
         </div>
       </Tabs>

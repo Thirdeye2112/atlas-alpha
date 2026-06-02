@@ -8,6 +8,7 @@ import { runFullAnalysis, type AnalysisResult } from "./analysisEngine.js";
 import { SCORE_VERSION } from "./scoring.js";
 import { logger } from "./logger.js";
 import { db, signalLogTable } from "@workspace/db";
+import { saveSnapshotsBatch, resolveOutcomes } from "./snapshotEngine.js";
 
 const JOB_TTL_MS = 30 * 60 * 1000; // keep a completed job for 30 min before re-scanning
 const BATCH_SIZE  = 10;
@@ -107,4 +108,13 @@ async function runJobBackground(job: ScanJob): Promise<void> {
       logger.warn({ err }, "Signal log DB write failed");
     });
   }
+
+  // Learning system: snapshot today's full signal state for every ticker,
+  // then resolve outcomes for snapshots taken 7+ days ago. Both fire-and-forget.
+  saveSnapshotsBatch(job.analyses).catch(err =>
+    logger.warn({ err }, "Snapshot save failed")
+  );
+  resolveOutcomes().catch(err =>
+    logger.warn({ err }, "Outcome resolution failed")
+  );
 }

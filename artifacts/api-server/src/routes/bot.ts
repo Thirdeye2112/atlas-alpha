@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db, paperTradesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { getLearningStats, getLearnedPatterns } from "../lib/snapshotEngine.js";
 import {
   getOrCreateConfig,
   updateConfig,
@@ -186,6 +187,26 @@ router.get("/bot/signal-performance", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "GET /bot/signal-performance failed");
     res.status(500).json({ error: "Failed to compute signal performance" });
+  }
+});
+
+// ── Learning system ───────────────────────────────────────────────────────────
+
+router.get("/bot/learning-stats", async (req, res): Promise<void> => {
+  try {
+    res.json(await getLearningStats());
+  } catch (err) {
+    req.log.error({ err }, "GET /bot/learning-stats failed");
+    res.status(500).json({ error: "Failed to get learning stats" });
+  }
+});
+
+router.get("/bot/learned-patterns", async (req, res): Promise<void> => {
+  try {
+    res.json({ patterns: await getLearnedPatterns() });
+  } catch (err) {
+    req.log.error({ err }, "GET /bot/learned-patterns failed");
+    res.status(500).json({ error: "Failed to get learned patterns" });
   }
 });
 

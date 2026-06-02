@@ -2,6 +2,7 @@ import { db, paperTradesTable, botConfigTable, type PaperTrade, type BotConfig }
 import { eq, desc, and, sql } from "drizzle-orm";
 import Anthropic from "@anthropic-ai/sdk";
 import { getOrStartScanJob } from "./scanJob.js";
+import { smartEntryGate } from "./entryGate.js";
 import { runFullAnalysis, type AnalysisResult } from "./analysisEngine.js";
 import { analysisCache } from "./cache.js";
 import { logger } from "./logger.js";
@@ -175,70 +176,6 @@ export async function updateConfig(patch: Partial<Omit<BotConfig, "id">>): Promi
 
 // ── Position helpers ──────────────────────────────────────────────────────────
 
-// ── Smart Entry Gate (deterministic — no LLM cost) ───────────────────────────
-// Uses our own candle structure, exhaustion engine, IC calibration, and cycle
-// signals to decide whether to enter. Runs in microseconds, zero API cost.
-
-function smartEntryGate(a: AnalysisResult): { enter: boolean; reasoning: string } {
-  const rc = a.recentCandles;
-  const ex = a.exhaustion;
-
-  // 1. Exhaustion engine: distribution top pattern (stoch overbought + wick + low RVOL at highs)
-  if (ex.distributionTop) {
-    return { enter: false, reasoning: "Distribution top — stoch overbought + upper wick rejection + low RVOL at highs" };
-  }
-
-  // 2. Parabolic rise confirmed by exhaustion system + stock rolling over
-  if (ex.parabolicRise && rc && rc.consecutiveRedDays >= 2) {
-    return {
-      enter: false,
-      reasoning: `Parabolic rise (+${rc.parabolicMovePct}% in ${rc.parabolicMoveDays}d) rolling over — ${rc.consecutiveRedDays} consecutive red days`,
-    };
-  }
-
-  // 3. Exhaustion signal active + significantly extended above SMA20
-  if (ex.exhaustionSignal && rc && rc.priceExtensionPct > 15) {
-    return {
-      enter: false,
-      reasoning: `Exhaustion signal + ${rc.priceExtensionPct}% above SMA20 — snap-back risk too high`,
-    };
-  }
-
-  // 4. Candle structure: multiple distribution bars + heavy down-day volume
-  if (rc && rc.distributionCandles >= 2 && rc.downDayVolumeRatio > 1.2) {
-    return {
-      enter: false,
-      reasoning: `${rc.distributionCandles} distribution candles (wick rejection) + down-vol ${rc.downDayVolumeRatio.toFixed(2)}× up-vol — sellers dominant`,
-    };
-  }
-
-  // 5. Extreme price extension (overextended, high mean-reversion risk regardless of score)
-  if (rc && rc.priceExtensionPct > 25) {
-    return {
-      enter: false,
-      reasoning: `${rc.priceExtensionPct}% extension above SMA20 — overextended, ATH-chasing risk`,
-    };
-  }
-
-  // 6. Buying climax followed by distribution (buyers exhausted, smart money distributing)
-  if (rc && rc.climaxBars >= 1 && rc.consecutiveRedDays >= 2) {
-    return {
-      enter: false,
-      reasoning: `Buying climax (${rc.climaxBars} high-vol green bars) followed by ${rc.consecutiveRedDays} red days — classic distribution`,
-    };
-  }
-
-  // 7. Contrarian IC + high score = dangerous (high score on a contrarian ticker historically precedes downside)
-  const isContrarian = a.atlasScore.signalNarrative?.toLowerCase().includes("contrarian");
-  if (isContrarian && a.atlasScore.overall >= 80) {
-    return {
-      enter: false,
-      reasoning: `Contrarian IC signal: score ${a.atlasScore.overall} is historically followed by downside on this ticker`,
-    };
-  }
-
-  return { enter: true, reasoning: "Candle structure clean — no distribution, exhaustion, or contrarian calibration blocks" };
-}
 
 async function openPosition(a: AnalysisResult, config: BotConfig, aiNotes?: string | null): Promise<void> {
   const price      = a.quote.price as number;
