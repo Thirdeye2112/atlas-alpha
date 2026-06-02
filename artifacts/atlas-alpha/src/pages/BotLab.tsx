@@ -57,6 +57,8 @@ interface PaperTrade {
   unrealizedPnlPct?: number;
   unrealizedPnlDollar?: number;
   holdDays?: number;
+  currentCyclePhase?: string;
+  currentWeeklyPatterns?: string[];
 }
 
 interface SignalGroup {
@@ -128,7 +130,14 @@ const CS_FIELDS: CsFieldConfig[] = [
   { key: "signalStrength",     label: "Signal Strength",     type: "enum",   options: ["strong", "moderate", "weak"] },
   { key: "exhaustion",         label: "Exhaustion Signal",   type: "enum",   options: ["none", "distribution_top", "capitulation"] },
   { key: "pullbackClass",      label: "Setup Type",          type: "enum",   options: ["pullback", "reversal", "ambiguous", "extended"] },
-  { key: "patterns",           label: "Pattern",             type: "array",  hint: "e.g. Bull Flag" },
+  { key: "patterns",           label: "Pattern (Daily)",     type: "array",  hint: "e.g. Bull Flag" },
+  // ── Multi-timeframe / cycle fields ───────────────────────────────────────────
+  { key: "cyclePhase",         label: "Cycle Phase",         type: "enum",   options: ["accumulation", "markup", "distribution", "markdown", "ranging"] },
+  { key: "weeklyPatterns",     label: "Pattern (Weekly)",    type: "array",  hint: "e.g. Weekly Bull Flag" },
+  { key: "sma40Rising",        label: "Weekly Trend (200d)", type: "enum",   options: ["yes", "no"] },
+  { key: "weeklyRsi",          label: "Weekly RSI",          type: "number", hint: "0–100" },
+  { key: "distFrom52wHigh",    label: "vs 52W High %",       type: "number", hint: "e.g. -10 = within 10%" },
+  { key: "priceVsSma40Weekly", label: "vs Weekly SMA200 %",  type: "number", hint: "e.g. 5.0" },
 ];
 
 const CS_OPS: Record<CsFieldType, { value: string; label: string }[]> = {
@@ -303,6 +312,11 @@ function ConfigTab({ config, onSaved }: { config: BotConfig; onSaved: () => void
     queryFn:  () => apiFetch("bot/patterns"),
     staleTime: Infinity,
   });
+  const { data: availableWeeklyPatterns = [] } = useQuery<string[]>({
+    queryKey: ["bot-weekly-patterns"],
+    queryFn:  () => apiFetch("bot/weekly-patterns"),
+    staleTime: Infinity,
+  });
   const [rows, setRows]             = useState<FilterRow[]>(() => criteriaToRows(config.entryCriteria));
   const [exitScore, setExitScore]   = useState(config.exitScoreThreshold);
   const [dirFlip, setDirFlip]       = useState(config.exitOnDirectionFlip);
@@ -404,9 +418,11 @@ function ConfigTab({ config, onSaved }: { config: BotConfig; onSaved: () => void
                 </select>
               ) : fc.type === "array" ? (
                 <select value={row.value} onChange={e => updateRow(row.id, { value: e.target.value })}
-                  className="bg-background border border-border rounded px-2 py-1 text-xs font-mono focus:outline-none focus:border-primary min-w-[160px]">
+                  className="bg-background border border-border rounded px-2 py-1 text-xs font-mono focus:outline-none focus:border-primary min-w-[180px]">
                   <option value="">— select pattern —</option>
-                  {availablePatterns.map(p => <option key={p} value={p}>{p}</option>)}
+                  {(row.field === "weeklyPatterns" ? availableWeeklyPatterns : availablePatterns).map(p => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
                 </select>
               ) : (
                 <>
@@ -545,6 +561,36 @@ function ConfigTab({ config, onSaved }: { config: BotConfig; onSaved: () => void
 
 // ── POSITIONS TAB ─────────────────────────────────────────────────────────────
 
+// ── Cycle phase badge ─────────────────────────────────────────────────────────
+
+const CYCLE_COLORS: Record<string, string> = {
+  markup:       "text-success border-success/50 bg-success/5",
+  accumulation: "text-blue-400 border-blue-400/50 bg-blue-400/5",
+  distribution: "text-warning border-warning/50 bg-warning/5",
+  markdown:     "text-destructive border-destructive/50 bg-destructive/5",
+  ranging:      "text-muted-foreground border-border bg-muted/10",
+};
+
+const CYCLE_LABELS: Record<string, string> = {
+  markup:       "MARKUP ↑",
+  accumulation: "ACCUM.",
+  distribution: "DIST. ↓",
+  markdown:     "MARKDOWN",
+  ranging:      "RANGING",
+};
+
+function CycleBadge({ phase }: { phase?: string }) {
+  if (!phase) return <span className="text-muted-foreground/30">—</span>;
+  return (
+    <span className={cn(
+      "text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border whitespace-nowrap",
+      CYCLE_COLORS[phase] ?? CYCLE_COLORS.ranging,
+    )}>
+      {CYCLE_LABELS[phase] ?? phase.toUpperCase()}
+    </span>
+  );
+}
+
 function PositionsTab({ trades, onClose }: { trades: PaperTrade[]; onClose: (id: number) => void }) {
   const open = trades.filter(t => t.status === "open");
 
@@ -566,6 +612,7 @@ function PositionsTab({ trades, onClose }: { trades: PaperTrade[]; onClose: (id:
             <th className="text-right py-2 px-2">CURRENT</th>
             <th className="text-right py-2 px-2">P&L</th>
             <th className="text-right py-2 px-2">SCORE</th>
+            <th className="text-center py-2 px-2">CYCLE</th>
             <th className="text-right py-2 px-2">RSI@ENTRY</th>
             <th className="text-right py-2 px-2">HOLD</th>
             <th className="text-center py-2 px-2">CLOSE</th>
@@ -589,6 +636,16 @@ function PositionsTab({ trades, onClose }: { trades: PaperTrade[]; onClose: (id:
                 <div className="flex items-center justify-end gap-1">
                   <ScoreChip score={t.entryScore} dim />
                   {t.currentScore != null && <><span className="text-muted-foreground/40">→</span><ScoreChip score={t.currentScore} /></>}
+                </div>
+              </td>
+              <td className="text-center py-2 px-2">
+                <div className="flex flex-col items-center gap-0.5">
+                  <CycleBadge phase={t.currentCyclePhase} />
+                  {t.currentWeeklyPatterns && t.currentWeeklyPatterns.length > 0 && (
+                    <div className="text-[9px] font-mono text-muted-foreground/50 max-w-[90px] truncate" title={t.currentWeeklyPatterns.join(", ")}>
+                      {t.currentWeeklyPatterns[0].replace("Weekly ", "W:")}
+                    </div>
+                  )}
                 </div>
               </td>
               <td className="text-right py-2 px-2 text-muted-foreground">{t.entryRsi?.toFixed(1) ?? "—"}</td>

@@ -1651,3 +1651,263 @@ export function calcWeeklyContext(weeklyBars: OHLCVBar[]): WeeklyContextResult |
     weeklyAlignment,
   };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Multi-Timeframe Market Cycle Analysis (Weinstein Stage Analysis)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface MarketCycleResult {
+  /** Weinstein stage the stock currently occupies */
+  cyclePhase: "accumulation" | "markup" | "distribution" | "markdown" | "ranging";
+  /** 0–100 confidence in the cycle-phase assignment */
+  cycleStrength: number;
+  /** % distance from 52-week high — negative means below (e.g. -10 = 10% below) */
+  distFrom52wHigh: number;
+  /** % distance above 52-week low */
+  distFrom52wLow: number;
+  /** Weekly SMA-40 value (proxy for the 200-day MA on a weekly chart) */
+  sma40Weekly: number;
+  /** Whether the weekly SMA-40 is in a rising slope */
+  sma40Rising: boolean;
+  /** % of price relative to weekly SMA-40 */
+  priceVsSma40Weekly: number;
+  /** Chart patterns detected on the weekly timeframe */
+  weeklyPatterns: string[];
+  /** RSI computed on weekly closes */
+  weeklyRsi: number;
+}
+
+/**
+ * Analyse where a stock is in its long-term market cycle using weekly OHLCV
+ * bars.  Returns null when fewer than 20 weekly bars are available.
+ *
+ * Logic uses Weinstein's Stage Analysis:
+ *   Stage 1 — Accumulation:  base-building near 52-week lows, flat SMA-40
+ *   Stage 2 — Markup:        above rising SMA-40, higher-highs / higher-lows
+ *   Stage 3 — Distribution:  extended at highs, SMA-40 flattening, weakening
+ *   Stage 4 — Markdown:      below declining SMA-40, lower-highs / lower-lows
+ */
+export function calcMarketCycle(weeklyBars: OHLCVBar[]): MarketCycleResult | null {
+  if (weeklyBars.length < 20) return null;
+
+  const closes  = weeklyBars.map(b => b.close);
+  const highs   = weeklyBars.map(b => b.high);
+  const lows    = weeklyBars.map(b => b.low);
+  const volumes = weeklyBars.map(b => b.volume);
+  const n       = closes.length;
+  const price   = closes[n - 1];
+
+  // ── 52-week high / low ───────────────────────────────────────────────────
+  const lb52    = Math.min(52, n);
+  const high52  = Math.max(...highs.slice(-lb52));
+  const low52   = Math.min(...lows.slice(-lb52));
+  const distFrom52wHigh = (price - high52) / high52 * 100;   // ≤0
+  const distFrom52wLow  = (price - low52)  / low52  * 100;   // ≥0
+
+  // ── Weekly SMA-40 (≈ 200-day MA) ─────────────────────────────────────────
+  const sma40Period  = Math.min(40, n - 1);
+  const sma40Arr     = SMA.calculate({ values: closes, period: sma40Period });
+  const sma40Weekly  = last(sma40Arr) ?? price;
+  const sma40Prev    = sma40Arr[Math.max(0, sma40Arr.length - 7)] ?? sma40Weekly;
+  const sma40Rising  = sma40Weekly > sma40Prev;
+  const priceVsSma40Weekly = sma40Weekly > 0 ? (price - sma40Weekly) / sma40Weekly * 100 : 0;
+
+  // ── Weekly SMA-10 (≈ 50-day MA) ──────────────────────────────────────────
+  const sma10Period = Math.min(10, n - 1);
+  const sma10Arr    = SMA.calculate({ values: closes, period: sma10Period });
+  const sma10Weekly = last(sma10Arr) ?? price;
+
+  // ── Weekly RSI ────────────────────────────────────────────────────────────
+  const rsiPeriod = Math.min(14, n - 2);
+  const rsiArr    = RSI.calculate({ values: closes, period: rsiPeriod });
+  const weeklyRsi = Math.round((last(rsiArr) ?? 50) * 10) / 10;
+
+  // ── Higher-highs / lower-lows (last 20 weekly bars) ─────────────────────
+  const lb20    = Math.min(20, n);
+  const rH      = highs.slice(-lb20);
+  const rL      = lows.slice(-lb20);
+  const higherHighs = rH[rH.length - 1] > rH[0];
+  const higherLows  = rL[rL.length - 1] > rL[0];
+  const lowerHighs  = rH[rH.length - 1] < rH[0];
+  const lowerLows   = rL[rL.length - 1] < rL[0];
+
+  // ── Volume expansion check (last 4 vs prior 12 weeks) ───────────────────
+  const slice4   = volumes.slice(-4);
+  const slice12  = volumes.slice(-16, -4);
+  const recentVol = slice4.reduce((a, b)  => a + b, 0) / slice4.length;
+  const priorVol  = slice12.reduce((a, b) => a + b, 0) / Math.max(slice12.length, 1);
+  const volExpanding = recentVol > priorVol * 1.1;
+
+  // ── Weinstein Stage Assignment ────────────────────────────────────────────
+  const aboveSma40 = price > sma40Weekly;
+  const aboveSma10 = price > sma10Weekly;
+  const nearHigh52 = distFrom52wHigh > -15;
+  const nearLow52  = distFrom52wLow  <  35;
+
+  let cyclePhase: MarketCycleResult["cyclePhase"];
+  let cycleStrength: number;
+
+  if (aboveSma40 && sma40Rising && higherHighs && higherLows && aboveSma10) {
+    // Stage 2 — Markup: above rising 200d proxy, uptrend structure intact
+    cyclePhase    = "markup";
+    cycleStrength = Math.min(95, 60 + (nearHigh52 ? 15 : 0) + (volExpanding ? 15 : 0) + (weeklyRsi > 55 ? 5 : 0));
+  } else if (!aboveSma40 && !sma40Rising && lowerHighs && lowerLows) {
+    // Stage 4 — Markdown: below declining 200d proxy, downtrend structure
+    cyclePhase    = "markdown";
+    cycleStrength = Math.min(95, 65 + (weeklyRsi < 45 ? 15 : 0) + (!nearLow52 ? 10 : 0));
+  } else if (aboveSma40 && nearHigh52 && (!sma40Rising || weeklyRsi > 68)) {
+    // Stage 3 — Distribution: extended at highs, momentum or slope weakening
+    cyclePhase    = "distribution";
+    cycleStrength = Math.min(85, 55 + (volExpanding && !higherHighs ? 20 : 0) + (weeklyRsi > 72 ? 10 : 0));
+  } else if (!aboveSma40 && nearLow52 && weeklyRsi < 52) {
+    // Stage 1 — Accumulation: base-building near lows, below flat/declining SMA
+    cyclePhase    = "accumulation";
+    cycleStrength = Math.min(80, 50 + (volExpanding ? 15 : 0) + (!lowerLows ? 15 : 0));
+  } else {
+    // Transitional / undefined
+    cyclePhase    = "ranging";
+    cycleStrength = 40;
+  }
+
+  // ── Weekly chart pattern detection ────────────────────────────────────────
+  const weeklyPatterns: string[] = [];
+
+  try {
+    // Golden / Death Cross on weekly (SMA10 vs SMA40)
+    if      (aboveSma10 && sma10Weekly > sma40Weekly) weeklyPatterns.push("Weekly Golden Cross");
+    else if (!aboveSma10 && sma10Weekly < sma40Weekly) weeklyPatterns.push("Weekly Death Cross");
+
+    // Bollinger Band signals (20-week bands)
+    if (n >= 20) {
+      const bbArr = BollingerBands.calculate({ values: closes, period: 20, stdDev: 2 });
+      const bb    = last(bbArr);
+      if (bb) {
+        if (price > bb.upper) weeklyPatterns.push("Weekly BB Breakout");
+        if (price < bb.lower) weeklyPatterns.push("Weekly BB Breakdown");
+        if (bb.upper > bb.lower && (bb.upper - bb.lower) / bb.middle < 0.08)
+          weeklyPatterns.push("Weekly Volatility Squeeze");
+      }
+    }
+
+    // Bull / Bear Flag on weekly (strong 12-week pole → 6-week tight flag)
+    if (n >= 25) {
+      const poleCloses = closes.slice(-20, -6);
+      const flagHighs  = highs.slice(-6);
+      const flagLows   = lows.slice(-6);
+      const poleGain   = poleCloses.length > 1
+        ? (poleCloses[poleCloses.length - 1] - poleCloses[0]) / poleCloses[0] * 100 : 0;
+      const poleRange  = Math.max(...highs.slice(-20, -6)) - Math.min(...lows.slice(-20, -6));
+      const flagRange  = Math.max(...flagHighs) - Math.min(...flagLows);
+      const tightFlag  = poleRange > 0 && flagRange < poleRange * 0.45;
+      const volLow     = volumes.slice(-6).reduce((a, b) => a + b, 0) / 6
+                       < volumes.slice(-20, -6).reduce((a, b) => a + b, 0) / 14 * 0.75;
+      if (poleGain > 8  && tightFlag && volLow) weeklyPatterns.push("Weekly Bull Flag");
+      if (poleGain < -8 && tightFlag && volLow) weeklyPatterns.push("Weekly Bear Flag");
+    }
+
+    // Ascending / Descending Triangle (20 weeks)
+    if (n >= 20) {
+      const tH   = highs.slice(-20), tL = lows.slice(-20);
+      const maxH = Math.max(...tH),  minH = Math.min(...tH);
+      const maxL = Math.max(...tL),  minL = Math.min(...tL);
+      const flatTop     = maxH > 0 && (maxH - minH) / maxH < 0.04;
+      const risingLows  = tL[tL.length - 1] > tL[0] + (maxL - minL) * 0.3;
+      const flatBot     = maxL > 0 && (maxL - minL) / maxL < 0.04;
+      const fallingHighs = tH[tH.length - 1] < tH[0] - (maxH - minH) * 0.3;
+      if (flatTop  && risingLows)  weeklyPatterns.push("Weekly Ascending Triangle");
+      if (flatBot  && fallingHighs) weeklyPatterns.push("Weekly Descending Triangle");
+    }
+
+    // Cup & Handle on weekly (40-bar cup, 10-bar handle)
+    if (n >= 45) {
+      const cupC  = closes.slice(-40, -10);
+      const cupH  = highs.slice(-40,  -10);
+      const cupMax = Math.max(...cupH);
+      const midMin = Math.min(...closes.slice(-30, -15));
+      const isU    = midMin < cupMax * 0.90 && cupC[cupC.length - 1] > cupMax * 0.94;
+      if (isU) {
+        const handleMin = Math.min(...lows.slice(-10));
+        if (handleMin > cupMax * 0.87) weeklyPatterns.push("Weekly Cup and Handle");
+      }
+    }
+
+    // Double Bottom on weekly (last 50 bars)
+    if (n >= 25) {
+      const dbLows = lows.slice(-50);
+      const dbLen  = dbLows.length;
+      let v1Idx = 0;
+      for (let i = 1; i < dbLen; i++) if (dbLows[i] < dbLows[v1Idx]) v1Idx = i;
+      const v1 = dbLows[v1Idx];
+      if (v1Idx >= 3 && v1Idx <= dbLen - 8) {
+        const sliceClose = closes.slice(-(50 - v1Idx));
+        let peakVal = v1, peakIdx = v1Idx;
+        for (let i = v1Idx + 1; i < dbLen - 3; i++) {
+          const cv = closes[n - dbLen + i];
+          if (cv !== undefined && cv > peakVal) { peakVal = cv; peakIdx = i; }
+        }
+        if ((peakVal - v1) / v1 * 100 >= 5 && peakIdx > v1Idx) {
+          let v2 = dbLows[peakIdx], v2Idx = peakIdx;
+          for (let i = peakIdx + 1; i < dbLen; i++) if (dbLows[i] < v2) { v2 = dbLows[i]; v2Idx = i; }
+          if (Math.abs(v2 - v1) / v1 * 100 <= 6 && v2Idx >= dbLen - 20)
+            weeklyPatterns.push("Weekly Double Bottom");
+        }
+        void sliceClose;
+      }
+    }
+
+    // Double Top on weekly (last 50 bars)
+    if (n >= 25) {
+      const dtHighs = highs.slice(-50);
+      const dtLen   = dtHighs.length;
+      let p1Idx = 0;
+      for (let i = 1; i < dtLen; i++) if (dtHighs[i] > dtHighs[p1Idx]) p1Idx = i;
+      const p1 = dtHighs[p1Idx];
+      if (p1Idx >= 3 && p1Idx <= dtLen - 8) {
+        let troughVal = closes[n - dtLen + p1Idx] ?? p1, troughIdx = p1Idx;
+        for (let i = p1Idx + 1; i < dtLen - 3; i++) {
+          const cv = closes[n - dtLen + i];
+          if (cv !== undefined && cv < troughVal) { troughVal = cv; troughIdx = i; }
+        }
+        if ((p1 - troughVal) / p1 * 100 >= 5 && troughIdx > p1Idx) {
+          let p2 = dtHighs[troughIdx], p2Idx = troughIdx;
+          for (let i = troughIdx + 1; i < dtLen; i++) if (dtHighs[i] > p2) { p2 = dtHighs[i]; p2Idx = i; }
+          if (Math.abs(p2 - p1) / p1 * 100 <= 6 && p2Idx >= dtLen - 20)
+            weeklyPatterns.push("Weekly Double Top");
+        }
+      }
+    }
+
+    // Head & Shoulders / Inverse H&S on weekly
+    if (n >= 30) {
+      const hsH = highs.slice(-30), hsL = lows.slice(-30);
+      const hl  = hsH.length;
+      const mid = Math.floor(hl / 2);
+      const leftH  = Math.max(...hsH.slice(0, mid - 4));
+      const head   = Math.max(...hsH.slice(mid - 4, mid + 4));
+      const rightH = Math.max(...hsH.slice(mid + 4));
+      const leftL  = Math.min(...hsL.slice(0, mid - 4));
+      const headL  = Math.min(...hsL.slice(mid - 4, mid + 4));
+      const rightL = Math.min(...hsL.slice(mid + 4));
+      // H&S: head > shoulders, shoulders similar
+      if (head > leftH * 1.03 && head > rightH * 1.03 && Math.abs(leftH - rightH) / head < 0.06)
+        weeklyPatterns.push("Weekly Head and Shoulders");
+      // Inv H&S: head below shoulders
+      if (headL < leftL * 0.97 && headL < rightL * 0.97 && Math.abs(leftL - rightL) / Math.max(leftL, 1) < 0.06)
+        weeklyPatterns.push("Weekly Inv Head and Shoulders");
+    }
+  } catch {
+    // pattern detection failures are non-fatal
+  }
+
+  return {
+    cyclePhase,
+    cycleStrength,
+    distFrom52wHigh,
+    distFrom52wLow,
+    sma40Weekly,
+    sma40Rising,
+    priceVsSma40Weekly,
+    weeklyPatterns,
+    weeklyRsi,
+  };
+}

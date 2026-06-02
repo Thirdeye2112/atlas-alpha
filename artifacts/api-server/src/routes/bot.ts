@@ -15,7 +15,7 @@ import { logger } from "../lib/logger.js";
 
 // ── All pattern names produced by calcPatterns() in indicators.ts ─────────────
 const ALL_PATTERNS: string[] = [
-  // Structural / MA-based
+  // Structural / MA-based (daily)
   "Golden Cross", "Death Cross", "Volatility Squeeze",
   "BB Breakout", "BB Breakdown",
   "Bull Flag", "Bear Flag",
@@ -46,6 +46,17 @@ const ALL_PATTERNS: string[] = [
   "Morning Star", "Evening Star",
   "Morning Doji Star", "Evening Doji Star",
   "Abandoned Baby",
+];
+
+// ── Weekly timeframe patterns produced by calcMarketCycle() ──────────────────
+const WEEKLY_PATTERNS: string[] = [
+  "Weekly Golden Cross", "Weekly Death Cross",
+  "Weekly BB Breakout", "Weekly BB Breakdown", "Weekly Volatility Squeeze",
+  "Weekly Bull Flag", "Weekly Bear Flag",
+  "Weekly Ascending Triangle", "Weekly Descending Triangle",
+  "Weekly Cup and Handle",
+  "Weekly Double Bottom", "Weekly Double Top",
+  "Weekly Head and Shoulders", "Weekly Inv Head and Shoulders",
 ];
 
 const router = Router();
@@ -157,6 +168,10 @@ router.post("/bot/trades/:id/close", async (req, res): Promise<void> => {
 
 router.get("/bot/patterns", (_req, res): void => {
   res.json(ALL_PATTERNS);
+});
+
+router.get("/bot/weekly-patterns", (_req, res): void => {
+  res.json(WEEKLY_PATTERNS);
 });
 
 // ── Signal performance learning ───────────────────────────────────────────────

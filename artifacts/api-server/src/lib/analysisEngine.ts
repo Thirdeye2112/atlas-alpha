@@ -2,12 +2,12 @@ import { fetchQuote, fetchOHLCV, type OHLCVBar } from "./marketData.js";
 import {
   calcTrend, calcMomentum, calcVolume, calcVolatility, calcOptions,
   calcPatterns, calcRelativeStrength, calcChartSignals, calcRegimeIndicators,
-  calcExhaustion, calcFibLevels, calcVolumeProfile, calcWeeklyContext,
+  calcExhaustion, calcFibLevels, calcVolumeProfile, calcWeeklyContext, calcMarketCycle,
   type TrendResult, type MomentumResult, type VolumeResult,
   type VolatilityResult, type OptionsResult, type PatternResult,
   type RelativeStrengthResult, type ChartSignal, type RegimeIndicators,
   type ExhaustionResult, type FibLevelsResult, type VolumeProfileResult,
-  type WeeklyContextResult,
+  type WeeklyContextResult, type MarketCycleResult,
 } from "./indicators.js";
 import { calcAtlasScore, type AtlasAlphaScore } from "./scoring.js";
 import { calcPatternOverlaysMultiTF, type PatternOverlay } from "./patternOverlays.js";
@@ -35,6 +35,7 @@ export interface AnalysisResult {
   fibLevels: FibLevelsResult | null;
   volumeProfile: VolumeProfileResult | null;
   weeklyContext: WeeklyContextResult | null;
+  marketCycle: MarketCycleResult | null;
   pullbackSetup: PullbackReversalResult | null;
   historicalDate?: string;
   cachedAt: string;
@@ -80,6 +81,7 @@ function buildResult(
   const fibLevels     = lightMode ? null : calcFibLevels(bars);
   const volumeProfile = lightMode ? null : calcVolumeProfile(bars);
   const weeklyContext = lightMode ? null : calcWeeklyContext(weeklyBars);
+  const marketCycle   = lightMode ? null : calcMarketCycle(weeklyBars);
   const pullbackSetup = calcPullbackReversal(bars, trend, momentum, volume, exhaustion);
 
   return {
@@ -99,6 +101,7 @@ function buildResult(
     fibLevels,
     volumeProfile,
     weeklyContext,
+    marketCycle,
     pullbackSetup,
     ...(historicalDate ? { historicalDate } : {}),
     cachedAt: new Date().toISOString(),

@@ -3,6 +3,7 @@ import { eq, desc, and, sql } from "drizzle-orm";
 import Anthropic from "@anthropic-ai/sdk";
 import { getOrStartScanJob } from "./scanJob.js";
 import { runFullAnalysis, type AnalysisResult } from "./analysisEngine.js";
+import { analysisCache } from "./cache.js";
 import { logger } from "./logger.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -29,6 +30,8 @@ export interface EnrichedTrade extends PaperTrade {
   unrealizedPnlPct?: number;
   unrealizedPnlDollar?: number;
   holdDays?: number;
+  currentCyclePhase?: string;
+  currentWeeklyPatterns?: string[];
 }
 
 export interface BotStats {
@@ -95,6 +98,12 @@ function getFieldValue(a: AnalysisResult, field: string): FieldValue {
     case "exhaustion":          return a.exhaustion.exhaustionSignal;
     case "pullbackClass":       return a.pullbackSetup?.classification ?? "unknown";
     case "patterns":            return (a.patterns?.patterns ?? []) as string[];
+    case "cyclePhase":          return a.marketCycle?.cyclePhase ?? "ranging";
+    case "weeklyPatterns":      return (a.marketCycle?.weeklyPatterns ?? []) as string[];
+    case "distFrom52wHigh":     return a.marketCycle?.distFrom52wHigh ?? 0;
+    case "sma40Rising":         return a.marketCycle?.sma40Rising ? "yes" : "no";
+    case "weeklyRsi":           return a.marketCycle?.weeklyRsi ?? a.momentum.rsi;
+    case "priceVsSma40Weekly":  return a.marketCycle?.priceVsSma40Weekly ?? 0;
     default:                    return 0;
   }
 }
@@ -347,15 +356,20 @@ export async function getEnrichedTrades(status: "open" | "closed" | "all" = "all
 
     if (trade.status !== "open") return { ...trade, holdDays };
 
-    const analysis = job.analyses.find(a => (a.quote.ticker as string) === trade.ticker);
+    // Prefer the full-mode cache (has marketCycle) over the lightMode scan-job result
+    const fullCached   = analysisCache.get<AnalysisResult>(`analysis:${trade.ticker}`);
+    const scanAnalysis = job.analyses.find(a => (a.quote.ticker as string) === trade.ticker);
+    const analysis     = fullCached ?? scanAnalysis;
     if (!analysis) return { ...trade, holdDays };
 
-    const currentPrice      = analysis.quote.price as number;
-    const currentScore      = analysis.atlasScore.overall;
-    const unrealizedPnlPct  = ((currentPrice - trade.entryPrice) / trade.entryPrice) * 100;
+    const currentPrice        = analysis.quote.price as number;
+    const currentScore        = analysis.atlasScore.overall;
+    const unrealizedPnlPct    = ((currentPrice - trade.entryPrice) / trade.entryPrice) * 100;
     const unrealizedPnlDollar = (trade.shares ?? 0) * (currentPrice - trade.entryPrice);
+    const currentCyclePhase     = analysis.marketCycle?.cyclePhase;
+    const currentWeeklyPatterns = analysis.marketCycle?.weeklyPatterns;
 
-    return { ...trade, currentPrice, currentScore, unrealizedPnlPct, unrealizedPnlDollar, holdDays };
+    return { ...trade, currentPrice, currentScore, unrealizedPnlPct, unrealizedPnlDollar, holdDays, currentCyclePhase, currentWeeklyPatterns };
   });
 }
 
