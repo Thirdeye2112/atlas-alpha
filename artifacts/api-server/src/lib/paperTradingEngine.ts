@@ -6,7 +6,7 @@ import { smartEntryGate } from "./entryGate.js";
 import { runFullAnalysis, type AnalysisResult } from "./analysisEngine.js";
 import { analysisCache } from "./cache.js";
 import { logger } from "./logger.js";
-import { getMarketContext, getIntelligenceVerdict, type MarketContext } from "./botIntelligence.js";
+import { getMarketContext, getIntelligenceVerdict, runSelfLearning, type MarketContext } from "./botIntelligence.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -438,6 +438,10 @@ async function closePosition(
       )
     ).catch(err => logger.warn({ err, ticker: trade.ticker }, "Failed to update pattern performance"));
   }
+
+  // Fire-and-forget: re-run self-learning immediately so the score threshold
+  // adapts as soon as this result is on record — no need to wait for EOD.
+  runSelfLearning().catch(err => logger.warn({ err, ticker: trade.ticker }, "Self-learning post-close failed"));
 }
 
 // ── Main cycle ────────────────────────────────────────────────────────────────
