@@ -5,6 +5,7 @@
  * Atlas Alpha - Quant Trading Signal Platform API
  * OpenAPI spec version: 0.1.0
  */
+import type { ScannerResultReversalUrgency } from './scannerResultReversalUrgency';
 import type { ScannerResultSignalStrength } from './scannerResultSignalStrength';
 
 export interface ScannerResult {
@@ -37,4 +38,10 @@ export interface ScannerResult {
   assetType?: string;
   /** True for leveraged ETFs and VIX-futures products with structural decay */
   isDistorted?: boolean;
+  /** 0-100 reversal short conviction (Double Top, Distribution Top, H&S, parabolic) */
+  reversalScore?: number | null;
+  /** Human-readable list of reversal signals that fired */
+  reversalTriggers?: string[] | null;
+  /** forming (<60), confirmed (60-77), extended (≥78) */
+  reversalUrgency?: ScannerResultReversalUrgency;
 }

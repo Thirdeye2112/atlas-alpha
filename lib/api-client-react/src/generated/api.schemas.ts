@@ -602,6 +602,18 @@ export const ScannerResultSignalStrength = {
   weak: 'weak',
 } as const;
 
+/**
+ * forming (<60), confirmed (60-77), extended (≥78)
+ */
+export type ScannerResultReversalUrgency = typeof ScannerResultReversalUrgency[keyof typeof ScannerResultReversalUrgency] | null;
+
+
+export const ScannerResultReversalUrgency = {
+  forming: 'forming',
+  confirmed: 'confirmed',
+  extended: 'extended',
+} as const;
+
 export interface ScannerResult {
   ticker: string;
   name: string;
@@ -632,6 +644,12 @@ export interface ScannerResult {
   assetType?: string;
   /** True for leveraged ETFs and VIX-futures products with structural decay */
   isDistorted?: boolean;
+  /** 0-100 reversal short conviction (Double Top, Distribution Top, H&S, parabolic) */
+  reversalScore?: number | null;
+  /** Human-readable list of reversal signals that fired */
+  reversalTriggers?: string[] | null;
+  /** forming (<60), confirmed (60-77), extended (≥78) */
+  reversalUrgency?: ScannerResultReversalUrgency;
 }
 
 export interface ScannerResponse {
@@ -1167,6 +1185,10 @@ limit?: number;
 };
 
 export type GetScannerGapDownParams = {
+limit?: number;
+};
+
+export type GetScannerReversalShortParams = {
 limit?: number;
 };
 

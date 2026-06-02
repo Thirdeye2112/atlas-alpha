@@ -14,6 +14,7 @@ import {
   useGetScannerGapUp,                getGetScannerGapUpQueryKey,
   useGetScannerGapDown,              getGetScannerGapDownQueryKey,
   useGetScannerKeyLevels,            getGetScannerKeyLevelsQueryKey,
+  useGetScannerReversalShort,        getGetScannerReversalShortQueryKey,
   useGetStockOhlcv,                  getGetStockOhlcvQueryKey,
   type ScannerResponse,
   type ScannerResult,
@@ -576,6 +577,108 @@ function ScannerTable({
   );
 }
 
+// ── Reversal Short Table ──────────────────────────────────────────────────────
+
+type ReversalRow = ScannerResult & {
+  reversalScore?: number | null;
+  reversalTriggers?: string[] | null;
+  reversalUrgency?: string | null;
+};
+
+function ReversalShortTable({ response, isLoading }: { response?: ScannerResponse; isLoading: boolean }) {
+  const rows = (response?.results ?? []) as ReversalRow[];
+  const complete = response?.complete ?? false;
+
+  const urgencyColor = (u?: string | null) => {
+    if (u === "extended")  return "bg-destructive/20 text-destructive border border-destructive/40";
+    if (u === "confirmed") return "bg-rose-700/20 text-rose-400 border border-rose-700/40";
+    return "bg-warning/15 text-warning border border-warning/30";
+  };
+
+  if (isLoading && rows.length === 0) {
+    return <ScanProgress done={0} total={0} />;
+  }
+  if (rows.length === 0 && complete) {
+    return (
+      <div className="p-8 text-center text-muted-foreground font-mono text-sm">
+        NO REVERSAL SHORT SETUPS DETECTED — MARKET MAY BE TRENDING CLEANLY
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-auto">
+      {response && !complete && <ScanProgress done={response.progress.done} total={response.progress.total} />}
+      <table className="w-full text-sm font-mono text-left">
+        <thead className="bg-muted/50 text-muted-foreground border-b border-border sticky top-0 z-10">
+          <tr>
+            <th className="px-3 py-2 w-24">TICKER</th>
+            <th className="px-3 py-2">NAME</th>
+            <th className="px-3 py-2 text-right w-20">PRICE</th>
+            <th className="px-3 py-2 text-right w-20">CHG%</th>
+            <th className="px-3 py-2 text-right w-20">SCORE</th>
+            <th className="px-3 py-2 text-center w-28">REV SCORE</th>
+            <th className="px-3 py-2 text-right w-16">RSI</th>
+            <th className="px-3 py-2 text-right w-16">RVOL</th>
+            <th className="px-3 py-2">REVERSAL SIGNALS</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {rows.map(row => (
+            <tr key={row.ticker} className="hover:bg-muted/30 transition-colors">
+              <td className="px-3 py-2">
+                <Link
+                  href={`/?ticker=${row.ticker}`}
+                  className="text-primary font-bold hover:underline"
+                >
+                  {row.ticker}
+                </Link>
+              </td>
+              <td className="px-3 py-2 text-muted-foreground truncate max-w-[160px]">{row.name}</td>
+              <td className="px-3 py-2 text-right">{formatCurrency(row.price)}</td>
+              <td className={cn("px-3 py-2 text-right", row.changePercent >= 0 ? "text-success" : "text-destructive")}>
+                {formatPercent(row.changePercent)}
+              </td>
+              <td className="px-3 py-2 text-right">
+                <span className={cn("px-1.5 py-0.5 rounded text-xs font-bold", getBgColorForScore(row.atlasScore))}>
+                  {row.atlasScore}
+                </span>
+              </td>
+              <td className="px-3 py-2 text-center">
+                {row.reversalScore != null ? (
+                  <div className="flex flex-col items-center gap-0.5">
+                    <span className={cn("text-xs font-bold px-1.5 py-0.5 rounded font-mono", urgencyColor(row.reversalUrgency))}>
+                      {row.reversalScore}
+                    </span>
+                    <span className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase">
+                      {row.reversalUrgency ?? "forming"}
+                    </span>
+                  </div>
+                ) : <span className="text-muted-foreground">—</span>}
+              </td>
+              <td className={cn("px-3 py-2 text-right", row.rsi > 70 ? "text-destructive" : row.rsi < 30 ? "text-success" : "")}>
+                {row.rsi.toFixed(1)}
+              </td>
+              <td className={cn("px-3 py-2 text-right", row.relativeVolume > 2 ? "text-warning" : "")}>
+                {row.relativeVolume.toFixed(1)}x
+              </td>
+              <td className="px-3 py-2">
+                <div className="flex flex-wrap gap-1">
+                  {(row.reversalTriggers ?? []).map((t, i) => (
+                    <span key={i} className="text-xs px-1.5 py-0.5 rounded font-mono bg-destructive/15 text-destructive/90 border border-destructive/20">
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // ── Custom Scan ───────────────────────────────────────────────────────────────
 
 type CsFieldType = "number" | "enum" | "string" | "array";
@@ -997,9 +1100,10 @@ export default function Scanner() {
   const { data: gapUp,        isLoading: guLoading   } = useGetScannerGapUp({ limit },       { query: qOpts(getGetScannerGapUpQueryKey({ limit }))       });
   const { data: gapDown,      isLoading: gdLoading   } = useGetScannerGapDown({ limit },     { query: qOpts(getGetScannerGapDownQueryKey({ limit }))     });
   const { data: keyLevels,    isLoading: klLoading   } = useGetScannerKeyLevels({ limit },   { query: qOpts(getGetScannerKeyLevelsQueryKey({ limit }))   });
+  const { data: reversalShort,isLoading: rsLoading   } = useGetScannerReversalShort({ limit },{ query: qOpts(getGetScannerReversalShortQueryKey({ limit })) });
 
   // Derive overall scan progress from the active-tab response (all tabs share the same job)
-  const anyResponse = longs ?? shorts ?? breakouts ?? breakdowns ?? gapSetupLong ?? gapSetupShort ?? gapUp ?? gapDown ?? gamma ?? ss ?? inst ?? mean ?? keyLevels;
+  const anyResponse = longs ?? shorts ?? breakouts ?? breakdowns ?? gapSetupLong ?? gapSetupShort ?? gapUp ?? gapDown ?? gamma ?? ss ?? inst ?? mean ?? keyLevels ?? reversalShort;
   const scanComplete = anyResponse?.complete ?? false;
 
   return (
@@ -1047,7 +1151,8 @@ export default function Scanner() {
           <TabsTrigger value="ss"         className="font-mono text-xs data-[state=active]:bg-warning data-[state=active]:text-warning-foreground">SHORT SQUEEZE</TabsTrigger>
           <TabsTrigger value="inst"       className="font-mono text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">INST ACCUM</TabsTrigger>
           <TabsTrigger value="mean"       className="font-mono text-xs data-[state=active]:bg-muted-foreground data-[state=active]:text-background">MEAN REVERSION</TabsTrigger>
-          <TabsTrigger value="key-levels" className="font-mono text-xs data-[state=active]:bg-cyan-700 data-[state=active]:text-white">KEY LEVELS</TabsTrigger>
+          <TabsTrigger value="key-levels"     className="font-mono text-xs data-[state=active]:bg-cyan-700 data-[state=active]:text-white">KEY LEVELS</TabsTrigger>
+          <TabsTrigger value="reversal-short" className="font-mono text-xs data-[state=active]:bg-rose-700 data-[state=active]:text-white">⚠ REVERSAL SHORT</TabsTrigger>
           <TabsTrigger value="custom" className="font-mono text-xs data-[state=active]:bg-violet-700 data-[state=active]:text-white">✦ CUSTOM SCAN</TabsTrigger>
         </TabsList>
 
@@ -1090,6 +1195,21 @@ export default function Scanner() {
               DIST% column shows distance to the nearest level — <span className="text-warning">amber ≤ 0.5%</span>, <span className="text-primary">blue ≤ 1%</span>.
             </div>
             <ScannerTable response={keyLevels} isLoading={klLoading} showKeyLevel />
+          </TabsContent>
+          <TabsContent value="reversal-short" className="m-0 h-full flex flex-col gap-3">
+            <div className="border border-rose-700/30 rounded-md bg-rose-700/5 px-4 py-2.5 text-xs font-mono text-muted-foreground leading-relaxed shrink-0">
+              <span className="text-rose-400 font-bold mr-2">⚠ REVERSAL SHORT DETECTION</span>
+              Stocks forming potential <span className="text-foreground">tops</span> based on structural exhaustion signals — identified{" "}
+              <span className="text-foreground">before</span> the Atlas Score direction flips bearish. Signals: Double Top ·
+              Distribution Top · Head &amp; Shoulders · Parabolic Rise · Bearish candlestick reversal · RSI divergence ·
+              BB extension · Wick rejection ratio. Sorted by <span className="text-foreground">Reversal Score</span> (min 45 to appear).
+              Conviction tiers: <span className="text-warning">FORMING ≥45</span> · <span className="text-rose-400">CONFIRMED ≥60</span> · <span className="text-destructive font-bold">EXTENDED ≥78</span>.
+              <br />
+              <span className="text-muted-foreground/60">
+                Urgency and triggers are shown in the Catalysts column. Use alongside the Dashboard backtest strip to size entries — short at resistance, stop above the recent peak.
+              </span>
+            </div>
+            <ReversalShortTable response={reversalShort} isLoading={rsLoading} />
           </TabsContent>
           <TabsContent value="custom" className="m-0 h-full flex flex-col gap-4">
             <div className="border border-violet-700/30 rounded-md bg-violet-700/5 px-4 py-2.5 text-xs font-mono text-muted-foreground leading-relaxed shrink-0">

@@ -88,6 +88,7 @@ interface PaperTrade {
   holdDays?: number;
   currentCyclePhase?: string;
   currentWeeklyPatterns?: string[];
+  reversalRisk?: { score: number; triggers: string[]; urgency: string } | null;
 }
 
 interface SignalGroup {
@@ -1139,7 +1140,7 @@ function PositionsTab({ trades, onClose }: { trades: PaperTrade[]; onClose: (id:
                 title={t.decisionLog ? "Click to see why this trade was entered" : undefined}
               >
                 <td className="py-2 px-2">
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <div className="font-bold text-primary">{t.ticker}</div>
                     <span className={cn(
                       "text-[9px] font-bold font-mono px-1 py-0.5 rounded border",
@@ -1149,6 +1150,21 @@ function PositionsTab({ trades, onClose }: { trades: PaperTrade[]; onClose: (id:
                     )}>
                       {isShort ? "SHORT" : "LONG"}
                     </span>
+                    {!isShort && t.reversalRisk && t.reversalRisk.score >= 45 && (
+                      <span
+                        title={`Reversal signals: ${t.reversalRisk.triggers.join(", ")}`}
+                        className={cn(
+                          "text-[8px] font-bold font-mono px-1 py-0.5 rounded border cursor-help",
+                          t.reversalRisk.urgency === "extended"
+                            ? "bg-destructive/20 text-destructive border-destructive/40"
+                            : t.reversalRisk.urgency === "confirmed"
+                              ? "bg-rose-700/20 text-rose-400 border-rose-700/40"
+                              : "bg-warning/15 text-warning border-warning/30",
+                        )}
+                      >
+                        ⚠ REVERSAL {t.reversalRisk.score}
+                      </span>
+                    )}
                   </div>
                   <div className="text-muted-foreground/60 text-[10px] max-w-[100px] truncate">{t.name}</div>
                   {t.scannerCategories && t.scannerCategories.length > 0 && (

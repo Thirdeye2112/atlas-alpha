@@ -378,6 +378,26 @@ paths:
               schema:
                 $ref: "#/components/schemas/ScannerResponse"
 
+  /scanner/reversal-short:
+    get:
+      operationId: getScannerReversalShort
+      tags: [scanner]
+      summary: Reversal short setups — double tops, distribution tops, overbought H&S
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 25
+      responses:
+        "200":
+          description: Reversal short candidates sorted by reversal conviction score
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScannerResponse"
+
   /scanner/custom:
     post:
       operationId: runCustomScan
@@ -1572,6 +1592,21 @@ components:
         isDistorted:
           type: boolean
           description: "True for leveraged ETFs and VIX-futures products with structural decay"
+        reversalScore:
+          type: number
+          nullable: true
+          description: "0-100 reversal short conviction (Double Top, Distribution Top, H&S, parabolic)"
+        reversalTriggers:
+          type: array
+          nullable: true
+          items:
+            type: string
+          description: "Human-readable list of reversal signals that fired"
+        reversalUrgency:
+          type: string
+          nullable: true
+          enum: [forming, confirmed, extended]
+          description: "forming (<60), confirmed (60-77), extended (≥78)"
       required:
         - ticker
         - name

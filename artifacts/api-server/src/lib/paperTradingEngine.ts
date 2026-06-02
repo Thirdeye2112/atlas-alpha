@@ -7,6 +7,7 @@ import { runFullAnalysis, type AnalysisResult } from "./analysisEngine.js";
 import { analysisCache } from "./cache.js";
 import { logger } from "./logger.js";
 import { getMarketContext, getIntelligenceVerdict, runSelfLearning, type MarketContext } from "./botIntelligence.js";
+import { calcReversalScore, computeReversalShortLevels } from "./reversalShort.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -26,6 +27,12 @@ export interface BotCycleResult {
   runAt: string;
 }
 
+export interface ReversalRisk {
+  score:    number;
+  triggers: string[];
+  urgency:  "forming" | "confirmed" | "extended";
+}
+
 export interface EnrichedTrade extends PaperTrade {
   currentPrice?: number;
   currentScore?: number;
@@ -34,6 +41,7 @@ export interface EnrichedTrade extends PaperTrade {
   holdDays?: number;
   currentCyclePhase?: string;
   currentWeeklyPatterns?: string[];
+  reversalRisk?: ReversalRisk | null;
 }
 
 export interface BotStats {
@@ -804,6 +812,62 @@ export async function runBotCycle(): Promise<BotCycleResult> {
           newEntries.push(a.quote.ticker as string);
           filled++;
         }
+
+        // ── Reversal short pass ──────────────────────────────────────────────────
+        // Enters shorts based on technical reversal signals (double top, distribution
+        // top, H&S, parabolic rise) BEFORE the overall direction flips bearish.
+        // Optimal entry: at the second peak / resistance level with a tight stop
+        // above it — NOT waiting for the breakdown (which is the trend-following path).
+        const reversalPool = pool.filter(a =>
+          !heldSet.has(a.quote.ticker as string) && !newEntries.includes(a.quote.ticker as string)
+        );
+        for (const ra of reversalPool) {
+          if (filled >= slotsAvailable) break;
+
+          const revSignal = calcReversalScore(ra);
+          if (revSignal.score < 60) continue;
+
+          // Don't fight a clean strong uptrend — require higher conviction
+          if (ra.atlasScore.overall > 80 && ra.atlasScore.trendScore > 75 && revSignal.score < 76) continue;
+
+          // Alignment gate still applies
+          if ((ra.atlasScore.alignmentScore ?? 100) < 40) continue;
+
+          const revLevels = computeReversalShortLevels(ra, revSignal);
+          if (!revLevels) continue;
+
+          const dRevLog: Record<string, unknown> = {
+            regime:           marketCtx.regime,
+            botRegime:        marketCtx.botRegime,
+            adx:              marketCtx.adx,
+            vix:              marketCtx.vix,
+            subScores: {
+              trend:    ra.atlasScore.trendScore,
+              momentum: ra.atlasScore.momentumScore,
+              volume:   ra.atlasScore.volumeScore,
+              rs:       ra.atlasScore.relativeStrengthScore,
+              regime:   ra.atlasScore.marketRegimeScore,
+              options:  ra.atlasScore.optionsScore,
+            },
+            alignmentScore:    ra.atlasScore.alignmentScore,
+            reversalScore:     revSignal.score,
+            reversalTriggers:  revSignal.triggers,
+            reversalUrgency:   revSignal.urgency,
+            resistanceLevel:   revSignal.resistanceLevel,
+            entryTrigger:      revLevels.trigger,
+            categories:        ["reversal_short"],
+          };
+
+          await openPosition(ra, config, revLevels, null, ["reversal_short"], 1.0, dRevLog);
+          newEntries.push(ra.quote.ticker as string);
+          filled++;
+          logger.info(
+            { ticker: ra.quote.ticker, reversalScore: revSignal.score,
+              triggers: revSignal.triggers, stop: revLevels.stopPrice.toFixed(2),
+              urgency: revSignal.urgency },
+            "Bot: reversal short entry",
+          );
+        }
       }
     }
 
@@ -868,7 +932,17 @@ export async function getEnrichedTrades(status: "open" | "closed" | "all" = "all
     const currentCyclePhase     = analysis.marketCycle?.cyclePhase;
     const currentWeeklyPatterns = analysis.marketCycle?.weeklyPatterns;
 
-    return { ...trade, currentPrice, currentScore, unrealizedPnlPct, unrealizedPnlDollar, holdDays, currentCyclePhase, currentWeeklyPatterns };
+    // Reversal risk: flag open LONG positions where technical signals suggest
+    // a developing top — gives the user early warning before direction flips.
+    let reversalRisk: ReversalRisk | null = null;
+    if (!tradeIsShort) {
+      const rev = calcReversalScore(analysis);
+      if (rev.score >= 45) {
+        reversalRisk = { score: rev.score, triggers: rev.triggers, urgency: rev.urgency };
+      }
+    }
+
+    return { ...trade, currentPrice, currentScore, unrealizedPnlPct, unrealizedPnlDollar, holdDays, currentCyclePhase, currentWeeklyPatterns, reversalRisk };
   });
 }
 

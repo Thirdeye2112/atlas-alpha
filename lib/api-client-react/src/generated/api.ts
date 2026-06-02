@@ -44,6 +44,7 @@ import type {
   GetScannerInstitutionalAccumulationParams,
   GetScannerKeyLevelsParams,
   GetScannerMeanReversionParams,
+  GetScannerReversalShortParams,
   GetScannerShortSqueezeParams,
   GetScannerTopLongsParams,
   GetScannerTopShortsParams,
@@ -1463,6 +1464,90 @@ export function useGetScannerGapDown<TData = Awaited<ReturnType<typeof getScanne
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetScannerGapDownQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetScannerReversalShortUrl = (params?: GetScannerReversalShortParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/scanner/reversal-short?${stringifiedParams}` : `/api/scanner/reversal-short`
+}
+
+/**
+ * @summary Reversal short setups — double tops, distribution tops, overbought H&S
+ */
+export const getScannerReversalShort = async (params?: GetScannerReversalShortParams, options?: RequestInit): Promise<ScannerResponse> => {
+
+  return customFetch<ScannerResponse>(getGetScannerReversalShortUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetScannerReversalShortQueryKey = (params?: GetScannerReversalShortParams,) => {
+    return [
+    `/api/scanner/reversal-short`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetScannerReversalShortQueryOptions = <TData = Awaited<ReturnType<typeof getScannerReversalShort>>, TError = ErrorType<unknown>>(params?: GetScannerReversalShortParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getScannerReversalShort>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetScannerReversalShortQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getScannerReversalShort>>> = ({ signal }) => getScannerReversalShort(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getScannerReversalShort>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetScannerReversalShortQueryResult = NonNullable<Awaited<ReturnType<typeof getScannerReversalShort>>>
+export type GetScannerReversalShortQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Reversal short setups — double tops, distribution tops, overbought H&S
+ */
+
+export function useGetScannerReversalShort<TData = Awaited<ReturnType<typeof getScannerReversalShort>>, TError = ErrorType<unknown>>(
+ params?: GetScannerReversalShortParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getScannerReversalShort>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetScannerReversalShortQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

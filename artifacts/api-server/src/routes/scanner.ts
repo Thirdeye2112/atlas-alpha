@@ -4,6 +4,7 @@ import { calcScannerResult } from "../lib/scoring.js";
 import { getAssetType, isStructurallyDistorted } from "../lib/scannerUniverse.js";
 import { logger } from "../lib/logger.js";
 import type { AnalysisResult } from "../lib/analysisEngine.js";
+import { calcReversalScore } from "../lib/reversalShort.js";
 
 const router: IRouter = Router();
 
@@ -643,6 +644,43 @@ router.post("/scanner/custom", (req, res): void => {
   } catch (err) {
     logger.error({ err }, "Custom scan failed");
     res.status(500).json({ error: "Custom scan failed" });
+  }
+});
+
+// ── Reversal Short ────────────────────────────────────────────────────────────
+// Identifies stocks forming potential tops BEFORE direction flips bearish.
+// Scored on double top, distribution top, H&S, parabolic rise, overbought RSI,
+// bearish candles and wick ratio. Min score 45 to appear; sorted desc by score.
+
+router.get("/scanner/reversal-short", (req, res): void => {
+  const limit = Math.min(Number(req.query.limit) || 25, 50);
+  try {
+    const job  = getOrStartScanJob();
+    const rows = job.analyses
+      .map(a => {
+        const rev = calcReversalScore(a);
+        if (rev.score < 45) return null;
+        const base = toRow(a) as Record<string, unknown>;
+        return {
+          ...base,
+          reversalScore:    rev.score,
+          reversalTriggers: rev.triggers,
+          reversalUrgency:  rev.urgency,
+        };
+      })
+      .filter((r): r is NonNullable<typeof r> => r !== null)
+      .sort((a, b) => (b.reversalScore as number) - (a.reversalScore as number))
+      .slice(0, limit);
+
+    res.json({
+      results:  rows,
+      progress: { done: job.done, total: job.total },
+      complete: job.complete,
+      scannedAt: job.completedAt ?? job.startedAt,
+    });
+  } catch (err) {
+    logger.error({ err }, "Scanner reversal-short failed");
+    res.json({ results: [], progress: { done: 0, total: 0 }, complete: true });
   }
 });
 

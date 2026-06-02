@@ -323,7 +323,10 @@ export const GetScannerTopLongsResponse = zod.object({
   "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
   "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)'),
   "assetType": zod.string().optional().describe('equity | etf | leveraged-etf | volatility-etf | bond-etf | commodity-etf | international-etf'),
-  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay')
+  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay'),
+  "reversalScore": zod.number().nullish().describe('0-100 reversal short conviction (Double Top, Distribution Top, H&S, parabolic)'),
+  "reversalTriggers": zod.array(zod.string()).nullish().describe('Human-readable list of reversal signals that fired'),
+  "reversalUrgency": zod.enum(['forming', 'confirmed', 'extended']).nullish().describe('forming (<60), confirmed (60-77), extended (≥78)')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -366,7 +369,10 @@ export const GetScannerTopShortsResponse = zod.object({
   "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
   "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)'),
   "assetType": zod.string().optional().describe('equity | etf | leveraged-etf | volatility-etf | bond-etf | commodity-etf | international-etf'),
-  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay')
+  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay'),
+  "reversalScore": zod.number().nullish().describe('0-100 reversal short conviction (Double Top, Distribution Top, H&S, parabolic)'),
+  "reversalTriggers": zod.array(zod.string()).nullish().describe('Human-readable list of reversal signals that fired'),
+  "reversalUrgency": zod.enum(['forming', 'confirmed', 'extended']).nullish().describe('forming (<60), confirmed (60-77), extended (≥78)')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -409,7 +415,10 @@ export const GetScannerBreakoutsResponse = zod.object({
   "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
   "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)'),
   "assetType": zod.string().optional().describe('equity | etf | leveraged-etf | volatility-etf | bond-etf | commodity-etf | international-etf'),
-  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay')
+  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay'),
+  "reversalScore": zod.number().nullish().describe('0-100 reversal short conviction (Double Top, Distribution Top, H&S, parabolic)'),
+  "reversalTriggers": zod.array(zod.string()).nullish().describe('Human-readable list of reversal signals that fired'),
+  "reversalUrgency": zod.enum(['forming', 'confirmed', 'extended']).nullish().describe('forming (<60), confirmed (60-77), extended (≥78)')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -452,7 +461,10 @@ export const GetScannerBreakdownsResponse = zod.object({
   "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
   "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)'),
   "assetType": zod.string().optional().describe('equity | etf | leveraged-etf | volatility-etf | bond-etf | commodity-etf | international-etf'),
-  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay')
+  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay'),
+  "reversalScore": zod.number().nullish().describe('0-100 reversal short conviction (Double Top, Distribution Top, H&S, parabolic)'),
+  "reversalTriggers": zod.array(zod.string()).nullish().describe('Human-readable list of reversal signals that fired'),
+  "reversalUrgency": zod.enum(['forming', 'confirmed', 'extended']).nullish().describe('forming (<60), confirmed (60-77), extended (≥78)')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -495,7 +507,10 @@ export const GetScannerGammaSqueezeResponse = zod.object({
   "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
   "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)'),
   "assetType": zod.string().optional().describe('equity | etf | leveraged-etf | volatility-etf | bond-etf | commodity-etf | international-etf'),
-  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay')
+  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay'),
+  "reversalScore": zod.number().nullish().describe('0-100 reversal short conviction (Double Top, Distribution Top, H&S, parabolic)'),
+  "reversalTriggers": zod.array(zod.string()).nullish().describe('Human-readable list of reversal signals that fired'),
+  "reversalUrgency": zod.enum(['forming', 'confirmed', 'extended']).nullish().describe('forming (<60), confirmed (60-77), extended (≥78)')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -538,7 +553,10 @@ export const GetScannerShortSqueezeResponse = zod.object({
   "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
   "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)'),
   "assetType": zod.string().optional().describe('equity | etf | leveraged-etf | volatility-etf | bond-etf | commodity-etf | international-etf'),
-  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay')
+  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay'),
+  "reversalScore": zod.number().nullish().describe('0-100 reversal short conviction (Double Top, Distribution Top, H&S, parabolic)'),
+  "reversalTriggers": zod.array(zod.string()).nullish().describe('Human-readable list of reversal signals that fired'),
+  "reversalUrgency": zod.enum(['forming', 'confirmed', 'extended']).nullish().describe('forming (<60), confirmed (60-77), extended (≥78)')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -581,7 +599,10 @@ export const GetScannerInstitutionalAccumulationResponse = zod.object({
   "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
   "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)'),
   "assetType": zod.string().optional().describe('equity | etf | leveraged-etf | volatility-etf | bond-etf | commodity-etf | international-etf'),
-  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay')
+  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay'),
+  "reversalScore": zod.number().nullish().describe('0-100 reversal short conviction (Double Top, Distribution Top, H&S, parabolic)'),
+  "reversalTriggers": zod.array(zod.string()).nullish().describe('Human-readable list of reversal signals that fired'),
+  "reversalUrgency": zod.enum(['forming', 'confirmed', 'extended']).nullish().describe('forming (<60), confirmed (60-77), extended (≥78)')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -624,7 +645,10 @@ export const GetScannerMeanReversionResponse = zod.object({
   "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
   "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)'),
   "assetType": zod.string().optional().describe('equity | etf | leveraged-etf | volatility-etf | bond-etf | commodity-etf | international-etf'),
-  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay')
+  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay'),
+  "reversalScore": zod.number().nullish().describe('0-100 reversal short conviction (Double Top, Distribution Top, H&S, parabolic)'),
+  "reversalTriggers": zod.array(zod.string()).nullish().describe('Human-readable list of reversal signals that fired'),
+  "reversalUrgency": zod.enum(['forming', 'confirmed', 'extended']).nullish().describe('forming (<60), confirmed (60-77), extended (≥78)')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -667,7 +691,10 @@ export const GetScannerGapSetupLongResponse = zod.object({
   "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
   "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)'),
   "assetType": zod.string().optional().describe('equity | etf | leveraged-etf | volatility-etf | bond-etf | commodity-etf | international-etf'),
-  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay')
+  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay'),
+  "reversalScore": zod.number().nullish().describe('0-100 reversal short conviction (Double Top, Distribution Top, H&S, parabolic)'),
+  "reversalTriggers": zod.array(zod.string()).nullish().describe('Human-readable list of reversal signals that fired'),
+  "reversalUrgency": zod.enum(['forming', 'confirmed', 'extended']).nullish().describe('forming (<60), confirmed (60-77), extended (≥78)')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -710,7 +737,10 @@ export const GetScannerGapSetupShortResponse = zod.object({
   "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
   "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)'),
   "assetType": zod.string().optional().describe('equity | etf | leveraged-etf | volatility-etf | bond-etf | commodity-etf | international-etf'),
-  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay')
+  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay'),
+  "reversalScore": zod.number().nullish().describe('0-100 reversal short conviction (Double Top, Distribution Top, H&S, parabolic)'),
+  "reversalTriggers": zod.array(zod.string()).nullish().describe('Human-readable list of reversal signals that fired'),
+  "reversalUrgency": zod.enum(['forming', 'confirmed', 'extended']).nullish().describe('forming (<60), confirmed (60-77), extended (≥78)')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -753,7 +783,10 @@ export const GetScannerKeyLevelsResponse = zod.object({
   "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
   "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)'),
   "assetType": zod.string().optional().describe('equity | etf | leveraged-etf | volatility-etf | bond-etf | commodity-etf | international-etf'),
-  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay')
+  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay'),
+  "reversalScore": zod.number().nullish().describe('0-100 reversal short conviction (Double Top, Distribution Top, H&S, parabolic)'),
+  "reversalTriggers": zod.array(zod.string()).nullish().describe('Human-readable list of reversal signals that fired'),
+  "reversalUrgency": zod.enum(['forming', 'confirmed', 'extended']).nullish().describe('forming (<60), confirmed (60-77), extended (≥78)')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -796,7 +829,10 @@ export const GetScannerGapUpResponse = zod.object({
   "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
   "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)'),
   "assetType": zod.string().optional().describe('equity | etf | leveraged-etf | volatility-etf | bond-etf | commodity-etf | international-etf'),
-  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay')
+  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay'),
+  "reversalScore": zod.number().nullish().describe('0-100 reversal short conviction (Double Top, Distribution Top, H&S, parabolic)'),
+  "reversalTriggers": zod.array(zod.string()).nullish().describe('Human-readable list of reversal signals that fired'),
+  "reversalUrgency": zod.enum(['forming', 'confirmed', 'extended']).nullish().describe('forming (<60), confirmed (60-77), extended (≥78)')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -839,7 +875,56 @@ export const GetScannerGapDownResponse = zod.object({
   "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
   "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)'),
   "assetType": zod.string().optional().describe('equity | etf | leveraged-etf | volatility-etf | bond-etf | commodity-etf | international-etf'),
-  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay')
+  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay'),
+  "reversalScore": zod.number().nullish().describe('0-100 reversal short conviction (Double Top, Distribution Top, H&S, parabolic)'),
+  "reversalTriggers": zod.array(zod.string()).nullish().describe('Human-readable list of reversal signals that fired'),
+  "reversalUrgency": zod.enum(['forming', 'confirmed', 'extended']).nullish().describe('forming (<60), confirmed (60-77), extended (≥78)')
+})),
+  "progress": zod.object({
+  "done": zod.number(),
+  "total": zod.number()
+}),
+  "complete": zod.boolean()
+})
+
+
+/**
+ * @summary Reversal short setups — double tops, distribution tops, overbought H&S
+ */
+export const getScannerReversalShortQueryLimitDefault = 25;
+
+export const GetScannerReversalShortQueryParams = zod.object({
+  "limit": zod.coerce.number().default(getScannerReversalShortQueryLimitDefault)
+})
+
+export const GetScannerReversalShortResponse = zod.object({
+  "results": zod.array(zod.object({
+  "ticker": zod.string(),
+  "name": zod.string(),
+  "price": zod.number(),
+  "change": zod.number(),
+  "changePercent": zod.number(),
+  "gapPercent": zod.number(),
+  "atlasScore": zod.number(),
+  "atlasLabel": zod.string(),
+  "bullishProbability": zod.number(),
+  "bearishProbability": zod.number(),
+  "confidenceScore": zod.number(),
+  "direction": zod.string(),
+  "signalStrength": zod.enum(['strong', 'moderate', 'weak']),
+  "sector": zod.string().nullable(),
+  "volume": zod.number(),
+  "relativeVolume": zod.number(),
+  "rsi": zod.number(),
+  "catalysts": zod.array(zod.string()),
+  "gapSetupScore": zod.number().nullish().describe('0-100 gap probability score (ATR×40% + BBWidth×35% + RVOL×25% vs research baselines)'),
+  "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
+  "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)'),
+  "assetType": zod.string().optional().describe('equity | etf | leveraged-etf | volatility-etf | bond-etf | commodity-etf | international-etf'),
+  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay'),
+  "reversalScore": zod.number().nullish().describe('0-100 reversal short conviction (Double Top, Distribution Top, H&S, parabolic)'),
+  "reversalTriggers": zod.array(zod.string()).nullish().describe('Human-readable list of reversal signals that fired'),
+  "reversalUrgency": zod.enum(['forming', 'confirmed', 'extended']).nullish().describe('forming (<60), confirmed (60-77), extended (≥78)')
 })),
   "progress": zod.object({
   "done": zod.number(),
@@ -894,7 +979,10 @@ export const RunCustomScanResponse = zod.object({
   "earningsDaysAway": zod.number().nullish().describe('Days until next earnings; null if not available or >14 days away'),
   "keyLevelDist": zod.number().nullish().describe('% distance to nearest key level (SMA50, SMA200, BB+, BB−, swing S\/R)'),
   "assetType": zod.string().optional().describe('equity | etf | leveraged-etf | volatility-etf | bond-etf | commodity-etf | international-etf'),
-  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay')
+  "isDistorted": zod.boolean().optional().describe('True for leveraged ETFs and VIX-futures products with structural decay'),
+  "reversalScore": zod.number().nullish().describe('0-100 reversal short conviction (Double Top, Distribution Top, H&S, parabolic)'),
+  "reversalTriggers": zod.array(zod.string()).nullish().describe('Human-readable list of reversal signals that fired'),
+  "reversalUrgency": zod.enum(['forming', 'confirmed', 'extended']).nullish().describe('forming (<60), confirmed (60-77), extended (≥78)')
 })),
   "progress": zod.object({
   "done": zod.number(),
