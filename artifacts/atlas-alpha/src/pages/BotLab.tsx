@@ -698,7 +698,7 @@ function ConfigTab({ config, onSaved }: { config: BotConfig; onSaved: () => void
         </div>
 
         {rows.length === 0 && (
-          <div className="text-xs font-mono text-muted-foreground/40 italic py-1">No filters — bot will open positions on highest-scoring tickers.</div>
+          <div className="text-xs font-mono text-muted-foreground/40 italic py-1">No filters — bot trades any direction (long or short) based on highest signal confidence.</div>
         )}
 
         {rows.map(row => {
