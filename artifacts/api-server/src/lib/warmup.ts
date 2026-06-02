@@ -3,6 +3,7 @@ import { runFullAnalysis } from "./analysisEngine.js";
 import { fetchYahooRaw } from "./marketData.js";
 import { runOhlcvBackfill, getBackfillState } from "./ohlcvStore.js";
 import { analysisCache, ohlcvCache, quoteCache } from "./cache.js";
+import { getOrStartScanJob } from "./scanJob.js";
 import { logger } from "./logger.js";
 
 // ── Warmup state ──────────────────────────────────────────────────────────────
@@ -162,6 +163,31 @@ export function startScheduler(): void {
   }, 60_000); // poll every minute
 
   logger.info("Warmup scheduler started (fires at 09:30 and 16:30 ET on trading days)");
+}
+
+// ── Learning scheduler ────────────────────────────────────────────────────────
+// Triggers the scan job (which auto-saves signal snapshots + resolves outcomes)
+// every 30 minutes on weekdays — completely independent of any user activity.
+// The scan job has its own 30-min TTL deduplication, so overlapping calls are safe.
+
+const LEARNING_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
+
+export function startLearningScheduler(): void {
+  // Initial scan: 30 seconds after startup (lets warmup settle first)
+  setTimeout(() => {
+    getOrStartScanJob();
+    logger.info("Learning scheduler: startup scan triggered");
+  }, 30_000);
+
+  // Recurring scan every 30 min, weekdays only
+  setInterval(() => {
+    const { day } = etHourMinute();
+    if (day === 0 || day === 6) return; // skip Saturday (6) and Sunday (0)
+    getOrStartScanJob();
+    logger.info("Learning scheduler: periodic scan triggered");
+  }, LEARNING_INTERVAL_MS);
+
+  logger.info("Learning scheduler started (scans every 30 min, Mon–Fri)");
 }
 
 // ── Cache stats helper ────────────────────────────────────────────────────────

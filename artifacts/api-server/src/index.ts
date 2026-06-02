@@ -1,6 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { runWarmup, startScheduler } from "./lib/warmup";
+import { runWarmup, startScheduler, startLearningScheduler } from "./lib/warmup";
 import { hydrateFromDb } from "./lib/dbCache";
 import { initCalibrationFromDB } from "./lib/calibrationStore";
 
@@ -39,6 +39,11 @@ app.listen(port, (err) => {
       .catch(err => logger.error({ err }, "Startup warmup failed"));
   });
 
-  // Schedule twice-daily refreshes: market open (09:30 ET) and market close (16:30 ET)
+  // Schedule twice-daily cache refreshes: market open (09:30 ET) and close (16:30 ET)
   startScheduler();
+
+  // Learning scheduler: triggers a full scan every 30 min on weekdays so the
+  // snapshot engine keeps accumulating signal state and resolving outcomes
+  // even when no one has the app open.
+  startLearningScheduler();
 });
