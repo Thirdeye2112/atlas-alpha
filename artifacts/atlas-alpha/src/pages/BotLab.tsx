@@ -1081,7 +1081,33 @@ function WhyPanel({ log }: { log: DecisionLog }) {
 
 function PositionsTab({ trades, onClose }: { trades: PaperTrade[]; onClose: (id: number) => void }) {
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [sortKey, setSortKey] = useState<"ticker" | "entryPrice" | "currentPrice" | "unrealizedPnlPct" | "currentScore" | "holdDays">("unrealizedPnlPct");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const open = trades.filter(t => t.status === "open");
+
+  function toggleSort(k: typeof sortKey) {
+    if (sortKey === k) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortKey(k); setSortDir("desc"); }
+  }
+
+  const SortTh = ({ label, k, align = "right" }: { label: string; k: typeof sortKey; align?: "left" | "right" | "center" }) => (
+    <th
+      className={cn(
+        "py-2 px-2 cursor-pointer hover:text-foreground transition-colors whitespace-nowrap select-none",
+        align === "left" ? "text-left" : align === "center" ? "text-center" : "text-right"
+      )}
+      onClick={() => toggleSort(k)}
+    >
+      {label}{sortKey === k ? <span className="ml-1 opacity-70">{sortDir === "asc" ? "↑" : "↓"}</span> : <span className="ml-1 opacity-20">↕</span>}
+    </th>
+  );
+
+  const sortedOpen = [...open].sort((a, b) => {
+    const av = (a[sortKey] as number | string | null | undefined) ?? (sortKey === "ticker" ? "" : -Infinity);
+    const bv = (b[sortKey] as number | string | null | undefined) ?? (sortKey === "ticker" ? "" : -Infinity);
+    const diff = av < bv ? -1 : av > bv ? 1 : 0;
+    return sortDir === "asc" ? diff : -diff;
+  });
 
   if (open.length === 0) {
     return (
@@ -1096,20 +1122,20 @@ function PositionsTab({ trades, onClose }: { trades: PaperTrade[]; onClose: (id:
       <table className="w-full text-xs font-mono">
         <thead>
           <tr className="border-b border-border text-muted-foreground">
-            <th className="text-left py-2 px-2">TICKER</th>
-            <th className="text-right py-2 px-2">ENTRY</th>
-            <th className="text-right py-2 px-2">CURRENT</th>
-            <th className="text-right py-2 px-2">P&L</th>
+            <SortTh label="TICKER" k="ticker" align="left" />
+            <SortTh label="ENTRY" k="entryPrice" />
+            <SortTh label="CURRENT" k="currentPrice" />
+            <SortTh label="P&L" k="unrealizedPnlPct" />
             <th className="text-left py-2 px-2">RISK LEVELS</th>
             <th className="text-left py-2 px-2">TRIGGER</th>
-            <th className="text-right py-2 px-2">SCORE</th>
+            <SortTh label="SCORE" k="currentScore" />
             <th className="text-center py-2 px-2">CYCLE</th>
-            <th className="text-right py-2 px-2">HOLD</th>
+            <SortTh label="HOLD" k="holdDays" />
             <th className="text-center py-2 px-2">CLOSE</th>
           </tr>
         </thead>
         <tbody>
-          {open.map(t => {
+          {sortedOpen.map(t => {
             const price   = t.currentPrice ?? t.entryPrice;
             const stop    = t.trailingStopPrice ?? t.stopPrice;
             const target  = t.targetPrice;
