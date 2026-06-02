@@ -10,7 +10,7 @@ import { logger } from "./logger.js";
 
 export interface CustomCriterion {
   field: string;
-  operator: "gt" | "lt" | "gte" | "lte" | "eq" | "neq" | "between" | "contains" | "notContains";
+  operator: "gt" | "lt" | "gte" | "lte" | "eq" | "neq" | "between" | "contains" | "notContains" | "includes";
   value: number | string;
   value2?: number;
 }
@@ -104,12 +104,19 @@ function getFieldValue(a: AnalysisResult, field: string): FieldValue {
     case "sma40Rising":         return a.marketCycle?.sma40Rising ? "yes" : "no";
     case "weeklyRsi":           return a.marketCycle?.weeklyRsi ?? a.momentum.rsi;
     case "priceVsSma40Weekly":  return a.marketCycle?.priceVsSma40Weekly ?? 0;
+    case "pattern":             return (a.patterns?.patterns ?? []) as string[];
     default:                    return 0;
   }
 }
 
 function applyCustomCriterion(a: AnalysisResult, c: CustomCriterion): boolean {
   const raw = getFieldValue(a, c.field);
+  // "includes" — exact-match membership test (used by the pattern picker UI)
+  if (c.operator === "includes") {
+    const arr = Array.isArray(raw) ? raw : [String(raw)];
+    const needle = String(c.value);
+    return arr.some(s => s === needle);
+  }
   if (c.operator === "contains" || c.operator === "notContains") {
     const arr = Array.isArray(raw) ? raw : [String(raw)];
     const needle = String(c.value).toLowerCase();

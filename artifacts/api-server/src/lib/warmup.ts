@@ -93,9 +93,11 @@ export async function runWarmup(label = "startup"): Promise<void> {
     "Cache warmup complete"
   );
 
-  // Fire-and-forget: ensure all 373 tickers have 2Y of daily bars in ohlcv_history.
-  // First boot does a full 2Y seed (~2 min background job); subsequent boots
-  // only fetch the missing tail (last bar → today) and skip up-to-date tickers.
+  // Fire-and-forget: ensure all tickers (now ~580 after S&P 500 + NASDAQ 100 expansion)
+  // have 2Y of daily bars in ohlcv_history. runOhlcvBackfill internally diffs each ticker
+  // against the DB: tickers with 400+ fresh bars are skipped; newly added tickers get a
+  // full 2Y seed; existing tickers only fetch the missing tail (last bar → today).
+  // Rate-limited to 5 tickers/batch with 1.5s delay to avoid Yahoo Finance throttling.
   if (!getBackfillState().running) {
     runOhlcvBackfill(SCANNER_UNIVERSE, fetchYahooRaw).catch(err =>
       logger.error({ err, label }, "OHLCV backfill failed")

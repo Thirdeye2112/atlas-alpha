@@ -13,8 +13,12 @@ import {
 } from "../lib/paperTradingEngine.js";
 import { logger } from "../lib/logger.js";
 
-// ── All pattern names produced by calcPatterns() in indicators.ts ─────────────
-const ALL_PATTERNS: string[] = [
+/**
+ * Canonical list of detectable pattern names — matches the strings emitted
+ * by calcPatterns() in indicators.ts. Kept as a static array so the
+ * frontend picker is always in sync without parsing the engine at runtime.
+ */
+export const DETECTABLE_PATTERNS: string[] = [
   // Structural / MA-based (daily)
   "Golden Cross", "Death Cross", "Volatility Squeeze",
   "BB Breakout", "BB Breakdown",
@@ -164,10 +168,10 @@ router.post("/bot/trades/:id/close", async (req, res): Promise<void> => {
   }
 });
 
-// ── Pattern catalogue ─────────────────────────────────────────────────────────
+// ── Patterns ──────────────────────────────────────────────────────────────────
 
 router.get("/bot/patterns", (_req, res): void => {
-  res.json(ALL_PATTERNS);
+  res.json({ patterns: DETECTABLE_PATTERNS });
 });
 
 router.get("/bot/weekly-patterns", (_req, res): void => {

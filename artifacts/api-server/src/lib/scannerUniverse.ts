@@ -6,12 +6,12 @@ export const SCANNER_UNIVERSE: string[] = [
   "DIS", "CMCSA", "T", "VZ", "TMUS",
 
   // ── Mid-cap Technology & Software ─────────────────────────────────────────
-  "MRVL", "ON", "SMCI", "ARM", "NET", "DDOG", "ZS", "OKTA", "TEAM", "WDAY",
-  "VEEV", "KEYS", "TER", "SWKS", "MPWR", "ENTG", "ENPH", "FSLR", "SEDG",
-  "SHOP", "ZM", "ROKU", "RBLX", "U", "LYFT", "UBER", "GRAB",
+  "MRVL", "ON", "ARM", "NET", "DDOG", "ZS", "OKTA", "TEAM", "WDAY",
+  "VEEV", "KEYS", "TER", "SWKS", "MPWR", "ENTG", "ENPH", "FSLR",
+  "SHOP", "ZM", "ROKU", "UBER",
 
   // ── Fintech / Crypto-adjacent ──────────────────────────────────────────────
-  "PYPL", "SQ", "COIN", "MSTR", "HOOD", "SOFI", "NU",
+  "PYPL", "SQ", "COIN", "SOFI",
 
   // ── Financials — Banks, Insurance, Asset Managers ─────────────────────────
   "JPM", "BAC", "WFC", "GS", "MS", "C", "AXP", "BLK", "SCHW", "USB",
@@ -26,7 +26,7 @@ export const SCANNER_UNIVERSE: string[] = [
 
   // ── Consumer Discretionary ────────────────────────────────────────────────
   "HD", "MCD", "NKE", "SBUX", "LOW", "TGT", "TJX", "ROST", "BKNG", "MELI",
-  "ORLY", "AZO", "F", "GM", "RIVN", "DHI", "LEN", "TSCO", "ULTA", "LULU",
+  "ORLY", "AZO", "F", "GM", "DHI", "LEN", "TSCO", "ULTA", "LULU",
   "EBAY", "ABNB", "DASH", "EXPE", "MAR", "HLT", "CCL", "RCL", "MGM",
 
   // ── Consumer Staples ──────────────────────────────────────────────────────
@@ -53,14 +53,11 @@ export const SCANNER_UNIVERSE: string[] = [
   "PLD", "AMT", "EQIX", "CCI", "SBAC", "DLR", "PSA", "EQR", "AVB", "O",
   "VTR", "WELL", "SPG", "MAA", "ARE",
 
-  // ── High-momentum / Speculative ───────────────────────────────────────────
-  "PLTR", "IONQ", "GME", "AMC", "PTON", "PLUG", "RKLB", "JOBY", "SNOW",
-
-  // ── China / Emerging ──────────────────────────────────────────────────────
-  "BABA", "JD", "PDD", "BIDU", "NIO",
+  // ── High-growth S&P 500 additions ─────────────────────────────────────────
+  "PLTR", "SNOW",
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // ── S&P 500 COMPLETIONS ────────────────────────────────────────────────────
+  // ── S&P 500 COMPLETIONS (ROUND 1) ─────────────────────────────────────────
   // ═══════════════════════════════════════════════════════════════════════════
 
   // ── Financials ────────────────────────────────────────────────────────────
@@ -74,7 +71,7 @@ export const SCANNER_UNIVERSE: string[] = [
 
   // ── Communication Services ────────────────────────────────────────────────
   "CHTR",                                          // Cable / broadband
-  "WBD", "NWSA", "FOX",                             // Media
+  "WBD", "NWSA", "FOX",                            // Media
   "LYV",                                           // Live events
   "EA", "TTWO",                                    // Video games
   "OMC", "IPG",                                    // Advertising agencies
@@ -94,8 +91,8 @@ export const SCANNER_UNIVERSE: string[] = [
   "KVUE",                                          // Kenvue (J&J spin-off)
 
   // ── Energy ────────────────────────────────────────────────────────────────
-  "PR",                                            // Permian Resources — Permian E&P (replaced MRO)
-  "OKE", "TRGP",                                  // Midstream
+  "PR",                                            // Permian Resources
+  "OKE", "TRGP",                                   // Midstream
   "LNG",                                           // Cheniere (LNG exports)
   "EQT",                                           // Natural gas E&P
 
@@ -119,7 +116,7 @@ export const SCANNER_UNIVERSE: string[] = [
   "NXPI", "MCHP",                                  // Semiconductors (Nasdaq-100)
   "FTNT", "AKAM", "FFIV", "GRMN",                 // Networking / security
   "ROP", "TYL", "PAYC", "HUBS", "MANH", "IT",    // Enterprise software
-  "CTSH", "EPAM", "GDDY",                          // IT services
+  "CTSH", "GDDY",                                  // IT services
   "FICO", "TRMB", "ZBRA",                          // Analytics / decisioning
   "PSTG", "GEN",                                   // Storage / security software
   "LDOS",                                          // Defense IT services
@@ -143,165 +140,158 @@ export const SCANNER_UNIVERSE: string[] = [
   "NRG", "EIX", "AEE", "FE", "PPL", "ETR", "PEG", "AES",
   "CEG", "VST",                                    // Clean / nuclear power gen
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // ── RUSSELL 1000 NOTABLE MID-CAPS ─────────────────────────────────────────
-  // High-growth names outside the S&P 500 core. Elevated gap frequency makes
-  // them ideal for gap-setup and short-squeeze scans.
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  // High-growth Tech
-  "APP",   // AppLovin — digital advertising
-  "DUOL",  // Duolingo — edtech
-  "MNDY",  // Monday.com — work OS
-  "TOST",  // Toast — restaurant tech
-  "DT",    // Dynatrace — observability
-  "PATH",  // UiPath — RPA automation
-  "MDB",   // MongoDB — database
-  "CFLT",  // Confluent — data streaming
-  "GTLB",  // GitLab — DevSecOps
-  "DOCS",  // Doximity — medical networking
-  "BILL",  // Bill.com — SMB payments
-  "ZI",    // ZoomInfo — B2B data
-  "BRZE",  // Braze — customer engagement
-  "TTD",   // The Trade Desk — programmatic ads
-  "IOT",     // Samsara — connected operations platform (ticker: IOT)
-
-  // Consumer / Retail mid-caps
-  "DKNG",  // DraftKings — sports betting
-  "CAVA",  // CAVA Group — fast casual
-  "CELH",  // Celsius Holdings — energy drinks
-  "HIMS",  // Hims & Hers Health
-  "RDDT",  // Reddit — social media
-  "AFRM",  // Affirm — BNPL payments
-  "CART",  // Maplebear (Instacart)
-
-  // Healthcare / Biotech mid-caps
-  "NTRA",  // Natera — genetic testing
-  "PCVX",  // Vaxcyte — vaccines
-  "RXRX",  // Recursion Pharma — AI drug discovery
-
-  // Clean energy mid-caps
-  "RUN",   // Sunrun — residential solar
-  "BE",    // Bloom Energy — fuel cells
+  // ── S&P 500 high-growth additions ─────────────────────────────────────────
+  "APP",   // AppLovin — S&P 500 digital advertising
+  "DT",    // Dynatrace — NASDAQ 100 observability
+  "TTD",   // The Trade Desk — NASDAQ 100 programmatic ads
 
   // ── US Broad-Market Index ETFs ────────────────────────────────────────────
-  // S&P 500
-  "SPY", "IVV", "VOO", "RSP", "OEF", "SPYG", "SPYV",
-  // Nasdaq
-  "QQQ", "QQQM", "ONEQ", "QQEW",
-  // Dow Jones
+  "SPY", "IVV", "VOO",
+  "QQQ",
   "DIA",
-  // Russell
-  "IWM", "IWB", "IWV", "IWF", "IWD", "IWO", "IWN",
-  // S&P 400 Mid-Cap
-  "MDY", "IJH",
-  // S&P 600 Small-Cap
-  "IJR", "SPSM",
-  // Total US Market
-  "VTI", "ITOT", "SCHB",
-  // Growth / Value
-  "VUG", "VTV", "MGC", "MGK", "MGV",
-  // Equal-weight & factor
-  "EUSA", "QUAL", "MTUM", "VLUE", "SIZE",
-  // Volatility
+  "IWM",
+  "VTI",
+  "VUG", "VTV",
   "VXX", "UVXY", "SVXY",
-  // Leveraged index
   "TQQQ", "SQQQ", "UPRO", "SPXU", "SSO", "SDS", "DDM", "DXD",
 
-  // ── Sector ETFs (SPDR + Vanguard) ────────────────────────────────────────
+  // ── Sector ETFs (SPDR) ────────────────────────────────────────────────────
   "XLK", "XLF", "XLE", "XLV", "XLP", "XLI", "XLY", "XLU", "XLB", "XLRE", "XLC",
-  "VGT", "VFH", "VDE", "VHT", "VDC", "VIS", "VCR", "VPU", "VAW",
+  "VGT",
 
   // ── Commodities & Bonds ───────────────────────────────────────────────────
   "GLD", "SLV", "GDX", "GDXJ", "USO", "UNG",
   "TLT", "TBT", "TMF", "IEF", "SHY", "AGG", "BND", "LQD", "HYG", "JNK",
 
   // ── International & Emerging ─────────────────────────────────────────────
-  "EEM", "IEMG", "EFA", "VEA", "ARKK",
+  "EEM", "EFA",
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // ── S&P 500 / NASDAQ 100 COMPLETIONS (ROUND 2) ────────────────────────────
-  // Tickers confirmed in S&P 500 or NASDAQ 100 not yet in universe above.
+  // ── S&P 500 / NASDAQ 100 COMPLETIONS (MERGED) ─────────────────────────────
+  // Union of all confirmed S&P 500 / NASDAQ 100 members not covered above.
   // ═══════════════════════════════════════════════════════════════════════════
 
-  // ── Financials (missing S&P 500) ─────────────────────────────────────────
-  "GOOG",   // Alphabet Class C (NASDAQ 100 — distinct from GOOGL)
-  "AFL",    // Aflac — supplemental insurance
-  "GL",     // Globe Life — life & health insurance
-  "UNM",    // Unum Group — employee benefits
-  "CMA",    // Comerica — Texas-based regional bank
-  "CINF",   // Cincinnati Financial — P&C insurance
-  "FDS",    // FactSet Research Systems — financial data (NASDAQ 100)
-  "ERIE",   // Erie Indemnity — property & casualty insurance
+  // ── Financials ────────────────────────────────────────────────────────────
+  "GOOG",   // Alphabet Class C — NASDAQ 100 (distinct share class from GOOGL)
+  "AFL",    // Aflac — S&P 500 supplemental insurance
+  "GL",     // Globe Life — S&P 500 life & health insurance
+  "UNM",    // Unum Group — S&P 500 employee benefits
+  "CMA",    // Comerica — S&P 500 regional bank
+  "CINF",   // Cincinnati Financial — S&P 500 P&C insurance
+  "FDS",    // FactSet Research — NASDAQ 100 financial data
+  "ERIE",   // Erie Indemnity — S&P 500 property & casualty insurance
+  "BRO",    // Brown & Brown — S&P 500 insurance brokerage
+  "CPAY",   // Corpay — S&P 500 payments
+  "EG",     // Everest Group — S&P 500 reinsurance
+  "MKTX",   // MarketAxess — S&P 500 bond trading platform
+  "WPC",    // W. P. Carey — S&P 500 net-lease REIT
+  "ZION",   // Zions Bancorp — S&P 500 regional bank
 
-  // ── Healthcare (missing S&P 500) ─────────────────────────────────────────
-  "TECH",   // Bio-Techne — life science reagents
-  "DGX",    // Quest Diagnostics — lab services
-  "LH",     // LabCorp — diagnostics & drug development
-  "XRAY",   // Dentsply Sirona — dental products
-  "BIO",    // Bio-Rad Laboratories — life science tools
-  "STE",    // STERIS — healthcare sterilization
-  "SOLV",   // Solventum — 3M Health spin-off
+  // ── Healthcare ────────────────────────────────────────────────────────────
+  "TECH",   // Bio-Techne — S&P 500 life science reagents
+  "DGX",    // Quest Diagnostics — S&P 500 lab services
+  "LH",     // LabCorp — S&P 500 diagnostics
+  "XRAY",   // Dentsply Sirona — S&P 500 dental products
+  "BIO",    // Bio-Rad Laboratories — S&P 500 life science tools
+  "STE",    // STERIS — S&P 500 healthcare sterilization
+  "BMRN",   // BioMarin Pharmaceutical — NASDAQ 100 rare disease
+  "DVA",    // DaVita — S&P 500 dialysis services
+  "ILMN",   // Illumina — NASDAQ 100 genomic sequencing
+  "TFX",    // Teleflex — S&P 500 medical devices
+  "UHS",    // Universal Health Services — S&P 500 hospitals
+  "WAT",    // Waters Corp — S&P 500 analytical instruments
+  "WST",    // West Pharma Services — S&P 500 drug delivery
+  "ZBH",    // Zimmer Biomet — S&P 500 orthopedic implants
 
-  // ── Technology (missing S&P 500 / NASDAQ 100) ────────────────────────────
-  "STX",    // Seagate Technology — HDD storage (NASDAQ)
-  "ANSS",   // Ansys — simulation software (NASDAQ 100)
-  "CSGP",   // CoStar Group — commercial real estate data (NASDAQ 100)
-  "GFS",    // GlobalFoundries — semiconductor foundry (NASDAQ)
-  "MTCH",   // Match Group — online dating apps (NASDAQ 100)
-  "WEX",    // WEX Inc. — fleet / health payment solutions
+  // ── Technology ────────────────────────────────────────────────────────────
+  "ADI",    // Analog Devices — NASDAQ 100 semiconductor
+  "ADSK",   // Autodesk — NASDAQ 100 design software
+  "ANSS",   // ANSYS — NASDAQ 100 simulation software
+  "ASML",   // ASML Holding — NASDAQ 100 lithography (ADR)
+  "APH",    // Amphenol — S&P 500 connectors / sensors
+  "CSGP",   // CoStar Group — NASDAQ 100 real estate data
+  "FIS",    // Fidelity National Information — S&P 500 payments
+  "FISV",   // Fiserv — S&P 500 fintech
+  "GPN",    // Global Payments — S&P 500 payment processing
+  "JKHY",   // Jack Henry & Associates — S&P 500 banking tech
+  "MSCI",   // MSCI Inc — S&P 500 index / analytics
+  "PTC",    // PTC Inc — S&P 500 industrial IoT software
+  "STX",    // Seagate Technology — NASDAQ 100 hard drives
+  "TEL",    // TE Connectivity — S&P 500 connectors
+  "VRSN",   // VeriSign — NASDAQ 100 domain registry
 
-  // ── Consumer Discretionary (missing S&P 500) ─────────────────────────────
-  "PARA",   // Paramount Global — media & streaming
-  "LW",     // Lamb Weston — frozen potato products
-  "POOL",   // Pool Corporation — pool supply distribution
-  "LKQ",    // LKQ Corporation — auto parts
-  "RHI",    // Robert Half International — staffing
+  // ── Consumer Discretionary ────────────────────────────────────────────────
+  "BBWI",   // Bath & Body Works — S&P 500 specialty retail
+  "DG",     // Dollar General — S&P 500 discount retail
+  "FIVE",   // Five Below — S&P 500 value retail
+  "LKQ",    // LKQ Corp — S&P 500 auto parts
+  "MHK",    // Mohawk Industries — S&P 500 flooring
+  "MTCH",   // Match Group — S&P 500 dating apps
+  "PARA",   // Paramount Global — S&P 500 media & streaming
+  "POOL",   // Pool Corp — NASDAQ 100 pool supply distribution
+  "RHI",    // Robert Half — S&P 500 staffing
+  "SNA",    // Snap-on — S&P 500 professional tools
+  "URI",    // United Rentals — S&P 500 equipment rental
+  "WSM",    // Williams-Sonoma — S&P 500 home furnishings
 
-  // ── Consumer Staples (missing S&P 500) ───────────────────────────────────
-  "KMB",    // Kimberly-Clark — tissue & personal care
-  "ADM",    // Archer-Daniels-Midland — agricultural commodities
-  "KDP",    // Keurig Dr Pepper — beverages (NASDAQ 100)
+  // ── Consumer Staples ──────────────────────────────────────────────────────
+  "ADM",    // Archer-Daniels-Midland — S&P 500 ag processing
+  "BG",     // Bunge Global — S&P 500 ag commodities
+  "KDP",    // Keurig Dr Pepper — NASDAQ 100 beverages
+  "KMB",    // Kimberly-Clark — S&P 500 paper products
+  "LW",     // Lamb Weston — S&P 500 frozen potato products
 
-  // ── Industrials (missing S&P 500) ────────────────────────────────────────
-  "PCAR",   // Paccar — truck manufacturer (NASDAQ 100)
-  "GWW",    // W.W. Grainger — industrial distribution
-  "MAS",    // Masco Corporation — home improvement products
-  "OC",     // Owens Corning — building insulation & composites
-  "SNA",    // Snap-on — professional tools
-  "JCI",    // Johnson Controls International — building tech
-  "PNR",    // Pentair — water treatment
-  "IR",     // Ingersoll Rand — industrial equipment
-  "NVT",    // nVent Electric — electrical enclosures
-  "NDSN",   // Nordson Corporation — precision dispensing
-  "JKHY",   // Jack Henry & Associates — fintech for banks
-  "FLS",    // Flowserve — flow control equipment
-  "ROL",    // Rollins — pest control services
-  "HWM",    // Howmet Aerospace — engineered components
+  // ── Energy ────────────────────────────────────────────────────────────────
+  "HES",    // Hess Corp — S&P 500 E&P
+  "MRO",    // Marathon Oil — S&P 500 E&P
 
-  // ── Materials (missing S&P 500) ──────────────────────────────────────────
-  "STLD",   // Steel Dynamics — electric arc furnace steel
-  "RS",     // Reliance Steel & Aluminum — metals service center
-  "LYB",    // LyondellBasell Industries — polyolefins & chemicals
+  // ── Industrials ───────────────────────────────────────────────────────────
+  "ALK",    // Alaska Air — S&P 500 airline
+  "AOS",    // A.O. Smith — S&P 500 water heaters
+  "BAH",    // Booz Allen Hamilton — S&P 500 defense consulting
+  "CSX",    // CSX Corp — S&P 500 Class I railroad
+  "EME",    // EMCOR Group — S&P 500 electrical contractor
+  "FLS",    // Flowserve — S&P 500 flow control equipment
+  "GWW",    // W.W. Grainger — S&P 500 industrial distribution
+  "HII",    // Huntington Ingalls — S&P 500 naval shipbuilding
+  "HWM",    // Howmet Aerospace — S&P 500 aerospace structures
+  "IR",     // Ingersoll Rand — S&P 500 industrial equipment
+  "JCI",    // Johnson Controls — S&P 500 building tech
+  "MAS",    // Masco — S&P 500 home improvement products
+  "NDSN",   // Nordson — S&P 500 precision dispensing
+  "NSC",    // Norfolk Southern — S&P 500 Class I railroad
+  "NVT",    // nVent Electric — S&P 500 electrical enclosures
+  "OC",     // Owens Corning — S&P 500 insulation / composites
+  "PCAR",   // PACCAR — NASDAQ 100 heavy trucks
+  "PNR",    // Pentair — S&P 500 water treatment
+  "ROL",    // Rollins — S&P 500 pest control
+  "RXO",    // RXO Inc — S&P 500 freight brokerage
+  "STLD",   // Steel Dynamics — S&P 500 steel mini-mill
+  "TDY",    // Teledyne Technologies — S&P 500 defense instruments
+  "UNP",    // Union Pacific — S&P 500 Class I railroad
+  "WAB",    // Westinghouse Air Brake — S&P 500 rail equipment
+  "WHR",    // Whirlpool — S&P 500 home appliances
+  "XYL",    // Xylem — S&P 500 water technology
 
-  // ── Real Estate (missing S&P 500) ────────────────────────────────────────
-  "DOC",    // Healthpeak Properties — medical office & life science REITs
-  "HST",    // Host Hotels & Resorts — hotel REIT
+  // ── Materials ─────────────────────────────────────────────────────────────
+  "LYB",    // LyondellBasell — S&P 500 petrochemicals
+  "RS",     // Reliance Steel & Aluminum — S&P 500 metals service center
 
-  // ── Utilities (missing S&P 500) ──────────────────────────────────────────
-  "PCG",    // PG&E Corporation — California electric & gas
-  "ED",     // Consolidated Edison — NYC utility
-  "DTE",    // DTE Energy — Michigan electric & gas
-  "ATO",    // Atmos Energy — natural gas distribution
+  // ── Real Estate ───────────────────────────────────────────────────────────
+  "DOC",    // Healthpeak Properties — S&P 500 medical office REIT
+  "ESS",    // Essex Property Trust — S&P 500 West Coast apartments
+  "HST",    // Host Hotels & Resorts — S&P 500 lodging REIT
+  "REG",    // Regency Centers — S&P 500 grocery-anchored REIT
 
-  // ── Defense / Government Tech (completing S&P 500 coverage) ──────────────
-  "DRS",    // Leonardo DRS — defense electronics
-  "BWXT",   // BWX Technologies — nuclear components for US Navy
-  "MRCY",   // Mercury Systems — aerospace & defense processing
+  // ── Utilities ─────────────────────────────────────────────────────────────
+  "ATO",    // Atmos Energy — S&P 500 natural gas distribution
+  "DTE",    // DTE Energy — S&P 500 Michigan electric/gas
+  "ED",     // Consolidated Edison — S&P 500 NYC utility
+  "EVRG",   // Evergy — S&P 500 Kansas/Missouri utility
+  "PCG",    // PG&E — S&P 500 California electric & gas
 
-  // ── ADR Mega-caps (NASDAQ-listed, high liquidity) ─────────────────────────
-  "ASML",   // ASML Holding — EUV lithography (essential NASDAQ 100 component)
-  "AZN",    // AstraZeneca — UK pharma giant (NASDAQ-listed ADR)
+  // ── Communication Services ────────────────────────────────────────────────
+  "FOXA",   // Fox Corp Class A — S&P 500 news/media
 ];
 
 // ── Asset-type metadata ────────────────────────────────────────────────────
@@ -338,31 +328,35 @@ export const UNIVERSE_METADATA: Readonly<Record<string, AssetType>> = {
   USO: "commodity-etf", UNG: "commodity-etf",
 
   // International / emerging-market ETFs
-  EEM: "international-etf", IEMG: "international-etf",
-  EFA: "international-etf", VEA:  "international-etf",
-  ARKK: "international-etf",
+  EEM: "international-etf",
+  EFA: "international-etf",
 };
 
 const BROAD_ETF_SET = new Set<string>([
-  "SPY","IVV","VOO","RSP","OEF","SPYG","SPYV",
-  "QQQ","QQQM","ONEQ","QQEW","DIA",
-  "IWM","IWB","IWV","IWF","IWD","IWO","IWN",
-  "MDY","IJH","IJR","SPSM","VTI","ITOT","SCHB",
-  "VUG","VTV","MGC","MGK","MGV",
-  "EUSA","QUAL","MTUM","VLUE","SIZE",
-  "XLK","XLF","XLE","XLV","XLP","XLI","XLY","XLU","XLB","XLRE","XLC",
-  "VGT","VFH","VDE","VHT","VDC","VIS","VCR","VPU","VAW",
+  "SPY","IVV","VOO","QQQ","DIA","IWM","VTI","VUG","VTV",
+  "VXX","UVXY","SVXY",
+  "TQQQ","SQQQ","UPRO","SPXU","SSO","SDS","DDM","DXD",
+  "XLK","XLF","XLE","XLV","XLP","XLI","XLY","XLU","XLB","XLRE","XLC","VGT",
+  "GLD","SLV","GDX","GDXJ","USO","UNG",
+  "TLT","TBT","TMF","IEF","SHY","AGG","BND","LQD","HYG","JNK",
+  "EEM","EFA",
 ]);
 
-/** Returns the asset type for any ticker in the universe. */
+/**
+ * Classify a ticker by asset type.
+ * Checks the explicit UNIVERSE_METADATA override first, then falls back to
+ * heuristics (broad ETF set → "etf", everything else → "equity").
+ */
 export function getAssetType(ticker: string): AssetType {
-  return UNIVERSE_METADATA[ticker] ?? (BROAD_ETF_SET.has(ticker) ? "etf" : "equity");
+  if (ticker in UNIVERSE_METADATA) return UNIVERSE_METADATA[ticker];
+  if (BROAD_ETF_SET.has(ticker)) return "etf";
+  return "equity";
 }
 
 /**
- * Returns true for tickers with structurally distorted price dynamics:
- * leveraged daily-reset decay or VIX futures contango drag.
- * These should carry disclaimers in the scanner and use caution in backtests.
+ * Returns true for leveraged and volatility ETFs whose return distributions
+ * are structurally distorted by daily rebalancing / VIX-futures roll decay.
+ * These should be excluded from mean-reversion scoring and backtest analysis.
  */
 export function isStructurallyDistorted(ticker: string): boolean {
   const t = UNIVERSE_METADATA[ticker];

@@ -106,7 +106,7 @@ interface BotStatus {
 
 // ── Filter-builder constants (mirrors Scanner.tsx) ────────────────────────────
 
-type CsFieldType = "number" | "enum" | "string" | "array";
+type CsFieldType = "number" | "enum" | "string" | "array" | "pattern";
 interface CsFieldConfig { key: string; label: string; type: CsFieldType; options?: string[]; hint?: string }
 
 const CS_FIELDS: CsFieldConfig[] = [
@@ -138,18 +138,20 @@ const CS_FIELDS: CsFieldConfig[] = [
   { key: "weeklyRsi",          label: "Weekly RSI",          type: "number", hint: "0–100" },
   { key: "distFrom52wHigh",    label: "vs 52W High %",       type: "number", hint: "e.g. -10 = within 10%" },
   { key: "priceVsSma40Weekly", label: "vs Weekly SMA200 %",  type: "number", hint: "e.g. 5.0" },
+  { key: "pattern",            label: "Pattern",             type: "pattern" },
 ];
 
 const CS_OPS: Record<CsFieldType, { value: string; label: string }[]> = {
-  number: [
+  number:  [
     { value: "gte", label: "≥" }, { value: "lte", label: "≤" },
     { value: "gt",  label: ">" }, { value: "lt",  label: "<" },
     { value: "eq",  label: "=" }, { value: "neq", label: "≠" },
     { value: "between", label: "between" },
   ],
-  enum:   [{ value: "eq", label: "is" }, { value: "neq", label: "is not" }],
-  string: [{ value: "eq", label: "is" }, { value: "contains", label: "contains" }, { value: "notContains", label: "not contains" }],
-  array:  [{ value: "contains", label: "contains" }, { value: "notContains", label: "not contains" }],
+  enum:    [{ value: "eq", label: "is" }, { value: "neq", label: "is not" }],
+  string:  [{ value: "eq", label: "is" }, { value: "contains", label: "contains" }, { value: "notContains", label: "not contains" }],
+  array:   [{ value: "contains", label: "contains" }, { value: "notContains", label: "not contains" }],
+  pattern: [{ value: "includes", label: "includes" }],
 };
 
 interface BotPreset {
@@ -307,16 +309,19 @@ function ScoreChip({ score, dim }: { score: number | null; dim?: boolean }) {
 function ConfigTab({ config, onSaved }: { config: BotConfig; onSaved: () => void }) {
   const qc = useQueryClient();
 
-  const { data: availablePatterns = [] } = useQuery<string[]>({
+  const { data: patternsData } = useQuery<{ patterns: string[] }>({
     queryKey: ["bot-patterns"],
     queryFn:  () => apiFetch("bot/patterns"),
     staleTime: Infinity,
   });
-  const { data: availableWeeklyPatterns = [] } = useQuery<string[]>({
+  const { data: weeklyPatternsData } = useQuery<{ patterns: string[] }>({
     queryKey: ["bot-weekly-patterns"],
     queryFn:  () => apiFetch("bot/weekly-patterns"),
     staleTime: Infinity,
   });
+
+  const availablePatterns = patternsData?.patterns ?? [];
+  const availableWeeklyPatterns = weeklyPatternsData?.patterns ?? [];
   const [rows, setRows]             = useState<FilterRow[]>(() => criteriaToRows(config.entryCriteria));
   const [exitScore, setExitScore]   = useState(config.exitScoreThreshold);
   const [dirFlip, setDirFlip]       = useState(config.exitOnDirectionFlip);
@@ -395,10 +400,11 @@ function ConfigTab({ config, onSaved }: { config: BotConfig; onSaved: () => void
         )}
 
         {rows.map(row => {
-          const fc     = CS_FIELDS.find(f => f.key === row.field) ?? CS_FIELDS[0];
-          const ops    = CS_OPS[fc.type];
-          const isBetw = row.operator === "between";
-          const isEnum = fc.type === "enum";
+          const fc        = CS_FIELDS.find(f => f.key === row.field) ?? CS_FIELDS[0];
+          const ops       = CS_OPS[fc.type];
+          const isBetw    = row.operator === "between";
+          const isEnum    = fc.type === "enum";
+          const isPattern = fc.type === "pattern";
 
           return (
             <div key={row.id} className="flex items-center gap-1.5 flex-wrap">
@@ -410,7 +416,20 @@ function ConfigTab({ config, onSaved }: { config: BotConfig; onSaved: () => void
                 className="bg-background border border-border rounded px-2 py-1 text-xs font-mono focus:outline-none focus:border-primary w-[108px]">
                 {ops.map(op => <option key={op.value} value={op.value}>{op.label}</option>)}
               </select>
-              {isEnum ? (
+              {isPattern ? (
+                <>
+                  <input
+                    list="available-patterns"
+                    value={row.value}
+                    onChange={e => updateRow(row.id, { value: e.target.value })}
+                    placeholder="Search pattern..."
+                    className="bg-background border border-border rounded px-2 py-1 text-xs font-mono focus:outline-none focus:border-primary min-w-[200px]"
+                  />
+                  <datalist id="available-patterns">
+                    {availablePatterns.map(p => <option key={p} value={p} />)}
+                  </datalist>
+                </>
+              ) : isEnum ? (
                 <select value={row.value} onChange={e => updateRow(row.id, { value: e.target.value })}
                   className="bg-background border border-border rounded px-2 py-1 text-xs font-mono focus:outline-none focus:border-primary min-w-[120px]">
                   <option value="">— select —</option>
