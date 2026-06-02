@@ -538,12 +538,12 @@ function ConfigTab({ config, onSaved }: { config: BotConfig; onSaved: () => void
         </div>
 
         <div className="bg-card border border-border rounded-md p-4 flex flex-col gap-3">
-          <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">AI Entry Gate</div>
+          <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Smart Entry Gate</div>
           <label className="flex items-center justify-between cursor-pointer">
             <div>
-              <div className="text-xs font-mono text-foreground">Enable AI candle analysis</div>
+              <div className="text-xs font-mono text-foreground">Enable candle structure gate</div>
               <div className="text-[10px] font-mono text-muted-foreground/60 mt-0.5">
-                Claude reviews candle structure, wick patterns, parabolic moves &amp; calibration before every entry
+                Blocks entries on distribution tops, parabolic exhaustion, contrarian IC signals &amp; overextension — zero latency, no API cost
               </div>
             </div>
             <button onClick={() => setAiGateEnabled(v => !v)}
@@ -553,7 +553,7 @@ function ConfigTab({ config, onSaved }: { config: BotConfig; onSaved: () => void
           </label>
           {aiGateEnabled && (
             <div className="text-[10px] font-mono text-primary/70 bg-primary/5 rounded px-2 py-1.5 leading-relaxed">
-              ✦ Active — each entry candidate is sent to Claude with last 5 candles, risk metrics, and backtest calibration. Rejected picks are logged to console.
+              ✦ Active — uses exhaustion engine, candle wick analysis, IC calibration &amp; SMA extension to filter entries. Reason logged to trade notes on each blocked pick.
             </div>
           )}
         </div>

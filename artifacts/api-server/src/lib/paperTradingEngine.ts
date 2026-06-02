@@ -175,72 +175,69 @@ export async function updateConfig(patch: Partial<Omit<BotConfig, "id">>): Promi
 
 // ── Position helpers ──────────────────────────────────────────────────────────
 
-// ── AI Entry Gate ─────────────────────────────────────────────────────────────
+// ── Smart Entry Gate (deterministic — no LLM cost) ───────────────────────────
+// Uses our own candle structure, exhaustion engine, IC calibration, and cycle
+// signals to decide whether to enter. Runs in microseconds, zero API cost.
 
-async function aiEntryGate(a: AnalysisResult): Promise<{ enter: boolean; reasoning: string }> {
-  const ticker = a.quote.ticker as string;
-  const rc     = a.recentCandles;
+function smartEntryGate(a: AnalysisResult): { enter: boolean; reasoning: string } {
+  const rc = a.recentCandles;
+  const ex = a.exhaustion;
 
-  const candleLines = rc
-    ? rc.last5Bars.map(b =>
-        `  ${b.date}: ${b.direction.toUpperCase().padEnd(5)} body${b.bodyPct >= 0 ? "+" : ""}${b.bodyPct.toFixed(1)}%` +
-        ` | wick↑${b.upperWickPct.toFixed(0)}% wick↓${b.lowerWickPct.toFixed(0)}%` +
-        ` | vol ${b.volumeVsAvg.toFixed(2)}× avg | gap ${b.gapPct >= 0 ? "+" : ""}${b.gapPct.toFixed(1)}%`
-      ).join("\n")
-    : "  N/A";
-
-  const prompt = `You are a quant trading analyst for the Atlas Alpha platform. Decide whether to enter a long paper trade.
-
-TICKER: ${ticker}
-ATLAS SCORE: ${a.atlasScore.overall}/100 | DIRECTION: ${a.atlasScore.direction} | BULL PROB: ${a.atlasScore.bullishProbability}%
-CYCLE: ${a.marketCycle?.cyclePhase ?? "unknown"} (strength ${a.marketCycle?.cycleStrength ?? 0}) | Weekly patterns: ${a.marketCycle?.weeklyPatterns?.join(", ") || "none"}
-DAILY PATTERNS: ${a.patterns?.patterns?.join(", ") || "none"}
-EXHAUSTION: signal=${a.exhaustion.exhaustionSignal} | distTop=${a.exhaustion.distributionTop} | parabolic=${a.exhaustion.parabolicRise}
-PULLBACK CLASS: ${a.pullbackSetup?.classification ?? "unknown"}
-
-CANDLE STRUCTURE — last 5 bars (oldest → newest):
-${candleLines}
-
-RISK METRICS:
-- Distribution candles (upper wick >40% of range) in last 5 bars: ${rc?.distributionCandles ?? 0}
-- Buying climax bars (vol >2× avg, green) in last 5 bars: ${rc?.climaxBars ?? 0}
-- Down-day / up-day volume ratio (last 10 bars): ${rc?.downDayVolumeRatio?.toFixed(2) ?? "1.00"}× (>1.2 = distribution pressure)
-- Parabolic move: +${rc?.parabolicMovePct ?? 0}% in ${rc?.parabolicMoveDays ?? 0} trading days
-- Consecutive red days: ${rc?.consecutiveRedDays ?? 0}
-- Extension above SMA20: ${rc?.priceExtensionPct ?? 0}%
-- Largest recent gap-up: +${rc?.largestGapPct ?? 0}%
-
-SYSTEM NARRATIVE (includes backtest calibration / contrarian warnings):
-${a.atlasScore.signalNarrative}
-
-Based on this full picture — candle structure, distribution signals, parabolic move context, exhaustion, and calibration — should the bot enter a long position now?
-
-Respond with JSON only (no markdown, no text outside the JSON object):
-{"enter": true, "confidence": 85, "reasoning": "one concise sentence explaining the decision"}`;
-
-  try {
-    const client = new Anthropic({
-      apiKey:  process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
-      baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
-    });
-    const msg = await client.messages.create({
-      model:      "claude-sonnet-4-6",
-      max_tokens: 256,
-      messages:   [{ role: "user", content: prompt }],
-    });
-    const text       = msg.content.filter(b => b.type === "text").map(b => (b as { type: "text"; text: string }).text).join("");
-    const jsonMatch  = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("No JSON in AI gate response");
-    const parsed = JSON.parse(jsonMatch[0]) as { enter: boolean; confidence: number; reasoning: string };
-    logger.info({ ticker, enter: parsed.enter, confidence: parsed.confidence, reasoning: parsed.reasoning }, "AI gate decision");
-    return {
-      enter:     !!parsed.enter,
-      reasoning: `[AI Gate ${parsed.enter ? "✓" : "✗"} ${parsed.confidence}% conf] ${parsed.reasoning}`,
-    };
-  } catch (err) {
-    logger.warn({ ticker, err }, "AI gate error — defaulting to enter");
-    return { enter: true, reasoning: "[AI Gate unavailable — defaulted to enter]" };
+  // 1. Exhaustion engine: distribution top pattern (stoch overbought + wick + low RVOL at highs)
+  if (ex.distributionTop) {
+    return { enter: false, reasoning: "Distribution top — stoch overbought + upper wick rejection + low RVOL at highs" };
   }
+
+  // 2. Parabolic rise confirmed by exhaustion system + stock rolling over
+  if (ex.parabolicRise && rc && rc.consecutiveRedDays >= 2) {
+    return {
+      enter: false,
+      reasoning: `Parabolic rise (+${rc.parabolicMovePct}% in ${rc.parabolicMoveDays}d) rolling over — ${rc.consecutiveRedDays} consecutive red days`,
+    };
+  }
+
+  // 3. Exhaustion signal active + significantly extended above SMA20
+  if (ex.exhaustionSignal && rc && rc.priceExtensionPct > 15) {
+    return {
+      enter: false,
+      reasoning: `Exhaustion signal + ${rc.priceExtensionPct}% above SMA20 — snap-back risk too high`,
+    };
+  }
+
+  // 4. Candle structure: multiple distribution bars + heavy down-day volume
+  if (rc && rc.distributionCandles >= 2 && rc.downDayVolumeRatio > 1.2) {
+    return {
+      enter: false,
+      reasoning: `${rc.distributionCandles} distribution candles (wick rejection) + down-vol ${rc.downDayVolumeRatio.toFixed(2)}× up-vol — sellers dominant`,
+    };
+  }
+
+  // 5. Extreme price extension (overextended, high mean-reversion risk regardless of score)
+  if (rc && rc.priceExtensionPct > 25) {
+    return {
+      enter: false,
+      reasoning: `${rc.priceExtensionPct}% extension above SMA20 — overextended, ATH-chasing risk`,
+    };
+  }
+
+  // 6. Buying climax followed by distribution (buyers exhausted, smart money distributing)
+  if (rc && rc.climaxBars >= 1 && rc.consecutiveRedDays >= 2) {
+    return {
+      enter: false,
+      reasoning: `Buying climax (${rc.climaxBars} high-vol green bars) followed by ${rc.consecutiveRedDays} red days — classic distribution`,
+    };
+  }
+
+  // 7. Contrarian IC + high score = dangerous (high score on a contrarian ticker historically precedes downside)
+  const isContrarian = a.atlasScore.signalNarrative?.toLowerCase().includes("contrarian");
+  if (isContrarian && a.atlasScore.overall >= 80) {
+    return {
+      enter: false,
+      reasoning: `Contrarian IC signal: score ${a.atlasScore.overall} is historically followed by downside on this ticker`,
+    };
+  }
+
+  return { enter: true, reasoning: "Candle structure clean — no distribution, exhaustion, or contrarian calibration blocks" };
 }
 
 async function openPosition(a: AnalysisResult, config: BotConfig, aiNotes?: string | null): Promise<void> {
@@ -397,9 +394,9 @@ export async function runBotCycle(): Promise<BotCycleResult> {
       for (const a of candidates.slice(0, slotsAvailable)) {
         let aiNotes: string | null = null;
         if (config.aiGateEnabled) {
-          const gate = await aiEntryGate(a);
+          const gate = smartEntryGate(a);
           if (!gate.enter) {
-            logger.info({ ticker: a.quote.ticker, reasoning: gate.reasoning }, "AI gate blocked entry");
+            logger.info({ ticker: a.quote.ticker, reasoning: gate.reasoning }, "Smart gate blocked entry");
             continue;
           }
           aiNotes = gate.reasoning;
