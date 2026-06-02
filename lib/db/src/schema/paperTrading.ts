@@ -58,6 +58,7 @@ export const paperTradesTable = pgTable("paper_trades", {
   scannerCategories:  jsonb("scanner_categories").default([]),
   status:             text("status").notNull().default("open"),
   aiNotes:            text("ai_notes"),
+  decisionLog:        jsonb("decision_log"),
   createdAt:          timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index("idx_paper_trades_status").on(t.status),

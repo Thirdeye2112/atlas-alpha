@@ -23,15 +23,36 @@ import type { AnalysisResult } from "./analysisEngine.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
+/**
+ * Granular bot-trading regime derived from ADX, VIX, breadth, and the broader
+ * market regime.  Used to route strategy types and block setups inappropriate
+ * for current market structure.
+ *
+ * trend_up   — ADX > 25, risk-on: momentum/breakout setups have highest edge
+ * neutral    — ADX 20–25 or mixed signals: normal operation, all setups allowed
+ * chop       — ADX < 20: trending setups fail; mean-reversion preferred
+ * high_vol   — VIX > 22: volatility elevated; block speculative plays
+ * risk_off   — regime score < 40 or VIX > 30: halt new long entries
+ */
+export type BotRegime = "trend_up" | "neutral" | "chop" | "high_vol" | "risk_off";
+
+// Scanner categories blocked in each bot regime
+const CHOP_BLOCKED_CATS     = ["breakout", "gap_setup_long", "gap_setup_short"];
+const HIGH_VOL_BLOCKED_CATS = ["gamma_squeeze", "short_squeeze"];
+
 export interface MarketContext {
-  regime:           "risk_on" | "neutral" | "risk_off";
-  regimeScore:      number;
-  breadthPct50:     number | null;
-  breadthPct200:    number | null;
-  vix:              number | null;
-  minScoreOverride: number | null;
-  allowNewEntries:  boolean;
-  reason:           string;
+  regime:            "risk_on" | "neutral" | "risk_off";
+  botRegime:         BotRegime;
+  regimeScore:       number;
+  breadthPct50:      number | null;
+  breadthPct200:     number | null;
+  vix:               number | null;
+  adx:               number | null;
+  minScoreOverride:  number | null;
+  allowNewEntries:   boolean;
+  /** Scanner categories that should be skipped in the current regime. */
+  blockedCategories: string[];
+  reason:            string;
 }
 
 export interface SimGateResult {
@@ -108,9 +129,9 @@ export function getMarketContext(): MarketContext {
 
   if (!overview) {
     const ctx: MarketContext = {
-      regime: "neutral", regimeScore: 50,
-      breadthPct50: null, breadthPct200: null, vix: null,
-      minScoreOverride: null, allowNewEntries: true,
+      regime: "neutral", botRegime: "neutral", regimeScore: 50,
+      breadthPct50: null, breadthPct200: null, vix: null, adx: null,
+      minScoreOverride: null, allowNewEntries: true, blockedCategories: [],
       reason: "market data not yet loaded — proceeding with caution",
     };
     state.lastMarketContext = ctx;
@@ -122,10 +143,11 @@ export function getMarketContext(): MarketContext {
   const breadthPct50 = overview.pctAboveSma50  as number | null ?? null;
   const breadthPct200= overview.pctAboveSma200 as number | null ?? null;
   const vix          = (overview.vix as { price?: number } | null)?.price ?? null;
+  const adx          = overview.adx  as number | null ?? null;
 
-  let allowNewEntries  = true;
+  let allowNewEntries   = true;
   let minScoreOverride: number | null = null;
-  let reason           = "market conditions normal — full operation";
+  let reason            = "market conditions normal — full operation";
 
   if (regime === "risk_off") {
     allowNewEntries = false;
@@ -140,9 +162,36 @@ export function getMarketContext(): MarketContext {
     reason = `RISK ON + strong breadth (${breadthPct50}% above SMA50) — full operation`;
   }
 
+  // ── Regime classifier ───────────────────────────────────────────────────────
+  // Classifies current market structure into one of five bot-trading regimes
+  // to route setup types appropriately (breakouts fail in chop, etc.)
+  let botRegime: BotRegime;
+  let blockedCategories: string[] = [];
+
+  if (regime === "risk_off") {
+    botRegime = "risk_off";
+    // allowNewEntries already false above
+  } else if (vix !== null && vix > 22) {
+    botRegime = "high_vol";
+    blockedCategories = HIGH_VOL_BLOCKED_CATS;
+    reason = reason === "market conditions normal — full operation"
+      ? `elevated VIX (${vix.toFixed(1)}) — blocking speculative plays (gamma/short squeeze)`
+      : reason + `; VIX ${vix.toFixed(1)} blocking speculative entries`;
+  } else if (adx !== null && adx < 20) {
+    botRegime = "chop";
+    blockedCategories = CHOP_BLOCKED_CATS;
+    reason = reason === "market conditions normal — full operation"
+      ? `choppy market (ADX ${adx.toFixed(1)} < 20) — blocking breakout/gap setups`
+      : reason + `; ADX ${adx.toFixed(1)} choppy — breakouts blocked`;
+  } else if (adx !== null && adx > 25 && regime === "risk_on") {
+    botRegime = "trend_up";
+  } else {
+    botRegime = "neutral";
+  }
+
   const ctx: MarketContext = {
-    regime, regimeScore, breadthPct50, breadthPct200, vix,
-    minScoreOverride, allowNewEntries, reason,
+    regime, botRegime, regimeScore, breadthPct50, breadthPct200, vix, adx,
+    minScoreOverride, allowNewEntries, blockedCategories, reason,
   };
   state.lastMarketContext = ctx;
   return ctx;

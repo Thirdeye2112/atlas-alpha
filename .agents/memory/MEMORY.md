@@ -15,3 +15,4 @@
 - [Scoring alignment penalty](scoring-alignment.md) — alignmentScore field in AtlasAlphaScore; stdDev of 5 sub-scores penalises confidenceScore (not overall); max 15% at stdDev≥55
 - [Paper trading R:R by category](paper-trading-rr.md) — getRRMultiplier() in paperTradingEngine; mean_reversion→1.5:1, gap/squeeze→2:1, default→3:1; applied at call site after categories known
 - [Pattern performance table](pattern-performance-table.md) — pattern_performance DB table; upsert on closePosition; uniqueIndex on (pattern, direction, horizon)
+- [Bot entry gates v2](bot-entry-gates-v2.md) — alignment gate (alignmentScore<40 blocks; <55+score<75 blocks), regime blocked-categories gate, decisionLog JSONB stored per trade; WhyPanel in PositionsTab expands on row click

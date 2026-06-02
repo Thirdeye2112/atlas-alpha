@@ -32,6 +32,26 @@ interface BotConfig {
   updatedAt: string;
 }
 
+interface DecisionLog {
+  regime:          string;
+  botRegime:       string;
+  regimeReason:    string;
+  adx:             number | null;
+  vix:             number | null;
+  breadth:         number | null;
+  subScores:       { trend: number; momentum: number; volume: number; rs: number; regime: number; options: number };
+  alignmentScore:  number;
+  confidenceScore: number;
+  calibProb:       number | null;
+  calibSignalMode: string;
+  calibRankIC:     number | null;
+  simHitRate:      number | null;
+  simN:            number;
+  gateResults:     { marketRegime: string; simGate: string; calibGate: string };
+  categories:      string[];
+  topFactors:      string[];
+}
+
 interface PaperTrade {
   id: number;
   ticker: string;
@@ -59,6 +79,7 @@ interface PaperTrade {
   positionValue: number | null;
   status: string;
   aiNotes: string | null;
+  decisionLog?: DecisionLog | null;
   scannerCategories?: string[] | null;
   currentPrice?: number;
   currentScore?: number;
@@ -934,7 +955,107 @@ function CycleBadge({ phase }: { phase?: string }) {
   );
 }
 
+// ── Bot-regime badge ──────────────────────────────────────────────────────────
+
+const BOT_REGIME_CONFIG: Record<string, { label: string; cls: string }> = {
+  trend_up: { label: "TREND UP",  cls: "text-success border-success/40 bg-success/10" },
+  neutral:  { label: "NEUTRAL",   cls: "text-muted-foreground border-border bg-muted/30" },
+  chop:     { label: "CHOP",      cls: "text-warning border-warning/40 bg-warning/10" },
+  high_vol: { label: "HIGH VOL",  cls: "text-orange-400 border-orange-400/40 bg-orange-400/10" },
+  risk_off: { label: "RISK OFF",  cls: "text-destructive border-destructive/40 bg-destructive/10" },
+};
+
+function BotRegimeBadge({ regime }: { regime: string }) {
+  const cfg = BOT_REGIME_CONFIG[regime] ?? BOT_REGIME_CONFIG["neutral"];
+  return (
+    <span className={cn("text-[9px] font-bold font-mono px-1.5 py-0.5 rounded border", cfg.cls)}>
+      {cfg.label}
+    </span>
+  );
+}
+
+// ── Why-this-trade explainability panel ───────────────────────────────────────
+
+function WhyPanel({ log }: { log: DecisionLog }) {
+  const subScores = log.subScores ?? {};
+  const subScoreEntries = Object.entries(subScores) as [string, number][];
+
+  return (
+    <div className="font-mono text-xs space-y-2.5 bg-background/60 rounded-md border border-border/20 px-4 py-3">
+      <div className="flex items-center gap-3 flex-wrap text-[10px]">
+        <span className="text-muted-foreground/60 uppercase tracking-wider">Why entered:</span>
+        <BotRegimeBadge regime={log.botRegime ?? "neutral"} />
+        <span className={cn(
+          "text-[9px] font-bold font-mono px-1.5 py-0.5 rounded border",
+          log.regime === "risk_on" ? "text-success border-success/40 bg-success/10" :
+          log.regime === "risk_off" ? "text-destructive border-destructive/40 bg-destructive/10" :
+          "text-muted-foreground border-border bg-muted/30"
+        )}>{(log.regime ?? "unknown").toUpperCase().replace("_", " ")}</span>
+        {log.adx != null && (
+          <span className="text-muted-foreground/60">ADX <span className={cn("font-semibold", log.adx < 20 ? "text-warning" : log.adx > 25 ? "text-success" : "text-foreground")}>{log.adx.toFixed(1)}</span></span>
+        )}
+        {log.vix != null && (
+          <span className="text-muted-foreground/60">VIX <span className={cn("font-semibold", log.vix > 25 ? "text-destructive" : log.vix > 18 ? "text-warning" : "text-success")}>{log.vix.toFixed(1)}</span></span>
+        )}
+        {log.breadth != null && (
+          <span className="text-muted-foreground/60">BREADTH <span className="text-foreground">{log.breadth}%</span></span>
+        )}
+      </div>
+
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {subScoreEntries.map(([k, v]) => (
+          <span key={k} className={cn(
+            "text-[9px] font-bold px-1.5 py-0.5 rounded border",
+            v >= 65 ? "text-success border-success/30 bg-success/10" :
+            v >= 45 ? "text-muted-foreground border-border bg-muted/20" :
+            "text-destructive border-destructive/30 bg-destructive/10",
+          )}>
+            {k.toUpperCase()} {v}
+          </span>
+        ))}
+        <span className="text-[9px] text-muted-foreground/60 ml-1">ALIGN
+          <span className={cn("font-semibold ml-1",
+            (log.alignmentScore ?? 0) >= 65 ? "text-success" :
+            (log.alignmentScore ?? 0) >= 45 ? "text-warning" : "text-destructive",
+          )}>{log.alignmentScore ?? "—"}</span>
+        </span>
+        <span className="text-[9px] text-muted-foreground/60 ml-1">CONF
+          <span className="font-semibold text-foreground ml-1">{log.confidenceScore ?? "—"}</span>
+        </span>
+      </div>
+
+      <div className="flex items-center gap-4 flex-wrap text-[9px] text-muted-foreground/70">
+        {log.simHitRate != null && (
+          <span>SIM <span className={cn("font-semibold", log.simHitRate >= 55 ? "text-success" : "text-warning")}>{log.simHitRate.toFixed(0)}%</span>
+            <span className="ml-0.5 opacity-60">(n={log.simN})</span>
+          </span>
+        )}
+        {log.calibProb != null && (
+          <span>P(+) <span className={cn("font-semibold", log.calibProb >= 58 ? "text-success" : "text-warning")}>{log.calibProb.toFixed(0)}%</span>
+            {log.calibSignalMode && <span className="ml-0.5 opacity-60">({log.calibSignalMode})</span>}
+          </span>
+        )}
+        {log.calibRankIC != null && (
+          <span>IC <span className={cn("font-semibold", log.calibRankIC > 0 ? "text-success" : "text-warning")}>{log.calibRankIC.toFixed(3)}</span></span>
+        )}
+        {log.topFactors?.length > 0 && (
+          <span className="text-muted-foreground/50">TOP: {log.topFactors.join(", ")}</span>
+        )}
+      </div>
+
+      {log.gateResults?.marketRegime && (
+        <div className="text-[9px] text-muted-foreground/40 italic border-t border-border/20 pt-2">
+          {log.gateResults.marketRegime}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Positions tab ─────────────────────────────────────────────────────────────
+
 function PositionsTab({ trades, onClose }: { trades: PaperTrade[]; onClose: (id: number) => void }) {
+  const [expandedId, setExpandedId] = useState<number | null>(null);
   const open = trades.filter(t => t.status === "open");
 
   if (open.length === 0) {
@@ -984,8 +1105,15 @@ function PositionsTab({ trades, onClose }: { trades: PaperTrade[]; onClose: (id:
                 : t.peakPrice >= t.entryPrice + (target - t.entryPrice) * 0.33
             );
 
+            const isExpanded = expandedId === t.id;
+
             return (
-              <tr key={t.id} className="border-b border-border/30 hover:bg-muted/20 transition-colors">
+              <React.Fragment key={t.id}>
+              <tr
+                className="border-b border-border/30 hover:bg-muted/20 transition-colors cursor-pointer select-none"
+                onClick={() => setExpandedId(isExpanded ? null : t.id)}
+                title={t.decisionLog ? "Click to see why this trade was entered" : undefined}
+              >
                 <td className="py-2 px-2">
                   <div className="flex items-center gap-1.5">
                     <div className="font-bold text-primary">{t.ticker}</div>
@@ -1069,12 +1197,28 @@ function PositionsTab({ trades, onClose }: { trades: PaperTrade[]; onClose: (id:
                 </td>
                 <td className="text-right py-2 px-2 text-muted-foreground">{t.holdDays ?? 0}d</td>
                 <td className="text-center py-2 px-2">
-                  <button onClick={() => onClose(t.id)}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onClose(t.id); }}
                     className="px-2 py-0.5 rounded border border-destructive/40 text-destructive text-[10px] font-bold hover:bg-destructive/10 transition-colors">
                     CLOSE
                   </button>
                 </td>
               </tr>
+              {isExpanded && t.decisionLog && (
+                <tr className="border-b border-border/20">
+                  <td colSpan={10} className="px-3 pb-3 pt-0">
+                    <WhyPanel log={t.decisionLog} />
+                  </td>
+                </tr>
+              )}
+              {isExpanded && !t.decisionLog && (
+                <tr className="border-b border-border/20">
+                  <td colSpan={10} className="px-4 py-2 text-[10px] font-mono text-muted-foreground/40 italic">
+                    No decision log — this trade was opened before explainability logging was enabled.
+                  </td>
+                </tr>
+              )}
+              </React.Fragment>
             );
           })}
         </tbody>

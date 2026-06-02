@@ -347,6 +347,7 @@ async function openPosition(
   aiNotes?: string | null,
   scannerCategories?: string[],
   positionMultiplier = 1.0,
+  decisionLog?: Record<string, unknown> | null,
 ): Promise<void> {
   const price    = a.quote.price as number;
   const basePosValue = (config.virtualPortfolio * config.positionSizePct) / 100;
@@ -378,6 +379,7 @@ async function openPosition(
     shares,
     status:             "open",
     aiNotes:            aiNotes ?? null,
+    decisionLog:        decisionLog ?? null,
   });
 
   logger.info(
@@ -709,6 +711,80 @@ export async function runBotCycle(): Promise<BotCycleResult> {
             logger.info({ ticker: a.quote.ticker }, "Bot: distribution signal at entry — skipping long");
             continue;
           }
+
+          // ── Feature-group alignment gate ──────────────────────────────────────
+          // When sub-scores diverge significantly, the overall composite score
+          // overstates conviction (e.g. trend=85 / momentum=18 inflates the mean).
+          // Block entries with high divergence; require a stronger score when
+          // divergence is moderate. Uses the pre-computed alignmentScore (0–100).
+          const alignment = a.atlasScore.alignmentScore;
+          if (alignment < 40) {
+            logger.info({ ticker: a.quote.ticker, alignment }, "Bot: sub-score divergence too high — skipping");
+            continue;
+          }
+          if (alignment < 55 && a.atlasScore.overall < 75) {
+            logger.info({ ticker: a.quote.ticker, alignment, score: a.atlasScore.overall },
+              "Bot: moderate divergence — requires score ≥75 to enter");
+            continue;
+          }
+
+          // ── Regime strategy-routing gate ──────────────────────────────────────
+          // Block setup categories inappropriate for the current market structure.
+          // CHOP (ADX < 20): breakout/gap setups fail in ranging markets.
+          // HIGH_VOL (VIX > 22): speculative plays are too dangerous.
+          if (marketCtx.blockedCategories.length > 0 && categories.length > 0) {
+            const hasAllowedCategory = categories.some(c => !marketCtx.blockedCategories.includes(c));
+            if (!hasAllowedCategory) {
+              logger.info(
+                { ticker: a.quote.ticker, categories, blocked: marketCtx.blockedCategories, botRegime: marketCtx.botRegime },
+                "Bot: all setup categories blocked by regime — skipping",
+              );
+              continue;
+            }
+          }
+
+          // ── Build decision log — persisted with the trade for explainability ──
+          const dLog: Record<string, unknown> = {
+            regime:        marketCtx.regime,
+            botRegime:     marketCtx.botRegime,
+            regimeReason:  marketCtx.reason,
+            adx:           marketCtx.adx,
+            vix:           marketCtx.vix,
+            breadth:       marketCtx.breadthPct50,
+            subScores: {
+              trend:    a.atlasScore.trendScore,
+              momentum: a.atlasScore.momentumScore,
+              volume:   a.atlasScore.volumeScore,
+              rs:       a.atlasScore.relativeStrengthScore,
+              regime:   a.atlasScore.marketRegimeScore,
+              options:  a.atlasScore.optionsScore,
+            },
+            alignmentScore:  alignment,
+            confidenceScore: a.atlasScore.confidenceScore,
+            calibProb:       verdict.calibGate.probPositive,
+            calibSignalMode: verdict.calibGate.signalMode,
+            calibRankIC:     verdict.calibGate.rankIC,
+            simHitRate:      verdict.simGate.hitRate5d,
+            simN:            verdict.simGate.n,
+            gateResults: {
+              marketRegime: marketCtx.reason,
+              simGate:      verdict.simGate.reason,
+              calibGate:    verdict.calibGate.reason,
+            },
+            entryTrigger: levels.trigger,
+            categories,
+            topFactors: (Object.entries({
+              trend:    a.atlasScore.trendScore,
+              momentum: a.atlasScore.momentumScore,
+              volume:   a.atlasScore.volumeScore,
+              rs:       a.atlasScore.relativeStrengthScore,
+              regime:   a.atlasScore.marketRegimeScore,
+            }) as [string, number][])
+              .sort(([, va], [, vb]) => vb - va)
+              .slice(0, 3)
+              .map(([k, v]) => `${k}:${v}`),
+          };
+
           if (stopMultiplier !== 1.0 && levels.stopPrice) {
             const quotePrice = a.quote.price as number;
             // riskDist is always positive: distance from entry to stop
@@ -724,7 +800,7 @@ export async function runBotCycle(): Promise<BotCycleResult> {
             levels.targetPrice = isShortEntry ? quotePrice - riskDist * rrMult : quotePrice + riskDist * rrMult;
           }
 
-          await openPosition(a, config, levels, aiNotes, categories, positionMultiplier);
+          await openPosition(a, config, levels, aiNotes, categories, positionMultiplier, dLog);
           newEntries.push(a.quote.ticker as string);
           filled++;
         }
