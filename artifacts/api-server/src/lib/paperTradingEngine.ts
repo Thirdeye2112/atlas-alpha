@@ -97,6 +97,10 @@ function getFieldValue(a: AnalysisResult, field: string): FieldValue {
     case "sector":              return ((a.quote.sector as string | undefined) ?? "").toLowerCase();
     case "exhaustion":          return a.exhaustion.exhaustionSignal;
     case "pullbackClass":       return a.pullbackSetup?.classification ?? "unknown";
+    case "signalStrength": {
+      const s = a.atlasScore.overall;
+      return s >= 75 ? "strong" : s >= 55 ? "moderate" : "weak";
+    }
     case "patterns":            return (a.patterns?.patterns ?? []) as string[];
     case "cyclePhase":          return a.marketCycle?.cyclePhase ?? "ranging";
     case "weeklyPatterns":      return (a.marketCycle?.weeklyPatterns ?? []) as string[];

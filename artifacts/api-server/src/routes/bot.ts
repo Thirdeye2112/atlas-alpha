@@ -175,7 +175,7 @@ router.get("/bot/patterns", (_req, res): void => {
 });
 
 router.get("/bot/weekly-patterns", (_req, res): void => {
-  res.json(WEEKLY_PATTERNS);
+  res.json({ patterns: WEEKLY_PATTERNS });
 });
 
 // ── Signal performance learning ───────────────────────────────────────────────
