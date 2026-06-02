@@ -558,9 +558,20 @@ export async function runBotCycle(): Promise<BotCycleResult> {
         exitReason = "stop_loss";
       }
 
-      // 4. Distribution signal on long / continuation signal on short → protect capital
-      if (!exitReason && !isShort && hasDistributionSignal(analysis)) {
-        exitReason = "distribution_signal";
+      // 4. Distribution signal on long → only exit if the signal is NEW since entry.
+      // Patterns already present at entry time are not a new risk event; they were
+      // knowingly accepted. Only a pattern that appears after entry warrants an exit.
+      if (!exitReason && !isShort) {
+        const tradedEntryPatterns = (trade.entryPatterns ?? []) as string[];
+        const currentDistroPatterns = ((analysis.patterns?.patterns ?? []) as string[])
+          .filter((p: string) => DISTRIBUTION_PATTERNS.some(d => p.toLowerCase().includes(d)));
+        const hasNewDistroPattern = currentDistroPatterns.some((p: string) => !tradedEntryPatterns.includes(p));
+        // distributionTop is a computed exhaustion flag — treat it as new only if no
+        // distribution pattern was present at all when the position was opened.
+        const hadAnyDistroAtEntry = tradedEntryPatterns.some((p: string) =>
+          DISTRIBUTION_PATTERNS.some(d => p.toLowerCase().includes(d)));
+        const hasNewDistroTop = analysis.exhaustion.distributionTop && !hadAnyDistroAtEntry;
+        if (hasNewDistroPattern || hasNewDistroTop) exitReason = "distribution_signal";
       }
 
       // 5. Target reached → let winner run if continuation signal present
@@ -689,8 +700,15 @@ export async function runBotCycle(): Promise<BotCycleResult> {
 
           // Apply scanner-category-based stop widening and position sizing
           const { categories, positionMultiplier, stopMultiplier } = verdict.scannerInfo;
-          const rrMult   = getRRMultiplier(categories);
-          const isShortEntry = a.atlasScore.direction === "bearish";
+          const rrMult        = getRRMultiplier(categories);
+          const isShortEntry  = a.atlasScore.direction === "bearish";
+
+          // Skip longs where a distribution signal is already present — they would
+          // immediately trigger the distribution_signal exit on the next cycle.
+          if (!isShortEntry && hasDistributionSignal(a)) {
+            logger.info({ ticker: a.quote.ticker }, "Bot: distribution signal at entry — skipping long");
+            continue;
+          }
           if (stopMultiplier !== 1.0 && levels.stopPrice) {
             const quotePrice = a.quote.price as number;
             // riskDist is always positive: distance from entry to stop
