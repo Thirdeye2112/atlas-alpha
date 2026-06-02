@@ -63,10 +63,12 @@
 
 ### 6. Scanner (`scanJob.ts` + routes) — ✅ Sound
 - 373-ticker universe analyzed in parallel batches with concurrency limiting ✅
-- All 13 category endpoints share a single background scan job — efficient, avoids redundant reanalysis ✅
+- All 14 category endpoints share a single background scan job — efficient, avoids redundant reanalysis ✅
 - 30-min cache with `staleWhileRevalidate` pattern — users get instant results after first load ✅
 - `lightMode: true` in scan job skips `marketCycle` calculation appropriately (expensive, not needed for ranking) ✅
 - Scanner RUN BACKTEST (5D) button batch-fetches IC for all results — correct use of the backtest cache ✅
+- **Reversal Short Detection** added as the 14th endpoint (`/api/scanner/reversal-short`) — structural exhaustion signals (double top, distribution top, H&S, parabolic rise, RSI divergence, BB extension, wick rejection) scored 0–100 with conviction tiers (FORMING ≥45 / CONFIRMED ≥60 / EXTENDED ≥78) ✅
+- Frontend restructured from 14 individual tabs to 4 logical groups: **▲ LONG IDEAS** (7 signal chips: HIGH PROB, BREAKOUTS, GAP SETUP ↑, GAP UP ↑, INST ACCUM, SQUEEZE, MEAN REV) · **▼ SHORT IDEAS** (6 chips: HIGH PROB, BREAKDOWNS, GAP SETUP ↓, GAP DOWN ↓, GAMMA SQUEEZE, ⚠ REVERSAL) · **KEY LEVELS** · **✦ CUSTOM SCAN** ✅
 
 ### 7. Paper Trading Engine (`paperTradingEngine.ts`) — ⚠️ Sound after fixes
 - Entry/exit logic is clean: `runBotCycle` → evaluate exits → evaluate entries ✅
@@ -95,10 +97,12 @@
 - **Recommendation:** Add Zod guards to bot and scanner routes for consistency with the contract-first design
 
 ### 10. Frontend Pages — ⚠️ Generally sound
+- **Nav** pruned to 4 items: Dashboard | Scanner | Lab | Bot Lab — Watchlist and Research removed from the nav bar (still accessible via direct URL); WatchlistSidebar footer now shows SCANNER + CSV IMPORT / MANAGE links ✅
 - `Dashboard.tsx`: candlestick chart uses `chart.addSeries(CandlestickSeries, ...)` (v5 API) ✅; `ChartBacktestStrip` inline backtest is well-integrated ✅
-- `Scanner.tsx`: 13-tab layout with RUN BACKTEST (5D) per tab — correct React Query cache usage ✅
-- `BacktestLab.tsx`: score timeline, IC bars, scatter plot, bucket hit rates all wired correctly; auto-runs on `?ticker=X` ✅
-- `BotLab.tsx`: Intelligence panel live countdown (`useCountdown` hook), category badges, adaptation log ✅
+- `Scanner.tsx`: 4-group tab layout (▲ LONG IDEAS / ▼ SHORT IDEAS / KEY LEVELS / ✦ CUSTOM SCAN) with inline signal picker chips within LONG and SHORT groups — replaces the previous 14-tab flat structure. React Query cache usage unchanged ✅
+- `BacktestLab.tsx`: IC BACKTEST | RESEARCH mode switcher at the top of the header. In IC BACKTEST mode: score timeline, IC bars, scatter plot, bucket hit rates, auto-run on `?ticker=X` — unchanged ✅. In RESEARCH mode: embeds `Research.tsx` (gap precursor analysis) inline — no separate nav item needed ✅
+- `BotLab.tsx`: Intelligence panel live countdown (`useCountdown` hook), category badges, adaptation log ✅; `⚠ REVERSAL` badge shown on open long positions when `reversalRisk.score ≥ 45` ✅
+- `BotLab.tsx` Positions table: all numeric columns now sortable (TICKER, ENTRY, CURRENT, P&L, SCORE, HOLD) — default sort by P&L descending; ↑/↓ on active column, faint ↕ on inactive ✅
 - `BotLab.tsx`: Stale intelligence data possible between 30s poll intervals — acceptable for monitoring UI
 - `Analysis response shape gotcha`: `direction`, `timeHorizon`, `expectedMovePercent` live inside `d.atlasScore`, not top-level — documented in replit.md, several pages handle this correctly ✅
 
