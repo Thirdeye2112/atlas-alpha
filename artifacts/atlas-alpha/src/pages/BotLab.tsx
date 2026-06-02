@@ -818,6 +818,263 @@ function HistoryTab({ trades }: { trades: PaperTrade[] }) {
   );
 }
 
+// ── SIM LAB TAB ───────────────────────────────────────────────────────────────
+
+interface SimJobStatus {
+  status:           "idle" | "running" | "complete" | "error";
+  tickersProcessed: number;
+  totalTickers:     number;
+  tradesRecorded:   number;
+  currentTicker:    string | null;
+  startedAt:        string | null;
+  completedAt:      string | null;
+  durationMs:       number | null;
+  error?:           string;
+}
+
+interface BucketRow {
+  score_bucket:     string;
+  n:                number;
+  n_entered:        number;
+  avg_5d:           number | null;
+  avg_10d:          number | null;
+  avg_20d:          number | null;
+  hit_rate_5d:      number | null;
+  hit_rate_10d:     number | null;
+  stopped_out_rate: number | null;
+}
+
+interface RsiRow {
+  rsi_zone:    string;
+  n:           number;
+  n_entered:   number;
+  avg_5d:      number | null;
+  avg_10d:     number | null;
+  hit_rate_5d: number | null;
+  hit_rate_10d: number | null;
+}
+
+interface SimResults {
+  status:                "idle" | "running" | "complete" | "error";
+  totalBars:             number;
+  totalEntered:          number;
+  pctEntered:            number;
+  byScoreBucket:         BucketRow[];
+  byRsiZone:             RsiRow[];
+  optimalScoreThreshold: number | null;
+  lastRunAt:             string | null;
+}
+
+function PnlCell({ val }: { val: number | null | undefined }) {
+  if (val == null) return <td className="px-3 py-2 text-center text-muted-foreground">—</td>;
+  const color = val > 0 ? "text-success" : val < 0 ? "text-destructive" : "text-muted-foreground";
+  return <td className={cn("px-3 py-2 text-right font-mono tabular-nums text-xs", color)}>{val > 0 ? "+" : ""}{Number(val).toFixed(2)}%</td>;
+}
+
+function HitCell({ val }: { val: number | null | undefined }) {
+  if (val == null) return <td className="px-3 py-2 text-center text-muted-foreground">—</td>;
+  const n = Number(val);
+  const color = n >= 60 ? "text-success" : n < 45 ? "text-destructive" : "text-warning";
+  return <td className={cn("px-3 py-2 text-right font-mono tabular-nums text-xs", color)}>{n.toFixed(1)}%</td>;
+}
+
+function SimLabTab() {
+  const { data: simStatus, refetch: refetchStatus } = useQuery<SimJobStatus>({
+    queryKey:        ["bot-sim-status"],
+    queryFn:         () => apiFetch("bot/sim-status"),
+    refetchInterval: (q) => q.state.data?.status === "running" ? 3000 : false,
+  });
+
+  const { data: simResults, refetch: refetchResults } = useQuery<SimResults>({
+    queryKey:  ["bot-sim-results"],
+    queryFn:   () => apiFetch("bot/sim-results"),
+    staleTime: 60_000,
+    enabled:   simStatus?.status !== "idle",
+  });
+
+  const runSim = useMutation({
+    mutationFn: () => apiFetch<{ started: boolean }>("bot/sim-run", { method: "POST" }),
+    onSuccess:  () => { void refetchStatus(); void refetchResults(); },
+  });
+
+  const isRunning  = simStatus?.status === "running";
+  const isDone     = simStatus?.status === "complete";
+  const pct        = simStatus && simStatus.totalTickers > 0
+    ? Math.round((simStatus.tickersProcessed / simStatus.totalTickers) * 100)
+    : 0;
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="text-sm font-mono font-bold tracking-widest text-foreground">◎ HISTORICAL SIM LAB</h2>
+          <p className="text-xs text-muted-foreground mt-1 max-w-lg">
+            Replays every candle in 2Y of OHLCV history across all {simStatus?.totalTickers ?? "~600"} tickers —
+            computing signals with only past data, applying the entry gate, and recording 5D/10D/20D outcomes.
+            Results show which score ranges and conditions historically lead to winning trades.
+          </p>
+        </div>
+        <button
+          onClick={() => runSim.mutate()}
+          disabled={isRunning || runSim.isPending}
+          className={cn(
+            "flex items-center gap-1.5 px-4 py-2 rounded font-mono text-xs font-bold tracking-wider transition-colors shrink-0",
+            isRunning || runSim.isPending
+              ? "bg-muted text-muted-foreground cursor-not-allowed"
+              : "bg-violet-700 text-white hover:bg-violet-600"
+          )}>
+          {isRunning ? "◎ RUNNING…" : isDone ? "↺ RE-RUN" : "▶ RUN SIM"}
+        </button>
+      </div>
+
+      {/* Progress */}
+      {simStatus && simStatus.status !== "idle" && (
+        <div className="bg-card border border-border rounded p-4 space-y-3">
+          <div className="flex items-center justify-between text-xs font-mono">
+            <span className={isRunning ? "text-warning animate-pulse" : isDone ? "text-success" : "text-muted-foreground"}>
+              {isRunning ? `● RUNNING — ${simStatus.currentTicker ?? ""}` : isDone ? "✓ COMPLETE" : simStatus.status.toUpperCase()}
+            </span>
+            <span className="text-muted-foreground">
+              {simStatus.tickersProcessed}/{simStatus.totalTickers} tickers · {simStatus.tradesRecorded.toLocaleString()} bars recorded
+            </span>
+          </div>
+          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+            <div
+              className={cn("h-full rounded-full transition-all duration-500", isRunning ? "bg-warning" : "bg-success")}
+              style={{ width: `${isDone ? 100 : pct}%` }}
+            />
+          </div>
+          {isDone && simStatus.durationMs && (
+            <div className="text-xs text-muted-foreground font-mono">
+              Completed in {(simStatus.durationMs / 60000).toFixed(1)} min ·{" "}
+              {simStatus.completedAt ? new Date(simStatus.completedAt).toLocaleString() : ""}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Optimal threshold callout */}
+      {simResults?.optimalScoreThreshold != null && (
+        <div className="bg-violet-900/20 border border-violet-500/30 rounded p-3 flex items-center gap-3">
+          <span className="text-violet-400 text-lg">◈</span>
+          <div>
+            <span className="text-xs font-mono font-bold text-violet-300">
+              OPTIMAL ENTRY THRESHOLD: {simResults.optimalScoreThreshold}+
+            </span>
+            <span className="text-xs text-muted-foreground ml-2">
+              Highest score bucket with positive avg 5D return (gate-passed trades only)
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* By score bucket */}
+      {simResults && simResults.byScoreBucket.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-xs font-mono font-bold tracking-wider text-muted-foreground uppercase">
+            Outcomes by Atlas Score Bucket (gate-passed entries only)
+          </h3>
+          <div className="overflow-x-auto rounded border border-border">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-border bg-muted/30">
+                  {["Bucket","Bars","Entered","Hit% 5D","Avg 5D","Hit% 10D","Avg 10D","Avg 20D","Stop% Rate"].map(h => (
+                    <th key={h} className="px-3 py-2 text-left font-mono text-muted-foreground font-normal">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/40">
+                {simResults.byScoreBucket.map((row) => {
+                  const bucketColor =
+                    row.score_bucket === "STRONG"   ? "text-success" :
+                    row.score_bucket === "ELEVATED" ? "text-primary" :
+                    row.score_bucket === "NEUTRAL"  ? "text-muted-foreground" :
+                    "text-destructive";
+                  return (
+                    <tr key={row.score_bucket} className="hover:bg-muted/10 transition-colors">
+                      <td className={cn("px-3 py-2 font-mono font-bold", bucketColor)}>{row.score_bucket}</td>
+                      <td className="px-3 py-2 text-right font-mono tabular-nums">{Number(row.n).toLocaleString()}</td>
+                      <td className="px-3 py-2 text-right font-mono tabular-nums">{Number(row.n_entered).toLocaleString()}</td>
+                      <HitCell val={row.hit_rate_5d} />
+                      <PnlCell val={row.avg_5d} />
+                      <HitCell val={row.hit_rate_10d} />
+                      <PnlCell val={row.avg_10d} />
+                      <PnlCell val={row.avg_20d} />
+                      <td className="px-3 py-2 text-right font-mono tabular-nums text-xs text-muted-foreground">
+                        {row.stopped_out_rate != null ? `${Number(row.stopped_out_rate).toFixed(1)}%` : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* By RSI zone */}
+      {simResults && simResults.byRsiZone.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-xs font-mono font-bold tracking-wider text-muted-foreground uppercase">
+            Outcomes by RSI Zone (gate-passed entries only)
+          </h3>
+          <div className="overflow-x-auto rounded border border-border">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-border bg-muted/30">
+                  {["RSI Zone","Bars","Entered","Hit% 5D","Avg 5D","Hit% 10D","Avg 10D"].map(h => (
+                    <th key={h} className="px-3 py-2 text-left font-mono text-muted-foreground font-normal">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/40">
+                {simResults.byRsiZone.map((row) => {
+                  const zoneColor =
+                    row.rsi_zone === "oversold"   ? "text-success" :
+                    row.rsi_zone === "overbought" ? "text-destructive" : "text-muted-foreground";
+                  return (
+                    <tr key={row.rsi_zone} className="hover:bg-muted/10 transition-colors">
+                      <td className={cn("px-3 py-2 font-mono font-bold capitalize", zoneColor)}>{row.rsi_zone}</td>
+                      <td className="px-3 py-2 text-right font-mono tabular-nums">{Number(row.n).toLocaleString()}</td>
+                      <td className="px-3 py-2 text-right font-mono tabular-nums">{Number(row.n_entered).toLocaleString()}</td>
+                      <HitCell val={row.hit_rate_5d} />
+                      <PnlCell val={row.avg_5d} />
+                      <HitCell val={row.hit_rate_10d} />
+                      <PnlCell val={row.avg_10d} />
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Coverage */}
+      {simResults && simResults.totalBars > 0 && (
+        <div className="text-xs font-mono text-muted-foreground border-t border-border pt-4">
+          {simResults.totalBars.toLocaleString()} total bar-snapshots across all tickers ·{" "}
+          {simResults.totalEntered.toLocaleString()} passed the entry gate ({simResults.pctEntered}%) ·{" "}
+          <span className="text-foreground">gate-passed trades only shown above</span>
+        </div>
+      )}
+
+      {/* Idle state */}
+      {simStatus?.status === "idle" && (
+        <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
+          <span className="text-4xl text-muted-foreground/30">◎</span>
+          <p className="text-sm font-mono text-muted-foreground">No simulation data yet</p>
+          <p className="text-xs text-muted-foreground/60 max-w-sm">
+            Click RUN SIM to replay 2 years of daily bars across all tickers. Takes ~5–10 minutes.
+            Results persist across sessions — re-run anytime to update with fresh history.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── LEARNING TAB ──────────────────────────────────────────────────────────────
 
 function LearningTab() {
@@ -1318,6 +1575,9 @@ export default function BotLab() {
           <TabsTrigger value="learning"  className="font-mono text-xs data-[state=active]:bg-cyan-700 data-[state=active]:text-white">
             ◈ LEARNING
           </TabsTrigger>
+          <TabsTrigger value="simlab" className="font-mono text-xs data-[state=active]:bg-violet-700 data-[state=active]:text-white">
+            ◎ SIM LAB
+          </TabsTrigger>
         </TabsList>
 
         <div className="flex-1 overflow-auto mt-4">
@@ -1335,6 +1595,9 @@ export default function BotLab() {
           </TabsContent>
           <TabsContent value="learning"  className="m-0">
             <LearningTab />
+          </TabsContent>
+          <TabsContent value="simlab" className="m-0">
+            <SimLabTab />
           </TabsContent>
         </div>
       </Tabs>

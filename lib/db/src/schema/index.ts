@@ -6,3 +6,4 @@ export * from "./alerts";
 export * from "./ohlcvHistory";
 export * from "./paperTrading";
 export * from "./signalSnapshots";
+export * from "./simTrades";

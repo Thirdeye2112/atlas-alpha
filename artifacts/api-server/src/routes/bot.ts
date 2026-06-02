@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, paperTradesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { getLearningStats, getLearnedPatterns } from "../lib/snapshotEngine.js";
+import { startSimJob, getSimStatus, getSimResults, getSimTrades } from "../lib/historicalSimEngine.js";
 import {
   getOrCreateConfig,
   updateConfig,
@@ -187,6 +188,42 @@ router.get("/bot/signal-performance", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "GET /bot/signal-performance failed");
     res.status(500).json({ error: "Failed to compute signal performance" });
+  }
+});
+
+// ── Historical simulation ─────────────────────────────────────────────────────
+
+router.post("/bot/sim-run", async (req, res): Promise<void> => {
+  if (getSimStatus().status === "running") {
+    res.status(409).json({ error: "Simulation already running", status: getSimStatus() });
+    return;
+  }
+  startSimJob();
+  res.json({ started: true, status: getSimStatus() });
+});
+
+router.get("/bot/sim-status", (_req, res): void => {
+  res.json(getSimStatus());
+});
+
+router.get("/bot/sim-results", async (req, res): Promise<void> => {
+  try {
+    res.json(await getSimResults());
+  } catch (err) {
+    req.log.error({ err }, "GET /bot/sim-results failed");
+    res.status(500).json({ error: "Failed to get sim results" });
+  }
+});
+
+router.get("/bot/sim-trades", async (req, res): Promise<void> => {
+  try {
+    const limit    = Math.min(Number(req.query["limit"]    ?? 100), 500);
+    const offset   = Number(req.query["offset"]   ?? 0);
+    const gateOnly = req.query["gate_only"] !== "false";
+    res.json(await getSimTrades(limit, offset, gateOnly));
+  } catch (err) {
+    req.log.error({ err }, "GET /bot/sim-trades failed");
+    res.status(500).json({ error: "Failed to get sim trades" });
   }
 });
 
