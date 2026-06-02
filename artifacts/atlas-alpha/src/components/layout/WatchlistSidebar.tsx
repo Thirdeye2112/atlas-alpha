@@ -94,7 +94,7 @@ export default function WatchlistSidebar() {
         ) : (
           <div className="divide-y divide-border">
             {watchlist.map(item => (
-              <Link key={item.id} href={`/?ticker=${item.ticker}`} className="block hover:bg-muted/50 transition-colors p-3">
+              <Link key={item.id} href={`/?ticker=${item.ticker}`} className="block hover:bg-muted/50 transition-colors p-3 outline-none">
                 <div className="flex justify-between items-center mb-1">
                   <span className="font-bold text-primary">{item.ticker}</span>
                   <div className="flex items-center gap-2">
