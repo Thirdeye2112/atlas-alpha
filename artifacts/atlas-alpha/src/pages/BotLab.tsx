@@ -25,6 +25,9 @@ interface BotConfig {
   exitOnDirectionFlip: boolean;
   maxHoldDays: number;
   virtualPortfolio: number;
+  takeProfitPct: number;
+  stopLossPct: number;
+  tickerWhitelist: string;
   updatedAt: string;
 }
 
@@ -238,12 +241,16 @@ function PnlBadge({ pct, dollar }: { pct: number | null | undefined; dollar?: nu
 function ExitReasonBadge({ reason }: { reason: string | null }) {
   if (!reason) return null;
   const styles: Record<string, string> = {
+    take_profit:    "bg-success/20 text-success border-success/30",
+    stop_loss:      "bg-destructive/25 text-destructive border-destructive/40",
     score_drop:     "bg-destructive/20 text-destructive border-destructive/30",
     direction_flip: "bg-warning/20 text-warning border-warning/30",
     max_hold:       "bg-muted/40 text-muted-foreground border-border",
     manual:         "bg-primary/20 text-primary border-primary/30",
   };
   const labels: Record<string, string> = {
+    take_profit:    "✓ TAKE PROFIT",
+    stop_loss:      "✗ STOP LOSS",
     score_drop:     "SCORE ↓",
     direction_flip: "DIR FLIP",
     max_hold:       "MAX HOLD",
@@ -275,8 +282,17 @@ function ConfigTab({ config, onSaved }: { config: BotConfig; onSaved: () => void
   const [dirFlip, setDirFlip]       = useState(config.exitOnDirectionFlip);
   const [maxHold, setMaxHold]       = useState(config.maxHoldDays);
   const [maxPos, setMaxPos]         = useState(config.maxPositions);
-  const [posSizePct, setPosSizePct] = useState(config.positionSizePct);
-  const [portfolio, setPortfolio]   = useState(config.virtualPortfolio);
+  const [posSizePct, setPosSizePct]       = useState(config.positionSizePct);
+  const [portfolio, setPortfolio]         = useState(config.virtualPortfolio);
+  const [takeProfitPct, setTakeProfitPct] = useState(config.takeProfitPct);
+  const [stopLossPct, setStopLossPct]     = useState(config.stopLossPct);
+  const [tickerWhitelist, setTickerWhitelist] = useState(config.tickerWhitelist);
+
+  function handleTakeProfitChange(val: number) {
+    setTakeProfitPct(val);
+    if (val > 0) setStopLossPct(Math.round(val / 3 * 100) / 100);
+    else setStopLossPct(0);
+  }
 
   const saveMutation = useMutation({
     mutationFn: () => apiFetch<BotConfig>("bot/config", {
@@ -286,6 +302,9 @@ function ConfigTab({ config, onSaved }: { config: BotConfig; onSaved: () => void
         exitScoreThreshold:  exitScore,
         exitOnDirectionFlip: dirFlip,
         maxHoldDays:         maxHold,
+        takeProfitPct,
+        stopLossPct,
+        tickerWhitelist,
         maxPositions:        maxPos,
         positionSizePct:     posSizePct,
         virtualPortfolio:    portfolio,
@@ -395,6 +414,33 @@ function ConfigTab({ config, onSaved }: { config: BotConfig; onSaved: () => void
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-card border border-border rounded-md p-4 flex flex-col gap-3">
           <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Exit Rules</div>
+
+          {/* 3:1 R:R price exits */}
+          <div className="border border-success/20 rounded p-2.5 flex flex-col gap-2 bg-success/5">
+            <div className="text-[10px] font-mono text-success/70 uppercase tracking-wider">Price-Based Exits (R:R)</div>
+            <label className="flex items-center justify-between">
+              <span className="text-xs font-mono text-foreground">Take profit at (%)</span>
+              <input type="number" min={0} step={0.5} placeholder="e.g. 9"
+                value={takeProfitPct || ""} onChange={e => handleTakeProfitChange(Number(e.target.value))}
+                className="bg-background border border-success/30 rounded px-2 py-1 text-xs font-mono text-success w-20 text-center focus:outline-none focus:border-success" />
+            </label>
+            <label className="flex items-center justify-between">
+              <span className="text-xs font-mono text-foreground">
+                Stop loss at (%) <span className="text-muted-foreground/50">← auto 1R</span>
+              </span>
+              <input type="number" min={0} step={0.5} placeholder="e.g. 3"
+                value={stopLossPct || ""} onChange={e => setStopLossPct(Number(e.target.value))}
+                className="bg-background border border-destructive/30 rounded px-2 py-1 text-xs font-mono text-destructive w-20 text-center focus:outline-none focus:border-destructive" />
+            </label>
+            {takeProfitPct > 0 && stopLossPct > 0 && (
+              <div className="text-[10px] font-mono text-muted-foreground/60 text-center">
+                R:R ratio = {(takeProfitPct / stopLossPct).toFixed(1)}:1
+                &nbsp;·&nbsp;+{takeProfitPct}% target / −{stopLossPct}% stop
+              </div>
+            )}
+          </div>
+
+          {/* Score/direction exits */}
           <label className="flex items-center justify-between">
             <span className="text-xs font-mono text-foreground">Exit if score drops below</span>
             <input type="number" min={0} max={100} value={exitScore} onChange={e => setExitScore(Number(e.target.value))}
@@ -415,7 +461,19 @@ function ConfigTab({ config, onSaved }: { config: BotConfig; onSaved: () => void
         </div>
 
         <div className="bg-card border border-border rounded-md p-4 flex flex-col gap-3">
-          <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Position Sizing</div>
+          <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mt-1">Ticker Whitelist</div>
+          <div>
+            <input type="text" placeholder="e.g. LMT, NOC, RTX, GD, LHX, HII (leave blank for all 580 tickers)"
+              value={tickerWhitelist} onChange={e => setTickerWhitelist(e.target.value)}
+              className="bg-background border border-border rounded px-2 py-1 text-xs font-mono text-foreground w-full focus:outline-none focus:border-primary placeholder:text-muted-foreground/30" />
+            {tickerWhitelist && (
+              <div className="text-[10px] font-mono text-muted-foreground/50 mt-0.5">
+                {tickerWhitelist.split(",").map(t => t.trim()).filter(Boolean).length} tickers whitelisted
+              </div>
+            )}
+          </div>
+
+          <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mt-1">Position Sizing</div>
           <label className="flex items-center justify-between">
             <span className="text-xs font-mono text-foreground">Max concurrent positions</span>
             <input type="number" min={1} max={20} value={maxPos} onChange={e => setMaxPos(Number(e.target.value))}

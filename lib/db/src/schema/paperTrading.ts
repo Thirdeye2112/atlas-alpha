@@ -12,6 +12,9 @@ export const botConfigTable = pgTable("bot_config", {
   exitScoreThreshold:  integer("exit_score_threshold").notNull().default(55),
   exitOnDirectionFlip: boolean("exit_on_direction_flip").notNull().default(true),
   maxHoldDays:         integer("max_hold_days").notNull().default(30),
+  takeProfitPct:       doublePrecision("take_profit_pct").notNull().default(0),
+  stopLossPct:         doublePrecision("stop_loss_pct").notNull().default(0),
+  tickerWhitelist:     text("ticker_whitelist").notNull().default(""),
   virtualPortfolio:    doublePrecision("virtual_portfolio").notNull().default(100000.0),
   updatedAt:           timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

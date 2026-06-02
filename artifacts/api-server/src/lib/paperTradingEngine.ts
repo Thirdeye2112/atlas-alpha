@@ -220,13 +220,19 @@ export async function runBotCycle(): Promise<BotCycleResult> {
         catch { continue; }
       }
 
-      const score      = analysis.atlasScore.overall;
-      const direction  = analysis.atlasScore.direction;
-      const price      = analysis.quote.price as number;
-      const holdDays   = Math.floor((Date.now() - new Date(trade.entryAt).getTime()) / 86400000);
+      const score          = analysis.atlasScore.overall;
+      const direction      = analysis.atlasScore.direction;
+      const price          = analysis.quote.price as number;
+      const holdDays       = Math.floor((Date.now() - new Date(trade.entryAt).getTime()) / 86400000);
+      const unrealizedPct  = ((price - trade.entryPrice) / trade.entryPrice) * 100;
 
       let exitReason: string | null = null;
-      if (score < config.exitScoreThreshold) {
+      // Price-based exits take priority over score-based exits
+      if (config.takeProfitPct > 0 && unrealizedPct >= config.takeProfitPct) {
+        exitReason = "take_profit";
+      } else if (config.stopLossPct > 0 && unrealizedPct <= -config.stopLossPct) {
+        exitReason = "stop_loss";
+      } else if (score < config.exitScoreThreshold) {
         exitReason = "score_drop";
       } else if (config.exitOnDirectionFlip && trade.entryDirection === "bullish" && direction !== "bullish") {
         exitReason = "direction_flip";
@@ -241,17 +247,35 @@ export async function runBotCycle(): Promise<BotCycleResult> {
     }
 
     // ── Step 2: Find new entries ──────────────────────────────────────────────
-    const remainingOpen = openTrades.filter(t => !exited.includes(t.ticker));
+    const remainingOpen  = openTrades.filter(t => !exited.includes(t.ticker));
     const slotsAvailable = config.maxPositions - remainingOpen.length;
 
-    if (slotsAvailable > 0 && analyses.length > 0) {
+    if (slotsAvailable > 0) {
       const criteria  = (config.entryCriteria ?? []) as CustomCriterion[];
       const heldSet   = new Set(remainingOpen.map(t => t.ticker));
 
-      const candidates = analyses
-        .filter(a => !heldSet.has(a.quote.ticker as string))
-        .filter(a => criteria.length === 0 || criteria.every(c => applyCustomCriterion(a, c)));
+      const whitelist = config.tickerWhitelist
+        ? config.tickerWhitelist.split(",").map(t => t.trim().toUpperCase()).filter(Boolean)
+        : [];
 
+      // Build candidate pool: scan-job analyses (filtered by whitelist if set)
+      let pool = analyses
+        .filter(a => !heldSet.has(a.quote.ticker as string))
+        .filter(a => whitelist.length === 0 || whitelist.includes((a.quote.ticker as string).toUpperCase()));
+
+      // For whitelisted tickers NOT yet in the scan job cache, run fresh analysis
+      if (whitelist.length > 0) {
+        const cachedTickers = new Set(pool.map(a => (a.quote.ticker as string).toUpperCase()));
+        const missing = whitelist.filter(t => !cachedTickers.has(t) && !heldSet.has(t));
+        if (missing.length > 0) {
+          const freshResults = await Promise.allSettled(missing.map(t => runFullAnalysis(t)));
+          for (const r of freshResults) {
+            if (r.status === "fulfilled") pool.push(r.value);
+          }
+        }
+      }
+
+      const candidates = pool.filter(a => criteria.length === 0 || criteria.every(c => applyCustomCriterion(a, c)));
       candidates.sort((a, b) => b.atlasScore.overall - a.atlasScore.overall);
 
       for (const a of candidates.slice(0, slotsAvailable)) {
