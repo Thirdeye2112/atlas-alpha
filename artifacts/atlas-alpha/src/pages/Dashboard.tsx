@@ -1453,6 +1453,31 @@ export default function Dashboard() {
                   </>
                 );
               })()}
+              {(() => {
+                const al = displayAnalysis.atlasScore.alignmentScore ?? 100;
+                const alColor = al >= 70 ? "text-success" : al >= 40 ? "text-warning" : "text-destructive";
+                const alBarColor = al >= 70 ? "bg-success" : al >= 40 ? "bg-warning" : "bg-destructive";
+                const alLabel = al >= 70 ? "HIGH" : al >= 40 ? "MED" : "LOW";
+                return (
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground flex items-center gap-1.5">
+                      FACTOR ALIGN
+                      {al < 40 && (
+                        <span className="text-[9px] font-bold px-1 py-0.5 bg-destructive/20 text-destructive rounded tracking-wide">⚠ MIXED</span>
+                      )}
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <div className="w-16 h-1.5 bg-border rounded-full overflow-hidden">
+                        <div
+                          className={cn("h-full rounded-full transition-all duration-500", alBarColor)}
+                          style={{ width: `${al}%` }}
+                        />
+                      </div>
+                      <span className={cn("font-bold text-xs w-7 text-right", alColor)}>{alLabel}</span>
+                    </span>
+                  </div>
+                );
+              })()}
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">EXPECTED MOVE</span>
                 <span className="text-warning font-bold">
