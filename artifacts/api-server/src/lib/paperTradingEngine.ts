@@ -68,6 +68,115 @@ export interface SignalPerformance {
   worstSignal: string;
 }
 
+// ── Pattern lists ─────────────────────────────────────────────────────────────
+
+const BULLISH_CANDLES = [
+  "bullish_engulfing", "hammer", "morning_star", "morning_doji_star",
+  "bullish_harami", "bullish_harami_cross", "dragonfly_doji",
+  "piercing_line", "three_white_soldiers", "bullish_marubozu",
+  "tweezer_bottom", "abandoned_baby_bullish",
+];
+
+const CONTINUATION_PATTERNS = [
+  "bull_flag", "ascending_triangle", "symmetrical_triangle",
+  "rectangle_base", "cup_and_handle", "inverse_head_and_shoulders",
+];
+
+const DISTRIBUTION_PATTERNS = [
+  "bear_flag", "evening_star", "evening_doji_star", "three_black_crows",
+  "head_and_shoulders", "bearish_engulfing", "shooting_star",
+  "double_top", "hanging_man", "descending_triangle", "island_reversal",
+];
+
+// ── Entry level computation ────────────────────────────────────────────────────
+
+interface EntryLevels {
+  stopPrice:   number;
+  targetPrice: number;
+  atrPct:      number;
+  trigger:     string;
+}
+
+/**
+ * Compute ATR-based stop/target for a given analysis and check for candle
+ * confirmation + support proximity. Returns null if no setup is confirmed
+ * this cycle — the bot will wait for a better entry next cycle.
+ *
+ * Stop distance varies by entry quality (1–2× ATR); target is always 3×
+ * stop distance (3:1 R:R). User requested: stop = 1/3 of target $.
+ */
+function computeEntryLevels(a: AnalysisResult): EntryLevels | null {
+  const price  = a.quote.price as number;
+  const atrPct = a.volatility.atrPercent;
+  const atr    = price * atrPct / 100;
+
+  const patterns         = (a.patterns?.patterns ?? []) as string[];
+  const hasBullishCandle = patterns.some(p =>
+    BULLISH_CANDLES.some(b => p.toLowerCase().includes(b))
+  );
+
+  // Support proximity
+  const sma20        = a.trend.sma20;
+  const lowerBB      = a.volatility.bollingerLower;
+  const pctFromSma20 = ((price - sma20) / sma20) * 100;
+  const nearSma20    = Math.abs(pctFromSma20) <= 3;
+  const nearLowerBB  = lowerBB > 0 && ((price - lowerBB) / lowerBB) * 100 <= 2;
+  const nearSupport  = nearSma20 || nearLowerBB;
+
+  const score = a.atlasScore.overall;
+  const rsi   = a.momentum.rsi;
+
+  // Tier 1 — Ideal: bullish candle AT a support level → tight 1× ATR stop
+  if (hasBullishCandle && nearSupport) {
+    const stopDist = 1.0 * atr;
+    return { stopPrice: price - stopDist, targetPrice: price + stopDist * 3, atrPct, trigger: "candle_at_support" };
+  }
+
+  // Tier 2 — Good: bullish candle on an RSI pullback (not yet overbought)
+  if (hasBullishCandle && rsi < 52) {
+    const stopDist = 1.5 * atr;
+    return { stopPrice: price - stopDist, targetPrice: price + stopDist * 3, atrPct, trigger: "candle_pullback" };
+  }
+
+  // Tier 3 — Good: price has pulled back to SMA20 region in an uptrend
+  if (nearSma20 && score >= 65 && a.atlasScore.trendScore >= 60) {
+    const stopDist = 1.5 * atr;
+    return { stopPrice: price - stopDist, targetPrice: price + stopDist * 3, atrPct, trigger: "pullback_to_sma20" };
+  }
+
+  // Tier 4 — Acceptable: any bullish candle in an uptrend (not extended >8%)
+  if (hasBullishCandle && score >= 65 && pctFromSma20 < 8) {
+    const stopDist = 1.5 * atr;
+    return { stopPrice: price - stopDist, targetPrice: price + stopDist * 3, atrPct, trigger: "bullish_candle_uptrend" };
+  }
+
+  // Tier 5 — Acceptable: very strong score + strong trend, momentum entry
+  if (score >= 78 && a.atlasScore.trendScore >= 65 && a.atlasScore.momentumScore >= 60) {
+    const stopDist = 2.0 * atr;  // wider stop for momentum chases
+    return { stopPrice: price - stopDist, targetPrice: price + stopDist * 3, atrPct, trigger: "strong_momentum_immediate" };
+  }
+
+  // No confirmation — skip this cycle, wait for better setup
+  return null;
+}
+
+function hasContinuationSignal(a: AnalysisResult): boolean {
+  const patterns  = (a.patterns?.patterns ?? []) as string[];
+  const hasCont   = patterns.some(p => CONTINUATION_PATTERNS.some(c => p.toLowerCase().includes(c)));
+  const inStage2  = a.marketCycle?.cyclePhase === "markup";
+  const strongTrend = a.atlasScore.trendScore >= 65 && a.trend.priceVsSma20 > 0;
+  const risingMom = a.atlasScore.momentumScore >= 55;
+  return hasCont || (inStage2 && strongTrend && risingMom);
+}
+
+function hasDistributionSignal(a: AnalysisResult): boolean {
+  const patterns = (a.patterns?.patterns ?? []) as string[];
+  return (
+    a.exhaustion.distributionTop ||
+    patterns.some(p => DISTRIBUTION_PATTERNS.some(d => p.toLowerCase().includes(d)))
+  );
+}
+
 // ── Field accessor (mirrors scanner.ts for filter evaluation) ─────────────────
 
 type FieldValue = number | string | string[];
@@ -177,11 +286,11 @@ export async function updateConfig(patch: Partial<Omit<BotConfig, "id">>): Promi
 // ── Position helpers ──────────────────────────────────────────────────────────
 
 
-async function openPosition(a: AnalysisResult, config: BotConfig, aiNotes?: string | null): Promise<void> {
-  const price      = a.quote.price as number;
-  const posValue   = (config.virtualPortfolio * config.positionSizePct) / 100;
-  const shares     = posValue / price;
-  const ticker     = a.quote.ticker as string;
+async function openPosition(a: AnalysisResult, config: BotConfig, levels: EntryLevels, aiNotes?: string | null): Promise<void> {
+  const price    = a.quote.price as number;
+  const posValue = (config.virtualPortfolio * config.positionSizePct) / 100;
+  const shares   = posValue / price;
+  const ticker   = a.quote.ticker as string;
 
   await db.insert(paperTradesTable).values({
     ticker,
@@ -196,13 +305,23 @@ async function openPosition(a: AnalysisResult, config: BotConfig, aiNotes?: stri
     entryTrendScore:    a.atlasScore.trendScore,
     entryCriteria:      config.entryCriteria as unknown as Record<string, unknown>,
     entryPatterns:      (a.patterns?.patterns ?? []) as unknown as Record<string, unknown>,
+    entryTrigger:       levels.trigger,
+    atrPctAtEntry:      levels.atrPct,
+    stopPrice:          levels.stopPrice,
+    targetPrice:        levels.targetPrice,
+    trailingStopPrice:  levels.stopPrice,  // trailing stop starts at initial stop
+    peakPrice:          price,
     positionValue:      posValue,
     shares,
     status:             "open",
     aiNotes:            aiNotes ?? null,
   });
 
-  logger.info({ ticker, price, score: a.atlasScore.overall }, "Bot opened position");
+  logger.info(
+    { ticker, price, score: a.atlasScore.overall, trigger: levels.trigger,
+      stop: levels.stopPrice.toFixed(2), target: levels.targetPrice.toFixed(2) },
+    "Bot opened position"
+  );
 }
 
 async function closePosition(
@@ -263,30 +382,101 @@ export async function runBotCycle(): Promise<BotCycleResult> {
 
     for (const trade of openTrades) {
       let analysis = analyses.find(a => (a.quote.ticker as string) === trade.ticker);
-
-      // Fallback: re-run if not in cache
       if (!analysis) {
         try { analysis = await runFullAnalysis(trade.ticker); }
         catch { continue; }
       }
 
-      const score          = analysis.atlasScore.overall;
-      const direction      = analysis.atlasScore.direction;
-      const price          = analysis.quote.price as number;
-      const holdDays       = Math.floor((Date.now() - new Date(trade.entryAt).getTime()) / 86400000);
-      const unrealizedPct  = ((price - trade.entryPrice) / trade.entryPrice) * 100;
+      const score         = analysis.atlasScore.overall;
+      const direction     = analysis.atlasScore.direction;
+      const price         = analysis.quote.price as number;
+      const holdDays      = Math.floor((Date.now() - new Date(trade.entryAt).getTime()) / 86400000);
+      const unrealizedPct = ((price - trade.entryPrice) / trade.entryPrice) * 100;
 
+      // ── Update trailing stop and peak price ─────────────────────────────────
+      const newPeak = Math.max(trade.peakPrice ?? trade.entryPrice, price);
+
+      // ATR for trailing calculation — prefer stored entry ATR for consistency
+      const entryAtrPct = trade.atrPctAtEntry ?? analysis.volatility.atrPercent;
+      const entryAtr    = trade.entryPrice * entryAtrPct / 100;
+
+      // Activate trailing stop once 33%+ of the way to target
+      let newTrailingStop = trade.trailingStopPrice ?? trade.stopPrice ?? (trade.entryPrice * (1 - (config.stopLossPct || 4) / 100));
+      if (trade.targetPrice && trade.stopPrice) {
+        const targetDist  = trade.targetPrice - trade.entryPrice;
+        const activationThreshold = trade.entryPrice + targetDist * 0.33;
+        if (price >= activationThreshold) {
+          // Trail at 1.5× entry ATR below running peak; never go below entry (breakeven) once activated
+          const trailLevel = newPeak - 1.5 * entryAtr;
+          newTrailingStop  = Math.max(newTrailingStop, trailLevel, trade.entryPrice * 0.998);
+        }
+      }
+
+      // Persist peak / trailing stop updates
+      if (newPeak !== (trade.peakPrice ?? 0) || Math.abs(newTrailingStop - (trade.trailingStopPrice ?? 0)) > 0.001) {
+        await db.update(paperTradesTable)
+          .set({ peakPrice: newPeak, trailingStopPrice: newTrailingStop })
+          .where(eq(paperTradesTable.id, trade.id));
+      }
+
+      // ── Exit decision ────────────────────────────────────────────────────────
       let exitReason: string | null = null;
-      // Price-based exits take priority over score-based exits
-      if (config.takeProfitPct > 0 && unrealizedPct >= config.takeProfitPct) {
-        exitReason = "take_profit";
-      } else if (config.stopLossPct > 0 && unrealizedPct <= -config.stopLossPct) {
+
+      // 1. Trailing stop hit (once trailing is active — price fell from peak)
+      if (trade.stopPrice && trade.targetPrice) {
+        const targetDist = trade.targetPrice - trade.entryPrice;
+        const trailingActive = newPeak >= trade.entryPrice + targetDist * 0.33;
+        if (trailingActive && price <= newTrailingStop && price < newPeak * 0.98) {
+          exitReason = "trailing_stop";
+        }
+      }
+
+      // 2. Initial ATR stop hit (before trailing is active)
+      if (!exitReason && trade.stopPrice && price <= trade.stopPrice) {
         exitReason = "stop_loss";
-      } else if (score < config.exitScoreThreshold) {
+      }
+
+      // 3. Fallback: fixed % stop for legacy trades without stopPrice
+      if (!exitReason && !trade.stopPrice && config.stopLossPct > 0 && unrealizedPct <= -config.stopLossPct) {
+        exitReason = "stop_loss";
+      }
+
+      // 4. Distribution signal detected → protect capital even if in profit
+      if (!exitReason && hasDistributionSignal(analysis)) {
+        exitReason = "distribution_signal";
+      }
+
+      // 5. Target reached → let winner run if continuation pattern present
+      if (!exitReason && trade.targetPrice && price >= trade.targetPrice) {
+        if (hasContinuationSignal(analysis)) {
+          // Tighten trailing stop to 1× ATR (closer trail to lock in more profit)
+          const tightTrail = newPeak - 1.0 * entryAtr;
+          if (tightTrail > newTrailingStop) {
+            await db.update(paperTradesTable)
+              .set({ trailingStopPrice: tightTrail })
+              .where(eq(paperTradesTable.id, trade.id));
+          }
+          // Don't exit — let trailing stop handle it
+        } else {
+          exitReason = "take_profit";
+        }
+      }
+
+      // 6. Fallback: fixed % take profit for legacy trades
+      if (!exitReason && !trade.targetPrice && config.takeProfitPct > 0 && unrealizedPct >= config.takeProfitPct) {
+        exitReason = "take_profit";
+      }
+
+      // 7. Score / direction exits
+      if (!exitReason && score < config.exitScoreThreshold) {
         exitReason = "score_drop";
-      } else if (config.exitOnDirectionFlip && trade.entryDirection === "bullish" && direction !== "bullish") {
+      }
+      if (!exitReason && config.exitOnDirectionFlip && trade.entryDirection === "bullish" && direction !== "bullish") {
         exitReason = "direction_flip";
-      } else if (holdDays >= config.maxHoldDays) {
+      }
+
+      // 8. Time exit — ONLY for losing or flat positions; winners keep running
+      if (!exitReason && holdDays >= config.maxHoldDays && unrealizedPct < 1.0) {
         exitReason = "max_hold";
       }
 
@@ -301,19 +491,17 @@ export async function runBotCycle(): Promise<BotCycleResult> {
     const slotsAvailable = config.maxPositions - remainingOpen.length;
 
     if (slotsAvailable > 0) {
-      const criteria  = (config.entryCriteria ?? []) as CustomCriterion[];
-      const heldSet   = new Set(remainingOpen.map(t => t.ticker));
+      const criteria = (config.entryCriteria ?? []) as CustomCriterion[];
+      const heldSet  = new Set(remainingOpen.map(t => t.ticker));
 
       const whitelist = config.tickerWhitelist
         ? config.tickerWhitelist.split(",").map(t => t.trim().toUpperCase()).filter(Boolean)
         : [];
 
-      // Build candidate pool: scan-job analyses (filtered by whitelist if set)
       let pool = analyses
         .filter(a => !heldSet.has(a.quote.ticker as string))
         .filter(a => whitelist.length === 0 || whitelist.includes((a.quote.ticker as string).toUpperCase()));
 
-      // For whitelisted tickers NOT yet in the scan job cache, run fresh analysis
       if (whitelist.length > 0) {
         const cachedTickers = new Set(pool.map(a => (a.quote.ticker as string).toUpperCase()));
         const missing = whitelist.filter(t => !cachedTickers.has(t) && !heldSet.has(t));
@@ -328,7 +516,17 @@ export async function runBotCycle(): Promise<BotCycleResult> {
       const candidates = pool.filter(a => criteria.length === 0 || criteria.every(c => applyCustomCriterion(a, c)));
       candidates.sort((a, b) => b.atlasScore.overall - a.atlasScore.overall);
 
-      for (const a of candidates.slice(0, slotsAvailable)) {
+      let filled = 0;
+      for (const a of candidates) {
+        if (filled >= slotsAvailable) break;
+
+        // Require candle confirmation + support-level check before entering
+        const levels = computeEntryLevels(a);
+        if (!levels) {
+          logger.info({ ticker: a.quote.ticker }, "Bot: no candle/support confirmation — waiting for better setup");
+          continue;
+        }
+
         let aiNotes: string | null = null;
         if (config.aiGateEnabled) {
           const gate = smartEntryGate(a);
@@ -338,8 +536,10 @@ export async function runBotCycle(): Promise<BotCycleResult> {
           }
           aiNotes = gate.reasoning;
         }
-        await openPosition(a, config, aiNotes);
+
+        await openPosition(a, config, levels, aiNotes);
         newEntries.push(a.quote.ticker as string);
+        filled++;
       }
     }
 

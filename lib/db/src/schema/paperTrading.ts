@@ -47,6 +47,13 @@ export const paperTradesTable = pgTable("paper_trades", {
   pnlDollar:          doublePrecision("pnl_dollar"),
   shares:             doublePrecision("shares"),
   positionValue:      doublePrecision("position_value"),
+  // Smart entry / adaptive exit fields
+  entryTrigger:       text("entry_trigger"),
+  atrPctAtEntry:      doublePrecision("atr_pct_at_entry"),
+  stopPrice:          doublePrecision("stop_price"),
+  targetPrice:        doublePrecision("target_price"),
+  trailingStopPrice:  doublePrecision("trailing_stop_price"),
+  peakPrice:          doublePrecision("peak_price"),
   status:             text("status").notNull().default("open"),
   aiNotes:            text("ai_notes"),
   createdAt:          timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
