@@ -146,10 +146,13 @@ interface SchedulerState {
 
 interface MarketContext {
   regime: "risk_on" | "neutral" | "risk_off";
+  botRegime: "trend_up" | "neutral" | "chop" | "high_vol" | "risk_off";
   regimeScore: number;
   breadthPct50: number | null;
   breadthPct200: number | null;
   vix: number | null;
+  adx: number | null;
+  blockedCategories: string[];
   minScoreOverride: number | null;
   allowNewEntries: boolean;
   reason: string;
@@ -556,6 +559,27 @@ function IntelligencePanel({
           <span className="text-muted-foreground/40">loading…</span>
         )}
       </div>
+
+      {/* Bot regime */}
+      {ctx?.botRegime && (
+        <>
+          <div className="text-border/60 hidden sm:block">|</div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-muted-foreground/60 uppercase tracking-wider text-[9px]">BOT</span>
+            <BotRegimeBadge regime={ctx.botRegime} />
+            {ctx.adx != null && (
+              <span className={cn("text-[10px] font-mono",
+                ctx.adx < 20 ? "text-warning" : ctx.adx > 25 ? "text-success" : "text-muted-foreground/50"
+              )}>ADX {ctx.adx.toFixed(0)}</span>
+            )}
+            {ctx.blockedCategories.length > 0 && (
+              <span className="text-[9px] font-mono text-destructive/70" title={`Blocked: ${ctx.blockedCategories.join(", ")}`}>
+                ✗ {ctx.blockedCategories.length} blocked
+              </span>
+            )}
+          </div>
+        </>
+      )}
 
       {/* Entry gate */}
       {ctx && (
@@ -1233,6 +1257,7 @@ function HistoryTab({ trades }: { trades: PaperTrade[] }) {
   const closed = trades.filter(t => t.status === "closed");
   const [sortKey, setSortKey] = useState<"pnlPercent" | "exitAt" | "holdDays">("exitAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const sorted = [...closed].sort((a, b) => {
     const av = a[sortKey] as number | string | null ?? 0;
@@ -1277,30 +1302,53 @@ function HistoryTab({ trades }: { trades: PaperTrade[] }) {
           </tr>
         </thead>
         <tbody>
-          {sorted.map(t => (
-            <tr key={t.id} className="border-b border-border/30 hover:bg-muted/20 transition-colors">
-              <td className="py-2 px-2">
-                <div className="font-bold text-foreground">{t.ticker}</div>
-                <div className="text-muted-foreground/50 text-[10px] truncate max-w-[100px]">{t.name}</div>
-              </td>
-              <td className="text-right py-2 px-2 text-muted-foreground">{formatCurrency(t.entryPrice)}</td>
-              <td className="text-right py-2 px-2 text-muted-foreground">{t.exitPrice ? formatCurrency(t.exitPrice) : "—"}</td>
-              <td className="text-right py-2 px-2"><PnlBadge pct={t.pnlPercent} dollar={t.pnlDollar} /></td>
-              <td className="py-2 px-2"><ExitReasonBadge reason={t.exitReason} /></td>
-              <td className="py-2 px-2"><EntryTriggerBadge trigger={t.entryTrigger} /></td>
-              <td className="text-right py-2 px-2 text-muted-foreground">{(t.holdDays ?? 0)}d</td>
-              <td className="text-right py-2 px-2">
-                <span className="inline-flex items-center gap-1">
-                  <ScoreChip score={t.entryScore} dim />
-                  <span className="text-muted-foreground/40">→</span>
-                  <ScoreChip score={t.exitScore} />
-                </span>
-              </td>
-              <td className="text-right py-2 px-2 text-muted-foreground/60">
-                {t.exitAt ? new Date(t.exitAt).toLocaleDateString() : "—"}
-              </td>
-            </tr>
-          ))}
+          {sorted.map(t => {
+            const isExpanded = expandedId === t.id;
+            return (
+              <React.Fragment key={t.id}>
+                <tr
+                  className="border-b border-border/30 hover:bg-muted/20 transition-colors cursor-pointer select-none"
+                  onClick={() => setExpandedId(isExpanded ? null : t.id)}
+                  title={t.decisionLog ? "Click to see why this trade was entered" : undefined}
+                >
+                  <td className="py-2 px-2">
+                    <div className="font-bold text-foreground">{t.ticker}</div>
+                    <div className="text-muted-foreground/50 text-[10px] truncate max-w-[100px]">{t.name}</div>
+                  </td>
+                  <td className="text-right py-2 px-2 text-muted-foreground">{formatCurrency(t.entryPrice)}</td>
+                  <td className="text-right py-2 px-2 text-muted-foreground">{t.exitPrice ? formatCurrency(t.exitPrice) : "—"}</td>
+                  <td className="text-right py-2 px-2"><PnlBadge pct={t.pnlPercent} dollar={t.pnlDollar} /></td>
+                  <td className="py-2 px-2"><ExitReasonBadge reason={t.exitReason} /></td>
+                  <td className="py-2 px-2"><EntryTriggerBadge trigger={t.entryTrigger} /></td>
+                  <td className="text-right py-2 px-2 text-muted-foreground">{(t.holdDays ?? 0)}d</td>
+                  <td className="text-right py-2 px-2">
+                    <span className="inline-flex items-center gap-1">
+                      <ScoreChip score={t.entryScore} dim />
+                      <span className="text-muted-foreground/40">→</span>
+                      <ScoreChip score={t.exitScore} />
+                    </span>
+                  </td>
+                  <td className="text-right py-2 px-2 text-muted-foreground/60">
+                    {t.exitAt ? new Date(t.exitAt).toLocaleDateString() : "—"}
+                  </td>
+                </tr>
+                {isExpanded && t.decisionLog && (
+                  <tr className="border-b border-border/20">
+                    <td colSpan={9} className="px-3 pb-3 pt-0">
+                      <WhyPanel log={t.decisionLog} />
+                    </td>
+                  </tr>
+                )}
+                {isExpanded && !t.decisionLog && (
+                  <tr className="border-b border-border/20">
+                    <td colSpan={9} className="px-4 py-2 text-[10px] font-mono text-muted-foreground/40 italic">
+                      No decision log — this trade was opened before explainability logging was enabled.
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
+            );
+          })}
         </tbody>
       </table>
     </div>
