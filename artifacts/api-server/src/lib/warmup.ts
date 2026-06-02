@@ -4,6 +4,7 @@ import { fetchYahooRaw } from "./marketData.js";
 import { runOhlcvBackfill, getBackfillState } from "./ohlcvStore.js";
 import { analysisCache, ohlcvCache, quoteCache } from "./cache.js";
 import { getOrStartScanJob } from "./scanJob.js";
+import { initSimState } from "./historicalSimEngine.js";
 import { logger } from "./logger.js";
 
 // ── Warmup state ──────────────────────────────────────────────────────────────
@@ -50,6 +51,9 @@ export async function runWarmup(label = "startup"): Promise<void> {
     logger.warn({ label }, "Warmup already in progress, skipping");
     return;
   }
+
+  // Restore sim state from DB so results survive server restarts
+  void initSimState();
 
   const startedAt = Date.now();
   state.status     = "running";

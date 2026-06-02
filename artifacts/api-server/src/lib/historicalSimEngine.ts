@@ -64,6 +64,26 @@ export function getSimStatus(): SimJobState {
   return { ...state };
 }
 
+/**
+ * Call once on server startup — restores state from DB so results survive restarts.
+ */
+export async function initSimState(): Promise<void> {
+  if (state.status !== "idle") return; // already set (e.g. mid-run)
+  const res = await db.execute(sql`
+    SELECT COUNT(*) AS n, MAX(sim_date) AS last_date FROM sim_trades
+  `);
+  const row = res.rows[0] as Record<string, unknown>;
+  const n = Number(row?.n ?? 0);
+  if (n > 0) {
+    Object.assign(state, {
+      status:          "complete",
+      tradesRecorded:  n,
+      completedAt:     String(row?.last_date ?? new Date().toISOString()),
+    });
+    logger.info({ rows: n }, "Sim state restored from DB");
+  }
+}
+
 export function startSimJob(): void {
   if (state.status === "running") {
     logger.warn("Historical sim already running — ignoring duplicate start");
@@ -388,9 +408,8 @@ export async function runHistoricalSim(): Promise<void> {
 const BUCKET_ORDER = ["STRONG", "ELEVATED", "NEUTRAL", "WEAK"];
 
 export async function getSimResults() {
-  if (state.status === "idle") {
-    return { status: "idle", totalBars: 0, totalEntered: 0, pctEntered: 0, byScoreBucket: [], byRsiZone: [], optimalScoreThreshold: null, lastRunAt: null, configFilter: null };
-  }
+  // Always query the DB — state.status may be "idle" after a server restart
+  // even though sim_trades is populated.
 
   // Read current bot config to apply the same entry criteria the live bot uses
   const configRows = await db.select().from(botConfigTable).limit(1);
@@ -488,8 +507,11 @@ export async function getSimResults() {
     }
   }
 
+  // Derive status from live state OR from DB data (survives server restarts)
+  const effectiveStatus = state.status !== "idle" ? state.status : totalBars > 0 ? "complete" : "idle";
+
   return {
-    status:               state.status,
+    status:               effectiveStatus,
     totalBars,
     totalEntered,
     pctEntered:           totalBars > 0 ? Math.round((totalEntered / totalBars) * 100) : 0,
