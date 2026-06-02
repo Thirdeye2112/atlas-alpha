@@ -74,7 +74,7 @@ export async function saveSnapshotsBatch(analyses: AnalysisResult[]): Promise<vo
 
   const rows = analyses.map(a => {
     const ticker  = String(a.quote.ticker ?? "");
-    const cal     = calibrationStore.getFitted(ticker);
+    const cal     = calibrationStore.getFitted(ticker, 10);
     const rc      = a.recentCandles;
     const ex      = a.exhaustion;
     const mc      = a.marketCycle;
@@ -264,7 +264,7 @@ export async function getLearningStats(): Promise<LearningStats> {
 
 export async function getConfidenceBoost(a: AnalysisResult): Promise<ConfidenceBoost | null> {
   const ticker   = String(a.quote.ticker ?? "");
-  const cal      = calibrationStore.getFitted(ticker);
+  const cal      = calibrationStore.getFitted(ticker, 10);
   const rsi      = a.momentum?.rsi ?? 50;
   const score    = a.atlasScore.overall;
   const zone     = rsiZone(rsi);

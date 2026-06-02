@@ -16,7 +16,7 @@ export const SCANNER_UNIVERSE: string[] = [
   // ── Financials — Banks, Insurance, Asset Managers ─────────────────────────
   "JPM", "BAC", "WFC", "GS", "MS", "C", "AXP", "BLK", "SCHW", "USB",
   "PNC", "TFC", "COF", "SYF", "ALLY", "ALL", "CB", "PGR", "TRV", "MET", "PRU",
-  "CME", "ICE", "CBOE", "SPGI", "MCO", "V", "MA", "AJG", "MMC", "WTW",
+  "CME", "ICE", "CBOE", "SPGI", "MCO", "V", "MA", "AJG", "WTW",
 
   // ── Healthcare — Pharma, Biotech, MedTech ─────────────────────────────────
   "JNJ", "UNH", "LLY", "MRK", "ABBV", "TMO", "ABT", "AMGN", "GILD", "VRTX",
@@ -206,7 +206,6 @@ export const SCANNER_UNIVERSE: string[] = [
   // ── Technology ────────────────────────────────────────────────────────────
   "ADI",    // Analog Devices — NASDAQ 100 semiconductor
   "ADSK",   // Autodesk — NASDAQ 100 design software
-  "ANSS",   // ANSYS — NASDAQ 100 simulation software
   "ASML",   // ASML Holding — NASDAQ 100 lithography (ADR)
   "APH",    // Amphenol — S&P 500 connectors / sensors
   "CSGP",   // CoStar Group — NASDAQ 100 real estate data
@@ -227,7 +226,6 @@ export const SCANNER_UNIVERSE: string[] = [
   "LKQ",    // LKQ Corp — S&P 500 auto parts
   "MHK",    // Mohawk Industries — S&P 500 flooring
   "MTCH",   // Match Group — S&P 500 dating apps
-  "PARA",   // Paramount Global — S&P 500 media & streaming
   "POOL",   // Pool Corp — NASDAQ 100 pool supply distribution
   "RHI",    // Robert Half — S&P 500 staffing
   "SNA",    // Snap-on — S&P 500 professional tools
@@ -242,8 +240,6 @@ export const SCANNER_UNIVERSE: string[] = [
   "LW",     // Lamb Weston — S&P 500 frozen potato products
 
   // ── Energy ────────────────────────────────────────────────────────────────
-  "HES",    // Hess Corp — S&P 500 E&P
-  "MRO",    // Marathon Oil — S&P 500 E&P
 
   // ── Industrials ───────────────────────────────────────────────────────────
   "ALK",    // Alaska Air — S&P 500 airline

@@ -1158,6 +1158,9 @@ components:
           type: integer
         signalNarrative:
           type: string
+        alignmentScore:
+          type: number
+          description: "0–100 factor alignment score. 100 = all sub-scores in sync; lower = internal divergence reducing effective confidence."
       required:
         - overall
         - label
@@ -1178,6 +1181,7 @@ components:
         - indicatorsAgreeing
         - totalIndicators
         - signalNarrative
+        - alignmentScore
 
     CalibrationInfo:
       type: object

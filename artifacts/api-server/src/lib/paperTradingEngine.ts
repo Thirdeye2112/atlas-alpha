@@ -1,4 +1,4 @@
-import { db, paperTradesTable, botConfigTable, type PaperTrade, type BotConfig } from "@workspace/db";
+import { db, paperTradesTable, botConfigTable, patternPerformanceTable, type PaperTrade, type BotConfig } from "@workspace/db";
 import { eq, desc, and, sql } from "drizzle-orm";
 import Anthropic from "@anthropic-ai/sdk";
 import { getOrStartScanJob } from "./scanJob.js";
@@ -89,6 +89,22 @@ const DISTRIBUTION_PATTERNS = [
   "double_top", "hanging_man", "descending_triangle", "island_reversal",
 ];
 
+// ── Category-specific risk:reward multipliers ─────────────────────────────────
+// Mean-reversion trades target a natural anchor (SMA, BB mid) that is closer
+// than a trend extension — 1.5:1 is more realistic and avoids over-targeting.
+// Gap/squeeze plays are volatile with high slippage; 2:1 balances reward vs.
+// the elevated probability of a partial fill or quick fade.
+// Breakout / institutional accumulation / high-prob longs support the full 3:1.
+const MEAN_REVERSION_CATS = ["mean_reversion", "key_sr"];
+const GAP_SQUEEZE_CATS    = ["gap_up", "gap_down", "gap_setup", "gamma_squeeze", "short_squeeze"];
+
+function getRRMultiplier(cats: string[]): number {
+  const lower = cats.map(c => c.toLowerCase());
+  if (lower.some(c => MEAN_REVERSION_CATS.some(mr => c.includes(mr)))) return 1.5;
+  if (lower.some(c => GAP_SQUEEZE_CATS.some(g => c.includes(g)))) return 2.0;
+  return 3.0;
+}
+
 // ── Entry level computation ────────────────────────────────────────────────────
 
 interface EntryLevels {
@@ -103,8 +119,9 @@ interface EntryLevels {
  * confirmation + support proximity. Returns null if no setup is confirmed
  * this cycle — the bot will wait for a better entry next cycle.
  *
- * Stop distance varies by entry quality (1–2× ATR); target is always 3×
- * stop distance (3:1 R:R). User requested: stop = 1/3 of target $.
+ * Stop distance varies by entry quality (1–2× ATR); default target is 3×
+ * stop distance (3:1 R:R). The call site applies category-specific R:R overrides
+ * (mean-reversion → 1.5:1; gap/squeeze → 2:1) after scanner categories are known.
  */
 function computeEntryLevels(a: AnalysisResult): EntryLevels | null {
   const price  = a.quote.price as number;
@@ -359,6 +376,27 @@ async function closePosition(
     .where(eq(paperTradesTable.id, trade.id));
 
   logger.info({ ticker: trade.ticker, exitReason, pnlPercent: pnlPercent.toFixed(2) }, "Bot closed position");
+
+  // Fire-and-forget: update per-pattern hit rates for the self-learning loop
+  const entryPatterns = (trade.entryPatterns ?? []) as string[];
+  if (entryPatterns.length > 0) {
+    const win = pnlPercent > 0;
+    Promise.all(
+      entryPatterns.map(pattern =>
+        db.insert(patternPerformanceTable)
+          .values({ pattern, direction: trade.entryDirection, horizon: 5, totalTrades: 1, wins: win ? 1 : 0, losses: win ? 0 : 1 })
+          .onConflictDoUpdate({
+            target: [patternPerformanceTable.pattern, patternPerformanceTable.direction, patternPerformanceTable.horizon],
+            set: {
+              totalTrades: sql`${patternPerformanceTable.totalTrades} + 1`,
+              wins:        sql`${patternPerformanceTable.wins} + ${win ? 1 : 0}`,
+              losses:      sql`${patternPerformanceTable.losses} + ${win ? 0 : 1}`,
+              updatedAt:   new Date(),
+            },
+          })
+      )
+    ).catch(err => logger.warn({ err, ticker: trade.ticker }, "Failed to update pattern performance"));
+  }
 }
 
 // ── Main cycle ────────────────────────────────────────────────────────────────
@@ -580,16 +618,22 @@ export async function runBotCycle(): Promise<BotCycleResult> {
 
           // Apply scanner-category-based stop widening and position sizing
           const { categories, positionMultiplier, stopMultiplier } = verdict.scannerInfo;
+          // Category-specific R:R: mean-reversion → 1.5:1, gap/squeeze → 2:1, else 3:1
+          const rrMult = getRRMultiplier(categories);
           if (stopMultiplier !== 1.0 && levels.stopPrice) {
             const quotePrice = a.quote.price as number;
             // riskDist is positive (distance from entry down to stop)
             const riskDist    = quotePrice - levels.stopPrice;
             const newRiskDist = riskDist * stopMultiplier;
             levels.stopPrice  = quotePrice - newRiskDist;
-            // Preserve 3:1 R:R by widening target proportionally
             if (levels.targetPrice) {
-              levels.targetPrice = quotePrice + newRiskDist * 3;
+              levels.targetPrice = quotePrice + newRiskDist * rrMult;
             }
+          } else if (rrMult !== 3.0 && levels.stopPrice && levels.targetPrice) {
+            // No stop widening but R:R should differ — re-derive target from risk distance
+            const quotePrice = a.quote.price as number;
+            const riskDist   = quotePrice - levels.stopPrice;
+            levels.targetPrice = quotePrice + riskDist * rrMult;
           }
 
           await openPosition(a, config, levels, aiNotes, categories, positionMultiplier);

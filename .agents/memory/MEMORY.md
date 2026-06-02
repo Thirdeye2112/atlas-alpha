@@ -1,7 +1,7 @@
 - [Backtest IC findings](backtest-ic-findings.md) — IC is positive for small/mid-cap stocks but negative (contrarian) for mega-caps/indices; RS is most underpaid factor
 - [Distribution top signal](distribution-top-signal.md) — overbought exhaustion mirror: stoch K/D >90, price above BB+, SMA20 deviation, low RVOL at highs
 - [Scoring weights rationale](scoring-weights.md) — weights updated via IC²-analysis; RS 13→20%, Regime 8→4%, Trend 27→24%
-- [Calibration persistence](calibration-persistence.md) — DB-backed calibrationStore; status values are 'live-fit'|'stale-fit'|'cold-start'|'pending'|'error'; SCORE_VERSION in scoring.ts invalidates stale rows
+- [Calibration persistence](calibration-persistence.md) — DB-backed calibrationStore; composite key `ticker:horizon`; all callers use horizon=10; status values are 'live-fit'|'stale-fit'|'cold-start'|'pending'|'error'
 - [Signal logging pattern](signal-logging.md) — batch insert to signal_log at scan job end; fire-and-forget; AnalysisResult.quote is Record<string,unknown> so ticker needs String() cast
 - [Backtest cost model](backtest-cost-model.md) — SLIPPAGE_BPS=5 baked in; hitRateNet = direction-aware net hit rate per bucket; brierScore persisted to calibration_models
 - [Platform upgrades v1.3](platform-upgrades-v1.3.md) — regime v1.3 field names, IS/OOS split design, alert DB schema, AI narrative toggle, and AnalysisResult field gotchas.
@@ -12,3 +12,6 @@
 - [TA overlays v2](ta-overlays-v2.md) — Fib/VolumeProfile/WeeklyContext added to AnalysisResult; calcOptions now takes optional bars param; pivot RSI divergence uses findPivotLows/Highs helpers; LightweightChart lineSeries prop for full-width time-series
 - [Market cycle detection](market-cycle-detection.md) — Weinstein Stage Analysis in calcMarketCycle(); scan job is lightMode (no marketCycle); getEnrichedTrades prefers full cache analysis:${ticker} over scan job for cycle data
 - [Continuous learning system](continuous-learning-system.md) — signal_snapshots table; snapshotEngine.ts saves+resolves+mines; smartEntryGate extracted to entryGate.ts; CalibrationEntry.isContrarian = rankIC < 0 (not stored)
+- [Scoring alignment penalty](scoring-alignment.md) — alignmentScore field in AtlasAlphaScore; stdDev of 5 sub-scores penalises confidenceScore (not overall); max 15% at stdDev≥55
+- [Paper trading R:R by category](paper-trading-rr.md) — getRRMultiplier() in paperTradingEngine; mean_reversion→1.5:1, gap/squeeze→2:1, default→3:1; applied at call site after categories known
+- [Pattern performance table](pattern-performance-table.md) — pattern_performance DB table; upsert on closePosition; uniqueIndex on (pattern, direction, horizon)

@@ -247,7 +247,7 @@ export async function getSimGate(score: number, rsi: number): Promise<SimGateRes
 // ── 3. Calibration gate ───────────────────────────────────────────────────────
 
 export function getCalibGate(ticker: string, score: number): CalibGateResult {
-  const fitted = calibrationStore.getFitted(ticker);
+  const fitted = calibrationStore.getFitted(ticker, 10);
 
   if (!fitted) {
     return { allow: true, probPositive: null, signalMode: "none", rankIC: null, reason: "no calibration data — allowing" };
@@ -504,7 +504,7 @@ export function startBackgroundEnhancement(): void {
       const job          = getOrStartScanJob();
       const uncalibrated = job.analyses
         .filter(a => {
-          const s = calibrationStore.status(a.quote.ticker as string);
+          const s = calibrationStore.status(a.quote.ticker as string, 10);
           return s === "cold-start" || s === "error";
         })
         .sort((a, b) => b.atlasScore.overall - a.atlasScore.overall)
@@ -514,7 +514,7 @@ export function startBackgroundEnhancement(): void {
 
       for (const a of uncalibrated) {
         const ticker = a.quote.ticker as string;
-        if (calibrationStore.markPending(ticker)) {
+        if (calibrationStore.markPending(ticker, 10)) {
           runCalibrationBackground(ticker).catch(err =>
             logger.warn({ ticker, err }, "Background calibration failed")
           );

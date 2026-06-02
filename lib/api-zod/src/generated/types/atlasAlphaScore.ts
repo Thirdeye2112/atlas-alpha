@@ -30,4 +30,6 @@ export interface AtlasAlphaScore {
   indicatorsAgreeing: number;
   totalIndicators: number;
   signalNarrative: string;
+  /** 0–100 factor alignment score. 100 = all sub-scores in sync; lower = internal divergence reducing effective confidence. */
+  alignmentScore: number;
 }

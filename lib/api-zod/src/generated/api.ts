@@ -107,7 +107,8 @@ export const GetStockAnalysisResponse = zod.object({
   "expectedMovePercent": zod.number(),
   "indicatorsAgreeing": zod.number(),
   "totalIndicators": zod.number(),
-  "signalNarrative": zod.string()
+  "signalNarrative": zod.string(),
+  "alignmentScore": zod.number().describe('0–100 factor alignment score. 100 = all sub-scores in sync; lower = internal divergence reducing effective confidence.')
 }),
   "trend": zod.object({
   "sma20": zod.number(),

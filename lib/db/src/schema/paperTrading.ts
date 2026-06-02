@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, doublePrecision, boolean, integer, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, doublePrecision, boolean, integer, jsonb, index, uniqueIndex, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -59,7 +59,12 @@ export const paperTradesTable = pgTable("paper_trades", {
   status:             text("status").notNull().default("open"),
   aiNotes:            text("ai_notes"),
   createdAt:          timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [
+  index("idx_paper_trades_status").on(t.status),
+  index("idx_paper_trades_ticker").on(t.ticker),
+  index("idx_paper_trades_ticker_status").on(t.ticker, t.status),
+  index("idx_paper_trades_exit_at").on(t.exitAt),
+]);
 
 export const insertPaperTradeSchema = createInsertSchema(paperTradesTable).omit({ id: true, createdAt: true });
 export type InsertPaperTrade = z.infer<typeof insertPaperTradeSchema>;
@@ -80,3 +85,25 @@ export const botAdaptationLogTable = pgTable("bot_adaptation_log", {
 });
 
 export type BotAdaptationLog = typeof botAdaptationLogTable.$inferSelect;
+
+// ── Per-pattern hit rate — persistent self-learning signal ────────────────────
+// Updated on every paper trade close via upsert. Enables the bot to de-weight
+// patterns with historically poor forward P&L rather than treating all equally.
+
+export const patternPerformanceTable = pgTable("pattern_performance", {
+  id:          serial("id").primaryKey(),
+  pattern:     text("pattern").notNull(),
+  direction:   text("direction").notNull(),   // 'bullish' | 'bearish' | 'neutral'
+  horizon:     integer("horizon").notNull().default(5),
+  totalTrades: integer("total_trades").notNull().default(0),
+  wins:        integer("wins").notNull().default(0),
+  losses:      integer("losses").notNull().default(0),
+  avgPnlPct:   real("avg_pnl_pct"),
+  updatedAt:   timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("uq_pattern_perf_pattern_dir_horizon").on(t.pattern, t.direction, t.horizon),
+  index("idx_pattern_perf_pattern").on(t.pattern),
+]);
+
+export type PatternPerformance = typeof patternPerformanceTable.$inferSelect;
+export type InsertPatternPerformance = typeof patternPerformanceTable.$inferInsert;

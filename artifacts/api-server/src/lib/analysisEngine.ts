@@ -65,7 +65,7 @@ function buildResult(
   const spyTrend       = calcTrend(spyBars, spyBars[spyBars.length - 1]?.close ?? 500);
   const regimeIndicators = calcRegimeIndicators(spyBars, spyTrend);
   const exhaustion     = calcExhaustion(bars, momentum, volume, trend, volatility);
-  const calEntry       = calibrationStore.getFitted(sym);
+  const calEntry       = calibrationStore.getFitted(sym, 10);
   const atlasScore     = calcAtlasScore(
     trend, momentum, volume, options, rs,
     regimeIndicators.regimeScore, volatility.expectedMovePercent, exhaustion,
@@ -115,7 +115,7 @@ function buildResult(
 /** Trigger a background calibration for `ticker` if not already tracked.
  *  Fire-and-forget — never awaited by the caller. */
 function maybeCalibrate(sym: string): void {
-  const marked = calibrationStore.markPending(sym);
+  const marked = calibrationStore.markPending(sym, 10);
   if (!marked) return; // already fitted, pending, or concurrency limit hit
   setImmediate(() => {
     runCalibrationBackground(sym).catch(() => {

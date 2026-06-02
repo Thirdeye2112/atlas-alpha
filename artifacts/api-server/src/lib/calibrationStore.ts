@@ -23,6 +23,9 @@ type StoreValue =
   | { status: "pending" | "error" }
   | ({ status: "live-fit" | "stale-fit" } & CalibrationEntry);
 
+// Store key format: `${TICKER}:${horizon}` — e.g. "AAPL:10", "TSLA:5"
+// Using a composite key prevents horizon=5 and horizon=10 models from
+// silently overwriting each other (the original bug: store only keyed by ticker).
 const store = new Map<string, StoreValue>();
 let pendingCount = 0;
 const MAX_CONCURRENT = 2;
@@ -30,6 +33,10 @@ const MAX_CONCURRENT = 2;
 function sigmoid(slope: number, intercept: number, score: number): number {
   const z = Math.max(-15, Math.min(15, slope * score + intercept));
   return Math.round((1 / (1 + Math.exp(-z))) * 100);
+}
+
+function storeKey(ticker: string, horizon: number): string {
+  return `${ticker.toUpperCase()}:${horizon}`;
 }
 
 /** Load calibration rows from DB for the current SCORE_VERSION on server startup. */
@@ -50,7 +57,7 @@ export async function initCalibrationFromDB(): Promise<void> {
     let loaded = 0;
 
     for (const row of rows) {
-      const key = `${row.ticker}:${row.horizon}`;
+      const key = storeKey(row.ticker, row.horizon);
       if (seen.has(key)) continue; // take only the most recent per ticker+horizon
       seen.add(key);
 
@@ -67,7 +74,7 @@ export async function initCalibrationFromDB(): Promise<void> {
         fitSource:  "db",
       };
 
-      store.set(row.ticker, { status: "stale-fit", ...entry });
+      store.set(key, { status: "stale-fit", ...entry });
       loaded++;
     }
 
@@ -99,44 +106,50 @@ async function persistToDB(entry: CalibrationEntry, brierScore?: number, logLoss
 }
 
 export const calibrationStore = {
-  get(ticker: string): StoreValue | undefined {
-    return store.get(ticker.toUpperCase());
+  /** Look up a store entry by ticker + horizon. */
+  get(ticker: string, horizon: number): StoreValue | undefined {
+    return store.get(storeKey(ticker, horizon));
   },
 
+  /** Store a fitted calibration. Map key is derived from entry.horizon, so callers
+   *  do not need to pass horizon separately — it is part of the CalibrationEntry. */
   set(ticker: string, entry: CalibrationEntry, diagnostics?: { brierScore?: number; logLoss?: number }): void {
-    const sym = ticker.toUpperCase();
-    const prev = store.get(sym);
+    const key = storeKey(ticker, entry.horizon);
+    const prev = store.get(key);
     if (prev?.status === "pending") pendingCount = Math.max(0, pendingCount - 1);
-    store.set(sym, { status: "live-fit", ...entry, fitSource: "live" });
-
-    // Fire-and-forget DB write
+    store.set(key, { status: "live-fit", ...entry, fitSource: "live" });
     void persistToDB(entry, diagnostics?.brierScore, diagnostics?.logLoss);
   },
 
-  markPending(ticker: string): boolean {
-    const sym = ticker.toUpperCase();
-    if (store.has(sym)) return false;
+  /** Reserve a calibration slot for a ticker+horizon pair.
+   *  Returns false if already tracked (any status) or concurrency limit hit. */
+  markPending(ticker: string, horizon: number): boolean {
+    const key = storeKey(ticker, horizon);
+    if (store.has(key)) return false;
     if (pendingCount >= MAX_CONCURRENT) return false;
     pendingCount++;
-    store.set(sym, { status: "pending" });
+    store.set(key, { status: "pending" });
     return true;
   },
 
-  markError(ticker: string): void {
-    const sym = ticker.toUpperCase();
-    const prev = store.get(sym);
+  /** Mark a calibration as failed (e.g. insufficient data for the given horizon). */
+  markError(ticker: string, horizon: number): void {
+    const key = storeKey(ticker, horizon);
+    const prev = store.get(key);
     if (prev?.status === "pending") pendingCount = Math.max(0, pendingCount - 1);
-    store.set(sym, { status: "error" });
+    store.set(key, { status: "error" });
   },
 
-  status(ticker: string): CalibrationStatus {
-    const entry = store.get(ticker.toUpperCase());
+  /** Current calibration status for a ticker+horizon pair. */
+  status(ticker: string, horizon: number): CalibrationStatus {
+    const entry = store.get(storeKey(ticker, horizon));
     if (!entry) return "cold-start";
     return entry.status as CalibrationStatus;
   },
 
-  getFitted(ticker: string): CalibrationEntry | null {
-    const entry = store.get(ticker.toUpperCase());
+  /** Returns the fitted entry if available (live-fit or stale-fit), otherwise null. */
+  getFitted(ticker: string, horizon: number): CalibrationEntry | null {
+    const entry = store.get(storeKey(ticker, horizon));
     if (entry?.status === "live-fit" || entry?.status === "stale-fit") return entry;
     return null;
   },

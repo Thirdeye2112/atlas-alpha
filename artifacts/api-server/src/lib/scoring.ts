@@ -29,6 +29,9 @@ export interface AtlasAlphaScore {
   indicatorsAgreeing: number;
   totalIndicators: number;
   signalNarrative: string;
+  /** 0–100 factor alignment score. 100 = all sub-scores in sync; lower values
+   *  indicate internal divergence that inflates apparent confidence. */
+  alignmentScore: number;
 }
 
 /** Per-ticker IC²-optimal weight overrides from the walk-forward backtest engine. */
@@ -133,7 +136,21 @@ export function calcAtlasScore(
 
   const totalIndicators = 6;
   const indicatorsAgreeing = overall >= 50 ? bullCats : bearCats;
-  const confidenceScore = clamp(Math.max(bullCats, bearCats) / totalIndicators * 100);
+  const rawConfidence = clamp(Math.max(bullCats, bearCats) / totalIndicators * 100);
+
+  // ── Alignment (dispersion) penalty ────────────────────────────────────────
+  // When the 5 primary sub-scores spread widely (e.g. trend=85 but momentum=20),
+  // averaging inflates apparent conviction. We penalise *confidence* — not the
+  // raw weighted score — by up to 15% at high factor divergence, preserving
+  // signal direction while communicating reduced conviction to the UI and bot.
+  const factorScores  = [trend.trendAlignmentScore, momentum.momentumScore, volume.volumeScore, rs.rsScore, marketRegimeScore];
+  const factorMean    = factorScores.reduce((s, v) => s + v, 0) / factorScores.length;
+  const factorStdDev  = Math.sqrt(factorScores.reduce((s, v) => s + (v - factorMean) ** 2, 0) / factorScores.length);
+  // 100 = all factors in sync; approaches 0 at stdDev ≥ 50
+  const alignmentScore = clamp(Math.round(100 - factorStdDev * 2));
+  // 0% penalty at stdDev ≤ 15; rises to 15% cap at stdDev ≥ 55 (267 = 40/0.15)
+  const alignPenalty  = Math.min(0.15, Math.max(0, (factorStdDev - 15) / 267));
+  const confidenceScore = Math.round(rawConfidence * (1 - alignPenalty));
 
   // IC quality gate: cap confidence when historical IC is noise-level (<3% rank correlation).
   // A noise IC means the score has no demonstrated predictive power for this ticker —
@@ -184,6 +201,7 @@ export function calcAtlasScore(
     indicatorsAgreeing,
     totalIndicators,
     signalNarrative,
+    alignmentScore,
   };
 }
 

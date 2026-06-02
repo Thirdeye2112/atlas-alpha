@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, boolean, timestamp, index } from "drizzle-orm/pg-core";
 
 export const alertsTable = pgTable("alerts", {
   id:              serial("id").primaryKey(),
@@ -10,7 +10,11 @@ export const alertsTable = pgTable("alerts", {
   lastTriggeredAt: timestamp("last_triggered_at", { withTimezone: true }),
   acknowledgedAt:  timestamp("acknowledged_at",   { withTimezone: true }),
   createdAt:       timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [
+  index("idx_alerts_ticker").on(t.ticker),
+  index("idx_alerts_is_active").on(t.isActive),
+  index("idx_alerts_ticker_active").on(t.ticker, t.isActive),
+]);
 
 export type Alert       = typeof alertsTable.$inferSelect;
 export type InsertAlert = typeof alertsTable.$inferInsert;

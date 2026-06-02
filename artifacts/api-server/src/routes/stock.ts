@@ -36,8 +36,8 @@ router.get("/stock/:ticker/analysis", async (req, res): Promise<void> => {
 
     // Overlay calibration data fresh on every request (not cached — calibration
     // updates async and we want the UI to reflect it without requiring a cache flush)
-    const calStatus = calibrationStore.status(sym);
-    const calEntry  = calibrationStore.getFitted(sym);
+    const calStatus = calibrationStore.status(sym, 10);
+    const calEntry  = calibrationStore.getFitted(sym, 10);
     const calibratedProbability = calEntry
       ? calEntry.calibratedProbability(analysis.atlasScore.overall)
       : null;
@@ -108,7 +108,7 @@ router.get("/stock/:ticker/narrative", async (req, res): Promise<void> => {
   const ticker = (req.params.ticker as string).toUpperCase();
   try {
     const analysis = await runFullAnalysis(ticker);
-    const calEntry  = calibrationStore.getFitted(ticker);
+    const calEntry  = calibrationStore.getFitted(ticker, 10);
 
     const narrative = await generateNarrative({
       ticker,

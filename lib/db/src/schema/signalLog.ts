@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, real, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, real, timestamp, index } from "drizzle-orm/pg-core";
 
 export const signalLogTable = pgTable("signal_log", {
   id:              serial("id").primaryKey(),
@@ -16,7 +16,11 @@ export const signalLogTable = pgTable("signal_log", {
   scoreVersion:    text("score_version").notNull(),
   fwdReturn1d:     real("fwd_return_1d"),
   loggedAt:        timestamp("logged_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [
+  index("idx_signal_log_ticker").on(t.ticker),
+  index("idx_signal_log_logged_at").on(t.loggedAt),
+  index("idx_signal_log_ticker_logged").on(t.ticker, t.loggedAt),
+]);
 
 export type SignalLog = typeof signalLogTable.$inferSelect;
 export type InsertSignalLog = typeof signalLogTable.$inferInsert;

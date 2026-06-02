@@ -483,6 +483,6 @@ export async function runCalibrationBackground(ticker: string): Promise<void> {
     await runBacktest(sym, 10);
   } catch (err) {
     logger.warn({ ticker: sym, err }, "Background calibration failed");
-    calibrationStore.markError(sym);
+    calibrationStore.markError(sym, 10);
   }
 }
