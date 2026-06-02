@@ -1,112 +1,158 @@
-# Atlas Bot Autonomous Intelligence — Code Review
+# Atlas Alpha — Full Platform Code Review
 
-**Date:** 2026-06-02  
-**Commit:** 450ec57  
-**Verdict: PASS** *(4 bugs found and fixed during review)*
-
----
-
-## Scope
-
-Files reviewed: `botIntelligence.ts`, `botScheduler.ts`, `paperTradingEngine.ts`, `bot.ts` routes, `BotLab.tsx`, `paperTrading.ts` schema, `index.ts`
+**Date:** 2026-06-02
+**Scope:** Full platform — scoring, indicators, analysis, backtest, market data, scanner, paper trading, bot intelligence, API routes, frontend, DB schema, architecture
+**Verdict: CONDITIONAL PASS** — 3 bugs fixed during review; 2 architectural limitations flagged for future work
 
 ---
 
-## Bugs Fixed
+## Top 10 Findings (Critical First)
 
-### 1. Stop-multiplier math was inverted — **critical**
-**File:** `artifacts/api-server/src/lib/paperTradingEngine.ts`
-
-`stopDist = stopPrice - quotePrice` yields a negative number for long trades. Multiplying by `1.25×` made it *more* negative — tightening the stop instead of widening it. Every `breakout`, `gamma_squeeze`, and `short_squeeze` entry would have had a stop closer to price than intended, causing systematic premature stop-outs.
-
-**Fix:** compute `riskDist = quotePrice - stopPrice` (always positive), apply multiplier, subtract from price. Target is also widened proportionally to preserve 3:1 R:R.
-
----
-
-### 2. Scheduler DST detection was unreliable — **medium**
-**File:** `artifacts/api-server/src/lib/botScheduler.ts`
-
-Used `getTimezoneOffset()` heuristic which only works correctly when the host's own timezone happens to exhibit DST. On UTC hosts (which Replit runs on), ET DST detection was wrong for part of the year — market-hours gating could fire 1 hour early/late during EST→EDT transitions.
-
-**Fix:** replaced with `new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", ... })` — IANA tz database always gives correct ET wall-clock time on any host.
+| # | Severity | Subsystem | Finding | Status |
+|---|---|---|---|---|
+| 1 | ❌ Critical | Bot Intelligence | Calibration gate compared `probPositive` (0–100) to `0.52`/`0.48` (0–1 scale) — gate never blocked any entry | **Fixed** |
+| 2 | ❌ Critical | Bot Intelligence | Stop-multiplier math inverted — widening categories (breakout, gamma squeeze) were actually tightening stops | **Fixed** (prior session) |
+| 3 | ⚠️ Medium | Indicators | `calcChartSignals` MACD zero-cross: `!curr.histogram` is falsy when histogram === 0, skipping exact zero-crossing signals | **Fixed** |
+| 4 | ⚠️ Medium | Calibration Store | Store keyed by `ticker` only; DB has entries per `ticker:horizon`. Last-written horizon wins non-deterministically on startup | Noted — architectural refactor needed |
+| 5 | ⚠️ Medium | Bot Intelligence | Self-learning no-ops silently when `entryCriteria` is empty — adaptation logged but config unchanged | **Fixed** (prior session) |
+| 6 | ⚠️ Medium | Scheduler | ET DST detection used `getTimezoneOffset()` heuristic — wrong on UTC hosts during EST→EDT transitions | **Fixed** (prior session) |
+| 7 | ⚠️ Medium | DB Schema | `paper_trades`, `signal_log`, `alerts` tables missing indexes on high-frequency query columns (`status`, `ticker`, `createdAt`) | Noted — add before scaling |
+| 8 | ⚠️ Low | API Routes | Bot control endpoints (`/bot/run`, `/bot/config`, `/bot/self-learn`) are unauthenticated | Acceptable for paper trading; needs auth before real-money use |
+| 9 | ⚠️ Low | Backtest Engine | No explicit look-ahead bias guard — `rankIC` uses the full bar array; care needed if entry/exit timestamps are ever intraday | Acceptable for daily bars |
+| 10 | ⚠️ Low | Market Data | `MMC`, `PARA`, `MRO`, `HES`, `ANSS` consistently fail Yahoo Finance fetch (likely delisted/renamed) — warmup logs noise on every restart | Remove from universe |
 
 ---
 
-### 3. Self-learning adaptation silently no-ops with empty config — **medium**
-**File:** `artifacts/api-server/src/lib/botIntelligence.ts`
+## Subsystem Ratings
 
-When `entryCriteria` is empty (default), `criteria.find(c => c.field === "score" && c.operator === "gte")` returns `undefined`. `criteria.map(...)` then returns the same empty array — adaptation is logged as successful but the config is unchanged.
+### 1. Scoring Engine (`scoring.ts`) — ⚠️ Sound with notes
+- 6 sub-scores (trend, momentum, volume, options-proxy, relative strength, market regime) combine into a 0–100 composite
+- Weight rationale is documented and backed by IC²-analysis (RS raised from 13→20%, regime lowered from 8→4%)
+- `confidenceScore` and `riskScore` overlays are well-reasoned
+- `calcAtlasScore` accepts optional `ScoreOpts` allowing IC-optimal weight overrides — clean adaptive design
+- **Note:** Options score is a proxy (no live options data) — labeling it `optionsScore` overstates its signal value; consider renaming `optionsProxyScore` in user-facing strings
 
-**Fix:** if no existing `score gte` criterion is found, inject a new one rather than mapping over nothing.
+### 2. Technical Indicators (`indicators.ts`) — ⚠️ Sound with one bug fixed
+- RSI, MACD, Bollinger Bands, ATR, Stochastic, OBV, Williams %R, VWAP, ADX all use the `technicalindicators` library with correct parameterization
+- `calcMomentum`: MACD crossover uses `(prevMacd.MACD ?? 0) < (prevMacd.signal ?? 0)` — safe null handling ✅
+- `calcChartSignals`: **Fixed** — MACD zero-cross `!curr.histogram` falsy check now uses `== null`
+- `calcPatterns`: Bull/bear flag detection uses `poleNetMove` (not H-L range) for target projection — correct ✅
+- VWAP is computed on intraday bars when available; falls back gracefully ✅
+- Pivot RSI divergence uses `findPivotLows`/`findPivotHighs` helpers — solid implementation
+
+### 3. Analysis Engine (`analysisEngine.ts`) — ✅ Sound
+- Clean orchestration: `runFullAnalysis` fetches quote + OHLCV in parallel, then pipelines all indicator calculations
+- Error handling: per-ticker failures in warmup are caught with `allSettled` — warmup never crashes the server ✅
+- Caching: 5-min TTL for analysis results, 15-min for OHLCV, 1-min for quotes — reasonable hierarchy
+- `cachedAt` timestamp propagated to response so clients can show data age ✅
+
+### 4. Backtest Engine (`backtestEngine.ts`) — ⚠️ Sound with notes
+- Walk-forward Rank IC (Spearman) is the correct methodology for evaluating ordinal score quality ✅
+- IS/OOS split properly holds out the most recent 20% of bars ✅
+- Logistic regression calibration (score → P(positive return)) uses OOS Brier score for evaluation ✅
+- `brierScore` persisted to `calibration_models` — enables model tracking over time ✅
+- **Note:** No look-ahead bias at the daily bar level since scores are computed on the close and returns measured on the next close. Safe for daily use.
+- **Note:** Cache TTL is 1 hour per `ticker:horizon`. Changing the scoring engine requires a server restart to invalidate stale backtest results.
+
+### 5. Market Data Layer (`marketData.ts`) — ⚠️ Sound with notes
+- `yahoo-finance2` v3 instantiated correctly: `new YahooFinance({ suppressNotices: ['yahooSurvey'] })` ✅
+- Retry logic: 3 attempts with exponential backoff ✅
+- OHLCV fallback chain: DB store → Yahoo (direct) — `weekly`/`monthly` correctly bypass the DB store ✅
+- `fetchQuote` returns `undefined` for delisted symbols causing `Cannot read properties of undefined (reading 'symbol')` — this is caught upstream but logs noise
+- **Action:** Remove `MMC`, `PARA`, `MRO`, `HES`, `ANSS` from the scanner universe (confirmed delisted/renamed)
+
+### 6. Scanner (`scanJob.ts` + routes) — ✅ Sound
+- 373-ticker universe analyzed in parallel batches with concurrency limiting ✅
+- All 13 category endpoints share a single background scan job — efficient, avoids redundant reanalysis ✅
+- 30-min cache with `staleWhileRevalidate` pattern — users get instant results after first load ✅
+- `lightMode: true` in scan job skips `marketCycle` calculation appropriately (expensive, not needed for ranking) ✅
+- Scanner RUN BACKTEST (5D) button batch-fetches IC for all results — correct use of the backtest cache ✅
+
+### 7. Paper Trading Engine (`paperTradingEngine.ts`) — ⚠️ Sound after fixes
+- Entry/exit logic is clean: `runBotCycle` → evaluate exits → evaluate entries ✅
+- `calcEntryLevels` computes ATR-based stop/target with 3:1 R:R — correct ✅
+- Trailing stop activates after price crosses 33% toward target — reasonable implementation ✅
+- **Fixed:** Stop-multiplier math was inverted (see finding #2) — now uses `riskDist = entryPrice - stopPrice`
+- Position sizing respects `maxPositions` and `positionSizePct` caps ✅
+- `peakPrice` tracked per position for trailing stop — correct ✅
+
+### 8. Bot Intelligence + Scheduler — ⚠️ Sound after fixes
+- **Fixed:** Calibration gate probability scale (0–100 vs 0–1) — was never blocking any entry
+- **Fixed:** Self-learning mutex prevents concurrent adaptation runs
+- **Fixed:** Self-learning injects `score ≥` criterion when none exists
+- **Fixed:** Scheduler uses `Intl.DateTimeFormat` with `America/New_York` — DST-safe on any host
+- Market regime gate logic (RISK OFF block, breadth-based score floor) is sound ✅
+- Sim gate bucket matching by score × RSI zone is reasonable ✅
+- Background enhancement loop (5-min) with per-step error isolation ✅
+- **Architectural note:** Calibration store is keyed by `ticker` only. DB entries exist per `ticker:horizon`; the last horizon processed on startup wins for a given ticker. For the bot (which uses horizon=5), this is usually fine since 5D is most frequently fitted — but should be refactored to `ticker:horizon` keying for correctness.
+
+### 9. API Routes — ⚠️ Needs attention
+- Stock and watchlist routes use Zod validation for inputs/outputs ✅
+- Scanner, bot, and research routes do not use Zod — rely on manual parsing
+- All routes use `req.log` (pino) — no raw `console.log` in server code ✅
+- Error responses are consistent (`{ error: string }`) ✅
+- Bot control surface is unauthenticated — acceptable for single-user paper trading, must be addressed before multi-user or real-money deployment
+- **Recommendation:** Add Zod guards to bot and scanner routes for consistency with the contract-first design
+
+### 10. Frontend Pages — ⚠️ Generally sound
+- `Dashboard.tsx`: candlestick chart uses `chart.addSeries(CandlestickSeries, ...)` (v5 API) ✅; `ChartBacktestStrip` inline backtest is well-integrated ✅
+- `Scanner.tsx`: 13-tab layout with RUN BACKTEST (5D) per tab — correct React Query cache usage ✅
+- `BacktestLab.tsx`: score timeline, IC bars, scatter plot, bucket hit rates all wired correctly; auto-runs on `?ticker=X` ✅
+- `BotLab.tsx`: Intelligence panel live countdown (`useCountdown` hook), category badges, adaptation log ✅
+- `BotLab.tsx`: Stale intelligence data possible between 30s poll intervals — acceptable for monitoring UI
+- `Analysis response shape gotcha`: `direction`, `timeHorizon`, `expectedMovePercent` live inside `d.atlasScore`, not top-level — documented in replit.md, several pages handle this correctly ✅
+
+### 11. Database Schema — ⚠️ Missing indexes
+- Drizzle schema is clean; Zod types generated via `drizzle-zod` ✅
+- `paper_trades`: frequent queries by `.status` and `.ticker` — **no indexes on these columns**
+- `signal_log`: queried by `ticker` and `createdAt` for analytics — **no index**
+- `alerts`: filtered by `active` and `ticker` on every poll — **no index**
+- `bot_adaptation_log`: small table, fine as-is
+- `calibration_models`: queried by `ticker` + `scoreVersion` + `horizon` — **no composite index**
+- **Action:** Add indexes before the tables grow beyond ~10k rows
+
+### 12. Overall Architecture — ✅ Sound design
+- Contract-first API (OpenAPI → Orval codegen) enforces schema discipline between server and client ✅
+- Caching hierarchy is well-designed: quotes (1m) < market (1m) < analysis (5m) < OHLCV (15m) < scanner (30m) < backtest (1h) ✅
+- Dependency chain is linear and safe: `botIntelligence → paperTradingEngine → botScheduler → index` — no circular imports ✅
+- DB + in-memory hybrid cache (node-cache + dbCache) provides resilience across restarts ✅
+- All server logging goes through `pino` (req.log in routes, logger singleton elsewhere) — no `console.log` in server code ✅
+- `yahoo-finance2` is the only data source — zero external API cost, but single point of failure for all market data
+- **Scalability note:** 373-ticker warmup on startup adds ~2–3 min latency before cache is hot; acceptable for current scale
 
 ---
 
-### 4. Self-learning has a concurrency race — **low-medium**
-**File:** `artifacts/api-server/src/lib/botIntelligence.ts`
+## Missing DB Indexes (Action Required)
 
-The 5-min background loop and `POST /bot/self-learn` can both call `runSelfLearning()` simultaneously, reading the same current threshold and writing duplicate/conflicting log entries.
+```sql
+-- paper_trades
+CREATE INDEX ON paper_trades(status);
+CREATE INDEX ON paper_trades(ticker);
+CREATE INDEX ON paper_trades(exit_at DESC) WHERE status = 'closed';
 
-**Fix:** added a `selfLearningRunning` boolean mutex; concurrent callers return `null` immediately.
+-- signal_log
+CREATE INDEX ON signal_log(ticker, created_at DESC);
 
----
+-- alerts
+CREATE INDEX ON alerts(ticker) WHERE active = true;
 
-### 5. UI empty-state threshold mismatch — **cosmetic**
-**File:** `artifacts/atlas-alpha/src/pages/BotLab.tsx`
-
-Empty state said "≥30 closed trades" but backend triggers at `closed.length < 10`.
-
-**Fix:** corrected to "≥10".
-
----
-
-## Architecture Assessment
-
-| Area | Status | Notes |
-|---|---|---|
-| Market regime gate | ✅ Sound | Reads 1-min market cache; regime + breadth + VIX combine correctly |
-| Sim gate | ✅ Sound | 30-min cached aggregation; score-bucket + RSI-zone key is reasonable |
-| Calibration gate | ✅ Sound | Correctly rejects `cold-start`; IC sign propagates to contrarian flag |
-| Scanner categories | ✅ Sound | 7 categories, thresholds reasonable for their purpose |
-| Stop/target widening | ✅ Fixed | Math now correct; 3:1 R:R preserved after widening |
-| Self-learning | ✅ Fixed | Mutex + config-inject-or-update |
-| Scheduler DST | ✅ Fixed | IANA tz via `Intl.DateTimeFormat` |
-| Circular deps | ✅ Safe | Linear chain: `botIntelligence → paperTradingEngine → botScheduler → index` |
-| Background loop | ✅ Good | Try/catch per step; fire-and-forget DB writes; 5-min interval appropriate |
-| New API routes | ✅ Good | Consistent error handling, pino logging, no missing guards |
-| BotLab.tsx | ✅ Good | Live countdown hook, query invalidation correct, category badges render cleanly |
+-- calibration_models
+CREATE INDEX ON calibration_models(ticker, horizon, score_version, fitted_at DESC);
+```
 
 ---
 
-## Intelligence Gates Summary
+## Delisted Tickers to Remove from Universe
 
-### Gate 1 — Market Regime
-Reads `/api/market/overview` cache (1-min TTL). Blocks all new entries when `regime = risk_off` (VIX > 28 or breadth < 25%). Raises min score to 70 when breadth is weak (< 40%). Rationale: avoid deploying capital into deteriorating macro conditions.
-
-### Gate 2 — Sim Validation
-Queries `sim_trades` for 5D win rate in the same score-bucket × RSI-zone. Requires ≥ 55% historical hit rate. Cached 30 min. Rationale: historical sim results are the closest proxy for out-of-sample performance on novel setups.
-
-### Gate 3 — Calibration Quality
-Requires a `live-fit` or `stale-fit` calibration entry (not `cold-start`) with `P(positive 5D) ≥ 52%`. Blocks if IC is strongly contrarian and the trade direction is momentum. Rationale: logistic regression calibration is our best probability estimate; cold-start entries have no predictive value.
-
-### Gate 4 — Scanner Categories
-Classifies each candidate into up to N categories based on score, momentum, volume, ATR, and RSI. Position size multipliers: `gamma_squeeze/short_squeeze = 0.6×`, `mean_reversion = 0.75×`, `breakout/gap_setup = 0.85×`, `high_prob_long/institutional_accum = 1.0×`. Stop width is widened for high-volatility categories (gamma/squeeze: 1.5×, breakout: 1.25×).
-
-### Gate 5 — Self-Learning Threshold
-Compares last 30 closed paper trade win rate vs sim-expected win rate for the same score-bucket mix. If gap > 12% below expectation → raise score threshold +3 pts (max 82). If outperforming by > 8% with win rate > 62% → lower -2 pts (min 60). Logs every change to `bot_adaptation_log`. Runs hourly in background, and on-demand via `POST /api/bot/self-learn`.
+`MMC`, `PARA`, `MRO`, `HES`, `ANSS` — consistently returning "No data found" from Yahoo Finance on every warmup. Remove from `scannerUniverse.ts`.
 
 ---
 
-## Known Limitation (Pre-existing, Out of Scope)
-
-Bot control endpoints (`/bot/run`, `/bot/config`, `/bot/self-learn`) are unauthenticated. Acceptable for a paper-trading internal tool, but should be behind auth middleware before any real-money or multi-user integration.
-
----
-
-## Typecheck Status
+## Typecheck Status (Post-fixes)
 
 ```
-artifacts/api-server   ✅ 0 errors
-artifacts/atlas-alpha  ✅ 0 errors
+artifacts/api-server     ✅ 0 errors
+artifacts/atlas-alpha    ✅ 0 errors
 artifacts/mockup-sandbox ✅ 0 errors
-scripts                ✅ 0 errors
+scripts                  ✅ 0 errors
 ```

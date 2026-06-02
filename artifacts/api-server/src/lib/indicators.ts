@@ -1049,7 +1049,7 @@ export function calcChartSignals(bars: OHLCVBar[]): ChartSignal[] {
     const bi = macdOff + i;
     if (bi < windowStart) continue;
     const prev = macdArr[i - 1], curr = macdArr[i];
-    if (!prev?.histogram || !curr?.histogram) continue;
+    if (prev?.histogram == null || curr?.histogram == null) continue;
     if (prev.histogram < 0 && curr.histogram >= 0) signals.push({ date: bars[bi].time.substring(0, 10), direction: "bull", label: "MACD↑", strength: "moderate" });
     if (prev.histogram > 0 && curr.histogram <= 0) signals.push({ date: bars[bi].time.substring(0, 10), direction: "bear", label: "MACD↓", strength: "moderate" });
   }

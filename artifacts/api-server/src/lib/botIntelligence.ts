@@ -260,20 +260,21 @@ export function getCalibGate(ticker: string, score: number): CalibGateResult {
   let allow  = true;
   let reason: string;
 
+  // probPositive is 0–100 (calibratedProbability multiplies sigmoid output by 100)
   if (signalMode === "contrarian") {
     // High score on a contrarian ticker = bearish signal for a long entry
-    if (probPositive < 0.48) {
+    if (probPositive < 48) {
       allow  = false;
-      reason = `contrarian IC=${rankIC.toFixed(3)}: P(+)=${(probPositive * 100).toFixed(0)}% — blocking long`;
+      reason = `contrarian IC=${rankIC.toFixed(3)}: P(+)=${probPositive.toFixed(0)}% — blocking long`;
     } else {
-      reason = `contrarian IC=${rankIC.toFixed(3)}: P(+)=${(probPositive * 100).toFixed(0)}% marginal — allowing with caution`;
+      reason = `contrarian IC=${rankIC.toFixed(3)}: P(+)=${probPositive.toFixed(0)}% marginal — allowing with caution`;
     }
   } else {
-    if (probPositive < 0.52) {
+    if (probPositive < 52) {
       allow  = false;
-      reason = `momentum IC=${rankIC.toFixed(3)}: P(+)=${(probPositive * 100).toFixed(0)}% < 52% — blocking`;
+      reason = `momentum IC=${rankIC.toFixed(3)}: P(+)=${probPositive.toFixed(0)}% < 52% — blocking`;
     } else {
-      reason = `momentum IC=${rankIC.toFixed(3)}: P(+)=${(probPositive * 100).toFixed(0)}% — allow`;
+      reason = `momentum IC=${rankIC.toFixed(3)}: P(+)=${probPositive.toFixed(0)}% — allow`;
     }
   }
 
