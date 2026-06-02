@@ -5,6 +5,7 @@ import { runOhlcvBackfill, getBackfillState } from "./ohlcvStore.js";
 import { analysisCache, ohlcvCache, quoteCache } from "./cache.js";
 import { getOrStartScanJob } from "./scanJob.js";
 import { initSimState } from "./historicalSimEngine.js";
+import { resolveOutcomes } from "./snapshotEngine.js";
 import { logger } from "./logger.js";
 
 // ── Warmup state ──────────────────────────────────────────────────────────────
@@ -192,6 +193,38 @@ export function startLearningScheduler(): void {
   }, LEARNING_INTERVAL_MS);
 
   logger.info("Learning scheduler started (scans every 30 min, Mon–Fri)");
+}
+
+// ── Market-close resolution scheduler ─────────────────────────────────────────
+// Fires a dedicated resolveOutcomes() pass at 16:05 ET every weekday.
+// Running 5 minutes after market close gives Yahoo Finance time to post final
+// closing prices, so the forward returns we compute are correct.
+//
+// This is separate from the 30-min scan-job resolution pass — the scan job
+// catches mid-day updates, but this nightly pass is the authoritative run
+// that scores the day's predictions with locked closing prices.
+
+const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
+let lastResolutionRun = 0;
+
+export function startResolutionScheduler(): void {
+  setInterval(() => {
+    const { day, h, m } = etHourMinute();
+    if (day === 0 || day === 6) return;
+
+    const totalMin = h * 60 + m;
+    // 16:05–16:15 ET window (5 min after regular close, 15 min safety margin)
+    const isWindow = totalMin >= 16 * 60 + 5 && totalMin < 16 * 60 + 15;
+
+    if (isWindow && Date.now() - lastResolutionRun > FOUR_HOURS_MS) {
+      lastResolutionRun = Date.now();
+      resolveOutcomes()
+        .then(n => logger.info({ updated: n }, "Market-close resolution complete"))
+        .catch(err => logger.error({ err }, "Market-close resolution failed"));
+    }
+  }, 60_000); // poll every minute
+
+  logger.info("Resolution scheduler started (fires at 16:05 ET Mon–Fri)");
 }
 
 // ── Cache stats helper ────────────────────────────────────────────────────────

@@ -110,7 +110,8 @@ async function runJobBackground(job: ScanJob): Promise<void> {
   }
 
   // Learning system: snapshot today's full signal state for every ticker,
-  // then resolve outcomes for snapshots taken 7+ days ago. Both fire-and-forget.
+  // then incrementally resolve forward returns for eligible snapshots (1+ day old).
+  // Both fire-and-forget.
   saveSnapshotsBatch(job.analyses).catch(err =>
     logger.warn({ err }, "Snapshot save failed")
   );

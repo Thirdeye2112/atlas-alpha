@@ -1,9 +1,14 @@
 /**
  * snapshotEngine — continuous signal learning system
  *
- * Three-stage loop that runs automatically after every scan job:
+ * Three-stage loop:
  *   1. saveSnapshotsBatch  — photographs every stock's full signal state today
- *   2. resolveOutcomes     — 7+ days later, fetches actual prices and scores predictions
+ *   2. resolveOutcomes     — next trading day onward, incrementally fills
+ *                            forward_return_5d / 10d / 20d as bars become available.
+ *                            A row is only stamped outcome_resolved_at once its 20D
+ *                            return is in — until then it is re-processed each run.
+ *                            Runs as part of every scan job AND at 16:05 ET Mon–Fri
+ *                            via the dedicated market-close resolution scheduler.
  *   3. getLearnedPatterns  — SQL aggregation over resolved outcomes, surfaces which
  *                            signal combinations have historically worked
  *
@@ -125,16 +130,25 @@ export async function saveSnapshotsBatch(analyses: AnalysisResult[]): Promise<vo
 }
 
 // ── 2. Resolve outcomes ────────────────────────────────────────────────────────
+//
+// Eligibility: any snapshot at least 1 trading day old whose 20D return is not
+// yet resolved (outcomeResolvedAt IS NULL).
+//
+// Incremental logic: on each run we try to fill whichever of the three forward
+// returns (5D / 10D / 20D) are now available, preserving any already-computed
+// values.  outcomeResolvedAt is only stamped once forwardReturn20d is confirmed
+// — until then the row stays eligible and will be revisited the next run.
 
 export async function resolveOutcomes(): Promise<number> {
+  // Rows where 20D resolution hasn't happened yet AND at least 1 day has passed
   const unresolved = await db
     .select()
     .from(signalSnapshotsTable)
     .where(and(
       isNull(signalSnapshotsTable.outcomeResolvedAt),
-      sql`snapshot_date <= CURRENT_DATE - INTERVAL '7 days'`,
+      sql`snapshot_date <= CURRENT_DATE - INTERVAL '1 day'`,
     ))
-    .limit(120);
+    .limit(200);
 
   if (!unresolved.length) return 0;
 
@@ -145,7 +159,7 @@ export async function resolveOutcomes(): Promise<number> {
     byTicker.set(s.ticker, arr);
   }
 
-  let resolved = 0;
+  let updated = 0;
 
   for (const [ticker, snapshots] of byTicker) {
     let bars: Awaited<ReturnType<typeof fetchOHLCV>>;
@@ -166,23 +180,28 @@ export async function resolveOutcomes(): Promise<number> {
         return bar ? ((bar.close - entryPrice) / entryPrice) * 100 : null;
       };
 
-      const forwardReturn5d  = ret(5);
-      const forwardReturn10d = ret(10);
-      const forwardReturn20d = ret(20);
+      // Preserve any previously computed values; only fill nulls
+      const forwardReturn5d  = snap.forwardReturn5d  ?? ret(5);
+      const forwardReturn10d = snap.forwardReturn10d ?? ret(10);
+      const forwardReturn20d = snap.forwardReturn20d ?? ret(20);
 
+      // Nothing new to write — all three still null, skip
       if (forwardReturn5d === null && forwardReturn10d === null && forwardReturn20d === null) continue;
+
+      // Only stamp as fully resolved once 20D is in; until then keep re-visiting
+      const outcomeResolvedAt = forwardReturn20d !== null ? new Date() : null;
 
       await db
         .update(signalSnapshotsTable)
-        .set({ forwardReturn5d, forwardReturn10d, forwardReturn20d, outcomeResolvedAt: new Date() })
+        .set({ forwardReturn5d, forwardReturn10d, forwardReturn20d, outcomeResolvedAt })
         .where(eq(signalSnapshotsTable.id, snap.id));
 
-      resolved++;
+      updated++;
     }
   }
 
-  if (resolved > 0) logger.info({ resolved }, "Signal snapshot outcomes resolved");
-  return resolved;
+  if (updated > 0) logger.info({ updated }, "Signal snapshot outcomes updated");
+  return updated;
 }
 
 // ── 3. Query learned patterns ──────────────────────────────────────────────────

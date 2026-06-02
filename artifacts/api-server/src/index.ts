@@ -1,6 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { runWarmup, startScheduler, startLearningScheduler } from "./lib/warmup";
+import { runWarmup, startScheduler, startLearningScheduler, startResolutionScheduler } from "./lib/warmup";
 import { startBotScheduler } from "./lib/botScheduler";
 import { hydrateFromDb } from "./lib/dbCache";
 import { initCalibrationFromDB } from "./lib/calibrationStore";
@@ -47,6 +47,10 @@ app.listen(port, (err) => {
   // snapshot engine keeps accumulating signal state and resolving outcomes
   // even when no one has the app open.
   startLearningScheduler();
+
+  // Market-close resolution scheduler: fires resolveOutcomes() at 16:05 ET
+  // Mon–Fri so every day's predictions are scored with locked closing prices.
+  startResolutionScheduler();
 
   // Autonomous bot cycle scheduler: fires runBotCycle() every 30 min between
   // 09:30–16:00 ET on trading days when bot is enabled. Also starts the
