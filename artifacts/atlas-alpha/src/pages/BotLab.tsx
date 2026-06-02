@@ -841,17 +841,20 @@ interface BucketRow {
   avg_20d:          number | null;
   hit_rate_5d:      number | null;
   hit_rate_10d:     number | null;
+  hit_rate_20d:     number | null;
   stopped_out_rate: number | null;
 }
 
 interface RsiRow {
-  rsi_zone:    string;
-  n:           number;
-  n_entered:   number;
-  avg_5d:      number | null;
-  avg_10d:     number | null;
-  hit_rate_5d: number | null;
+  rsi_zone:     string;
+  n:            number;
+  n_entered:    number;
+  avg_5d:       number | null;
+  avg_10d:      number | null;
+  avg_20d:      number | null;
+  hit_rate_5d:  number | null;
   hit_rate_10d: number | null;
+  hit_rate_20d: number | null;
 }
 
 interface SimResults {
@@ -863,19 +866,20 @@ interface SimResults {
   byRsiZone:             RsiRow[];
   optimalScoreThreshold: number | null;
   lastRunAt:             string | null;
+  configFilter:          { rsiMin: number; rsiMax: number; scoreMin: number } | null;
 }
 
-function PnlCell({ val }: { val: number | null | undefined }) {
-  if (val == null) return <td className="px-3 py-2 text-center text-muted-foreground">—</td>;
+function PnlCell({ val, className }: { val: number | null | undefined; className?: string }) {
+  if (val == null) return <td className={cn("px-3 py-2 text-center text-muted-foreground", className)}>—</td>;
   const color = val > 0 ? "text-success" : val < 0 ? "text-destructive" : "text-muted-foreground";
-  return <td className={cn("px-3 py-2 text-right font-mono tabular-nums text-xs", color)}>{val > 0 ? "+" : ""}{Number(val).toFixed(2)}%</td>;
+  return <td className={cn("px-3 py-2 text-right font-mono tabular-nums text-xs", color, className)}>{val > 0 ? "+" : ""}{Number(val).toFixed(2)}%</td>;
 }
 
-function HitCell({ val }: { val: number | null | undefined }) {
-  if (val == null) return <td className="px-3 py-2 text-center text-muted-foreground">—</td>;
+function HitCell({ val, className }: { val: number | null | undefined; className?: string }) {
+  if (val == null) return <td className={cn("px-3 py-2 text-center text-muted-foreground", className)}>—</td>;
   const n = Number(val);
   const color = n >= 60 ? "text-success" : n < 45 ? "text-destructive" : "text-warning";
-  return <td className={cn("px-3 py-2 text-right font-mono tabular-nums text-xs", color)}>{n.toFixed(1)}%</td>;
+  return <td className={cn("px-3 py-2 text-right font-mono tabular-nums text-xs", color, className)}>{n.toFixed(1)}%</td>;
 }
 
 function SimLabTab() {
@@ -969,19 +973,44 @@ function SimLabTab() {
         </div>
       )}
 
+      {/* Config filter badge */}
+      {simResults?.configFilter && (
+        <div className="flex items-center gap-2 text-xs font-mono">
+          <span className="text-muted-foreground">Filtered by config:</span>
+          <span className="px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+            RSI {simResults.configFilter.rsiMin}–{simResults.configFilter.rsiMax}
+          </span>
+          <span className="px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+            Score ≥ {simResults.configFilter.scoreMin}
+          </span>
+          <span className="text-muted-foreground">· structural gate</span>
+        </div>
+      )}
+
       {/* By score bucket */}
       {simResults && simResults.byScoreBucket.length > 0 && (
         <div className="space-y-2">
           <h3 className="text-xs font-mono font-bold tracking-wider text-muted-foreground uppercase">
-            Outcomes by Atlas Score Bucket (gate-passed entries only)
+            Outcomes by Atlas Score Bucket
           </h3>
           <div className="overflow-x-auto rounded border border-border">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-border bg-muted/30">
-                  {["Bucket","Bars","Entered","Hit% 5D","Avg 5D","Hit% 10D","Avg 10D","Avg 20D","Stop% Rate"].map(h => (
-                    <th key={h} className="px-3 py-2 text-left font-mono text-muted-foreground font-normal">{h}</th>
-                  ))}
+                  <th className="px-3 py-2 text-left font-mono text-muted-foreground font-normal" rowSpan={2}>Bucket</th>
+                  <th className="px-3 py-2 text-right font-mono text-muted-foreground font-normal" rowSpan={2}>Entered</th>
+                  <th className="px-3 py-2 text-center font-mono text-muted-foreground font-normal border-l border-border/40" colSpan={2}>5 Day</th>
+                  <th className="px-3 py-2 text-center font-mono text-muted-foreground font-normal border-l border-border/40" colSpan={2}>10 Day</th>
+                  <th className="px-3 py-2 text-center font-mono text-muted-foreground font-normal border-l border-border/40" colSpan={2}>20 Day</th>
+                  <th className="px-3 py-2 text-right font-mono text-muted-foreground font-normal border-l border-border/40" rowSpan={2}>Stop%</th>
+                </tr>
+                <tr className="border-b border-border bg-muted/20">
+                  <th className="px-3 py-1 text-right font-mono text-muted-foreground font-normal text-[10px] border-l border-border/40">Hit%</th>
+                  <th className="px-3 py-1 text-right font-mono text-muted-foreground font-normal text-[10px]">Avg</th>
+                  <th className="px-3 py-1 text-right font-mono text-muted-foreground font-normal text-[10px] border-l border-border/40">Hit%</th>
+                  <th className="px-3 py-1 text-right font-mono text-muted-foreground font-normal text-[10px]">Avg</th>
+                  <th className="px-3 py-1 text-right font-mono text-muted-foreground font-normal text-[10px] border-l border-border/40">Hit%</th>
+                  <th className="px-3 py-1 text-right font-mono text-muted-foreground font-normal text-[10px]">Avg</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/40">
@@ -990,18 +1019,18 @@ function SimLabTab() {
                     row.score_bucket === "STRONG"   ? "text-success" :
                     row.score_bucket === "ELEVATED" ? "text-primary" :
                     row.score_bucket === "NEUTRAL"  ? "text-muted-foreground" :
-                    "text-destructive";
+                    "text-yellow-500";
                   return (
                     <tr key={row.score_bucket} className="hover:bg-muted/10 transition-colors">
                       <td className={cn("px-3 py-2 font-mono font-bold", bucketColor)}>{row.score_bucket}</td>
-                      <td className="px-3 py-2 text-right font-mono tabular-nums">{Number(row.n).toLocaleString()}</td>
-                      <td className="px-3 py-2 text-right font-mono tabular-nums">{Number(row.n_entered).toLocaleString()}</td>
-                      <HitCell val={row.hit_rate_5d} />
+                      <td className="px-3 py-2 text-right font-mono tabular-nums text-muted-foreground">{Number(row.n_entered).toLocaleString()}</td>
+                      <HitCell val={row.hit_rate_5d} className="border-l border-border/40" />
                       <PnlCell val={row.avg_5d} />
-                      <HitCell val={row.hit_rate_10d} />
+                      <HitCell val={row.hit_rate_10d} className="border-l border-border/40" />
                       <PnlCell val={row.avg_10d} />
+                      <HitCell val={row.hit_rate_20d} className="border-l border-border/40" />
                       <PnlCell val={row.avg_20d} />
-                      <td className="px-3 py-2 text-right font-mono tabular-nums text-xs text-muted-foreground">
+                      <td className="px-3 py-2 text-right font-mono tabular-nums text-muted-foreground border-l border-border/40">
                         {row.stopped_out_rate != null ? `${Number(row.stopped_out_rate).toFixed(1)}%` : "—"}
                       </td>
                     </tr>
@@ -1017,15 +1046,25 @@ function SimLabTab() {
       {simResults && simResults.byRsiZone.length > 0 && (
         <div className="space-y-2">
           <h3 className="text-xs font-mono font-bold tracking-wider text-muted-foreground uppercase">
-            Outcomes by RSI Zone (gate-passed entries only)
+            Outcomes by RSI Zone
           </h3>
           <div className="overflow-x-auto rounded border border-border">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-border bg-muted/30">
-                  {["RSI Zone","Bars","Entered","Hit% 5D","Avg 5D","Hit% 10D","Avg 10D"].map(h => (
-                    <th key={h} className="px-3 py-2 text-left font-mono text-muted-foreground font-normal">{h}</th>
-                  ))}
+                  <th className="px-3 py-2 text-left font-mono text-muted-foreground font-normal" rowSpan={2}>RSI Zone</th>
+                  <th className="px-3 py-2 text-right font-mono text-muted-foreground font-normal" rowSpan={2}>Entered</th>
+                  <th className="px-3 py-2 text-center font-mono text-muted-foreground font-normal border-l border-border/40" colSpan={2}>5 Day</th>
+                  <th className="px-3 py-2 text-center font-mono text-muted-foreground font-normal border-l border-border/40" colSpan={2}>10 Day</th>
+                  <th className="px-3 py-2 text-center font-mono text-muted-foreground font-normal border-l border-border/40" colSpan={2}>20 Day</th>
+                </tr>
+                <tr className="border-b border-border bg-muted/20">
+                  <th className="px-3 py-1 text-right font-mono text-muted-foreground font-normal text-[10px] border-l border-border/40">Hit%</th>
+                  <th className="px-3 py-1 text-right font-mono text-muted-foreground font-normal text-[10px]">Avg</th>
+                  <th className="px-3 py-1 text-right font-mono text-muted-foreground font-normal text-[10px] border-l border-border/40">Hit%</th>
+                  <th className="px-3 py-1 text-right font-mono text-muted-foreground font-normal text-[10px]">Avg</th>
+                  <th className="px-3 py-1 text-right font-mono text-muted-foreground font-normal text-[10px] border-l border-border/40">Hit%</th>
+                  <th className="px-3 py-1 text-right font-mono text-muted-foreground font-normal text-[10px]">Avg</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/40">
@@ -1036,12 +1075,13 @@ function SimLabTab() {
                   return (
                     <tr key={row.rsi_zone} className="hover:bg-muted/10 transition-colors">
                       <td className={cn("px-3 py-2 font-mono font-bold capitalize", zoneColor)}>{row.rsi_zone}</td>
-                      <td className="px-3 py-2 text-right font-mono tabular-nums">{Number(row.n).toLocaleString()}</td>
-                      <td className="px-3 py-2 text-right font-mono tabular-nums">{Number(row.n_entered).toLocaleString()}</td>
-                      <HitCell val={row.hit_rate_5d} />
+                      <td className="px-3 py-2 text-right font-mono tabular-nums text-muted-foreground">{Number(row.n_entered).toLocaleString()}</td>
+                      <HitCell val={row.hit_rate_5d} className="border-l border-border/40" />
                       <PnlCell val={row.avg_5d} />
-                      <HitCell val={row.hit_rate_10d} />
+                      <HitCell val={row.hit_rate_10d} className="border-l border-border/40" />
                       <PnlCell val={row.avg_10d} />
+                      <HitCell val={row.hit_rate_20d} className="border-l border-border/40" />
+                      <PnlCell val={row.avg_20d} />
                     </tr>
                   );
                 })}

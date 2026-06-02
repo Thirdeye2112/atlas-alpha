@@ -12,7 +12,7 @@
  * zones / gate conditions historically produced the best outcomes.
  */
 
-import { db, ohlcvHistoryTable, simTradesTable } from "@workspace/db";
+import { db, ohlcvHistoryTable, simTradesTable, botConfigTable } from "@workspace/db";
 import { eq, asc, sql } from "drizzle-orm";
 import { type OHLCVBar } from "./marketData.js";
 import {
@@ -389,53 +389,73 @@ const BUCKET_ORDER = ["STRONG", "ELEVATED", "NEUTRAL", "WEAK"];
 
 export async function getSimResults() {
   if (state.status === "idle") {
-    return { status: "idle", totalBars: 0, totalEntered: 0, pctEntered: 0, byScoreBucket: [], byRsiZone: [], optimalScoreThreshold: null, lastRunAt: null };
+    return { status: "idle", totalBars: 0, totalEntered: 0, pctEntered: 0, byScoreBucket: [], byRsiZone: [], optimalScoreThreshold: null, lastRunAt: null, configFilter: null };
   }
+
+  // Read current bot config to apply the same entry criteria the live bot uses
+  const configRows = await db.select().from(botConfigTable).limit(1);
+  const cfg = configRows[0];
+
+  // Extract RSI min/max and score min from entry criteria
+  type Criterion = { field: string; operator: string; value?: number; value2?: number };
+  const criteria: Criterion[] = Array.isArray(cfg?.entryCriteria) ? (cfg.entryCriteria as Criterion[]) : [];
+  const rsiCrit   = criteria.find(c => c.field === "rsi"   && c.operator === "between");
+  const scoreCrit = criteria.find(c => c.field === "score" && c.operator === "gte");
+
+  const rsiMin   = rsiCrit?.value   ?? 0;
+  const rsiMax   = rsiCrit?.value2  ?? 100;
+  const scoreMin = scoreCrit?.value ?? 0;
+
+  const configFilter = { rsiMin, rsiMax, scoreMin };
 
   const [bucketRes, rsiRes, totalsRes] = await Promise.all([
     db.execute(sql`
       SELECT
         score_bucket,
-        COUNT(*)                                                                                  AS n,
-        SUM(CASE WHEN gate_enter THEN 1 ELSE 0 END)                                             AS n_entered,
-        ROUND(AVG(CASE WHEN gate_enter AND pnl_5d  IS NOT NULL THEN pnl_5d  END)::numeric, 2)  AS avg_5d,
-        ROUND(AVG(CASE WHEN gate_enter AND pnl_10d IS NOT NULL THEN pnl_10d END)::numeric, 2)  AS avg_10d,
-        ROUND(AVG(CASE WHEN gate_enter AND pnl_20d IS NOT NULL THEN pnl_20d END)::numeric, 2)  AS avg_20d,
+        COUNT(*)                                                                                              AS n,
+        SUM(CASE WHEN gate_enter AND rsi BETWEEN ${rsiMin} AND ${rsiMax} AND atlas_score >= ${scoreMin} THEN 1 ELSE 0 END) AS n_entered,
+        ROUND(AVG(CASE WHEN gate_enter AND rsi BETWEEN ${rsiMin} AND ${rsiMax} AND atlas_score >= ${scoreMin} AND pnl_5d  IS NOT NULL THEN pnl_5d  END)::numeric, 2) AS avg_5d,
+        ROUND(AVG(CASE WHEN gate_enter AND rsi BETWEEN ${rsiMin} AND ${rsiMax} AND atlas_score >= ${scoreMin} AND pnl_10d IS NOT NULL THEN pnl_10d END)::numeric, 2) AS avg_10d,
+        ROUND(AVG(CASE WHEN gate_enter AND rsi BETWEEN ${rsiMin} AND ${rsiMax} AND atlas_score >= ${scoreMin} AND pnl_20d IS NOT NULL THEN pnl_20d END)::numeric, 2) AS avg_20d,
         ROUND(
-          100.0 * SUM(CASE WHEN gate_enter AND pnl_5d > 0  THEN 1 ELSE 0 END)
-                / NULLIF(SUM(CASE WHEN gate_enter AND pnl_5d IS NOT NULL THEN 1 ELSE 0 END), 0),
-          1
-        )                                                                                        AS hit_rate_5d,
+          100.0 * SUM(CASE WHEN gate_enter AND rsi BETWEEN ${rsiMin} AND ${rsiMax} AND atlas_score >= ${scoreMin} AND pnl_5d > 0 THEN 1 ELSE 0 END)
+                / NULLIF(SUM(CASE WHEN gate_enter AND rsi BETWEEN ${rsiMin} AND ${rsiMax} AND atlas_score >= ${scoreMin} AND pnl_5d IS NOT NULL THEN 1 ELSE 0 END), 0), 1
+        ) AS hit_rate_5d,
         ROUND(
-          100.0 * SUM(CASE WHEN gate_enter AND pnl_10d > 0 THEN 1 ELSE 0 END)
-                / NULLIF(SUM(CASE WHEN gate_enter AND pnl_10d IS NOT NULL THEN 1 ELSE 0 END), 0),
-          1
-        )                                                                                        AS hit_rate_10d,
+          100.0 * SUM(CASE WHEN gate_enter AND rsi BETWEEN ${rsiMin} AND ${rsiMax} AND atlas_score >= ${scoreMin} AND pnl_10d > 0 THEN 1 ELSE 0 END)
+                / NULLIF(SUM(CASE WHEN gate_enter AND rsi BETWEEN ${rsiMin} AND ${rsiMax} AND atlas_score >= ${scoreMin} AND pnl_10d IS NOT NULL THEN 1 ELSE 0 END), 0), 1
+        ) AS hit_rate_10d,
         ROUND(
-          100.0 * SUM(CASE WHEN gate_enter AND stopped_out THEN 1 ELSE 0 END)
-                / NULLIF(SUM(CASE WHEN gate_enter THEN 1 ELSE 0 END), 0),
-          1
-        )                                                                                        AS stopped_out_rate
+          100.0 * SUM(CASE WHEN gate_enter AND rsi BETWEEN ${rsiMin} AND ${rsiMax} AND atlas_score >= ${scoreMin} AND pnl_20d > 0 THEN 1 ELSE 0 END)
+                / NULLIF(SUM(CASE WHEN gate_enter AND rsi BETWEEN ${rsiMin} AND ${rsiMax} AND atlas_score >= ${scoreMin} AND pnl_20d IS NOT NULL THEN 1 ELSE 0 END), 0), 1
+        ) AS hit_rate_20d,
+        ROUND(
+          100.0 * SUM(CASE WHEN gate_enter AND rsi BETWEEN ${rsiMin} AND ${rsiMax} AND atlas_score >= ${scoreMin} AND stopped_out THEN 1 ELSE 0 END)
+                / NULLIF(SUM(CASE WHEN gate_enter AND rsi BETWEEN ${rsiMin} AND ${rsiMax} AND atlas_score >= ${scoreMin} THEN 1 ELSE 0 END), 0), 1
+        ) AS stopped_out_rate
       FROM sim_trades
       GROUP BY score_bucket
     `),
     db.execute(sql`
       SELECT
         rsi_zone,
-        COUNT(*)                                                                                  AS n,
-        SUM(CASE WHEN gate_enter THEN 1 ELSE 0 END)                                             AS n_entered,
-        ROUND(AVG(CASE WHEN gate_enter AND pnl_5d  IS NOT NULL THEN pnl_5d  END)::numeric, 2)  AS avg_5d,
-        ROUND(AVG(CASE WHEN gate_enter AND pnl_10d IS NOT NULL THEN pnl_10d END)::numeric, 2)  AS avg_10d,
+        COUNT(*)                                                                                              AS n,
+        SUM(CASE WHEN gate_enter AND rsi BETWEEN ${rsiMin} AND ${rsiMax} AND atlas_score >= ${scoreMin} THEN 1 ELSE 0 END) AS n_entered,
+        ROUND(AVG(CASE WHEN gate_enter AND rsi BETWEEN ${rsiMin} AND ${rsiMax} AND atlas_score >= ${scoreMin} AND pnl_5d  IS NOT NULL THEN pnl_5d  END)::numeric, 2) AS avg_5d,
+        ROUND(AVG(CASE WHEN gate_enter AND rsi BETWEEN ${rsiMin} AND ${rsiMax} AND atlas_score >= ${scoreMin} AND pnl_10d IS NOT NULL THEN pnl_10d END)::numeric, 2) AS avg_10d,
+        ROUND(AVG(CASE WHEN gate_enter AND rsi BETWEEN ${rsiMin} AND ${rsiMax} AND atlas_score >= ${scoreMin} AND pnl_20d IS NOT NULL THEN pnl_20d END)::numeric, 2) AS avg_20d,
         ROUND(
-          100.0 * SUM(CASE WHEN gate_enter AND pnl_5d > 0  THEN 1 ELSE 0 END)
-                / NULLIF(SUM(CASE WHEN gate_enter AND pnl_5d IS NOT NULL THEN 1 ELSE 0 END), 0),
-          1
-        )                                                                                        AS hit_rate_5d,
+          100.0 * SUM(CASE WHEN gate_enter AND rsi BETWEEN ${rsiMin} AND ${rsiMax} AND atlas_score >= ${scoreMin} AND pnl_5d > 0 THEN 1 ELSE 0 END)
+                / NULLIF(SUM(CASE WHEN gate_enter AND rsi BETWEEN ${rsiMin} AND ${rsiMax} AND atlas_score >= ${scoreMin} AND pnl_5d IS NOT NULL THEN 1 ELSE 0 END), 0), 1
+        ) AS hit_rate_5d,
         ROUND(
-          100.0 * SUM(CASE WHEN gate_enter AND pnl_10d > 0 THEN 1 ELSE 0 END)
-                / NULLIF(SUM(CASE WHEN gate_enter AND pnl_10d IS NOT NULL THEN 1 ELSE 0 END), 0),
-          1
-        )                                                                                        AS hit_rate_10d
+          100.0 * SUM(CASE WHEN gate_enter AND rsi BETWEEN ${rsiMin} AND ${rsiMax} AND atlas_score >= ${scoreMin} AND pnl_10d > 0 THEN 1 ELSE 0 END)
+                / NULLIF(SUM(CASE WHEN gate_enter AND rsi BETWEEN ${rsiMin} AND ${rsiMax} AND atlas_score >= ${scoreMin} AND pnl_10d IS NOT NULL THEN 1 ELSE 0 END), 0), 1
+        ) AS hit_rate_10d,
+        ROUND(
+          100.0 * SUM(CASE WHEN gate_enter AND rsi BETWEEN ${rsiMin} AND ${rsiMax} AND atlas_score >= ${scoreMin} AND pnl_20d > 0 THEN 1 ELSE 0 END)
+                / NULLIF(SUM(CASE WHEN gate_enter AND rsi BETWEEN ${rsiMin} AND ${rsiMax} AND atlas_score >= ${scoreMin} AND pnl_20d IS NOT NULL THEN 1 ELSE 0 END), 0), 1
+        ) AS hit_rate_20d
       FROM sim_trades
       WHERE rsi_zone IS NOT NULL
       GROUP BY rsi_zone
@@ -443,7 +463,7 @@ export async function getSimResults() {
     db.execute(sql`
       SELECT
         COUNT(*)                                              AS total_bars,
-        SUM(CASE WHEN gate_enter THEN 1 ELSE 0 END)         AS total_entered
+        SUM(CASE WHEN gate_enter AND rsi BETWEEN ${rsiMin} AND ${rsiMax} AND atlas_score >= ${scoreMin} THEN 1 ELSE 0 END) AS total_entered
       FROM sim_trades
     `),
   ]);
@@ -458,11 +478,11 @@ export async function getSimResults() {
       BUCKET_ORDER.indexOf((b as Record<string, unknown>).score_bucket as string)
   );
 
-  // Derive optimal entry threshold: highest-scoring bucket with positive avg_5d
+  // Derive optimal entry threshold: highest-scoring bucket with positive avg_20d (best predictor)
   let optimalScoreThreshold: number | null = null;
   for (const bucket of ["STRONG", "ELEVATED", "NEUTRAL"] as const) {
     const row = byScoreBucket.find(r => (r as Record<string, unknown>).score_bucket === bucket);
-    if (row && Number((row as Record<string, unknown>).avg_5d ?? -1) > 0) {
+    if (row && Number((row as Record<string, unknown>).avg_20d ?? -1) > 0) {
       optimalScoreThreshold = bucket === "STRONG" ? 75 : bucket === "ELEVATED" ? 60 : 45;
       break;
     }
@@ -477,6 +497,7 @@ export async function getSimResults() {
     byRsiZone:            rsiRes.rows,
     optimalScoreThreshold,
     lastRunAt:            state.completedAt,
+    configFilter,
   };
 }
 
