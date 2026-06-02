@@ -426,7 +426,7 @@ export async function runBotCycle(): Promise<BotCycleResult> {
       if (trade.stopPrice && trade.targetPrice) {
         const targetDist = trade.targetPrice - trade.entryPrice;
         const trailingActive = newPeak >= trade.entryPrice + targetDist * 0.33;
-        if (trailingActive && price <= newTrailingStop && price < newPeak * 0.98) {
+        if (trailingActive && price <= newTrailingStop) {
           exitReason = "trailing_stop";
         }
       }

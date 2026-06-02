@@ -43,6 +43,12 @@ interface PaperTrade {
   entryRsi: number | null;
   entryRvol: number | null;
   entryPatterns?: string[] | null;
+  entryTrigger: string | null;
+  atrPctAtEntry: number | null;
+  stopPrice: number | null;
+  targetPrice: number | null;
+  trailingStopPrice: number | null;
+  peakPrice: number | null;
   entryAt: string;
   exitPrice: number | null;
   exitScore: number | null;
@@ -306,24 +312,52 @@ function PnlBadge({ pct, dollar }: { pct: number | null | undefined; dollar?: nu
 function ExitReasonBadge({ reason }: { reason: string | null }) {
   if (!reason) return null;
   const styles: Record<string, string> = {
-    take_profit:    "bg-success/20 text-success border-success/30",
-    stop_loss:      "bg-destructive/25 text-destructive border-destructive/40",
-    score_drop:     "bg-destructive/20 text-destructive border-destructive/30",
-    direction_flip: "bg-warning/20 text-warning border-warning/30",
-    max_hold:       "bg-muted/40 text-muted-foreground border-border",
-    manual:         "bg-primary/20 text-primary border-primary/30",
+    take_profit:          "bg-success/20 text-success border-success/30",
+    trailing_stop:        "bg-success/15 text-success border-success/20",
+    stop_loss:            "bg-destructive/25 text-destructive border-destructive/40",
+    score_drop:           "bg-destructive/20 text-destructive border-destructive/30",
+    direction_flip:       "bg-warning/20 text-warning border-warning/30",
+    distribution_signal:  "bg-warning/25 text-warning border-warning/40",
+    max_hold:             "bg-muted/40 text-muted-foreground border-border",
+    manual:               "bg-primary/20 text-primary border-primary/30",
   };
   const labels: Record<string, string> = {
-    take_profit:    "✓ TAKE PROFIT",
-    stop_loss:      "✗ STOP LOSS",
-    score_drop:     "SCORE ↓",
-    direction_flip: "DIR FLIP",
-    max_hold:       "MAX HOLD",
-    manual:         "MANUAL",
+    take_profit:          "✓ TARGET HIT",
+    trailing_stop:        "✓ TRAIL STOP",
+    stop_loss:            "✗ STOP LOSS",
+    score_drop:           "SCORE ↓",
+    direction_flip:       "DIR FLIP",
+    distribution_signal:  "⚠ DIST TOP",
+    max_hold:             "MAX HOLD",
+    manual:               "MANUAL",
   };
   return (
-    <span className={cn("px-1.5 py-0.5 rounded border text-[10px] font-mono font-bold", styles[reason] ?? "bg-muted text-muted-foreground")}>
+    <span className={cn("px-1.5 py-0.5 rounded border text-[10px] font-mono font-bold", styles[reason] ?? "bg-muted text-muted-foreground border-border")}>
       {labels[reason] ?? reason.toUpperCase()}
+    </span>
+  );
+}
+
+const TRIGGER_LABELS: Record<string, string> = {
+  candle_at_support:         "T1 · CANDLE@SUPPORT",
+  candle_pullback:           "T2 · CANDLE PULL",
+  pullback_to_sma20:         "T3 · SMA20 PULL",
+  bullish_candle_uptrend:    "T4 · CANDLE TREND",
+  strong_momentum_immediate: "T5 · MOMENTUM",
+};
+
+function EntryTriggerBadge({ trigger }: { trigger: string | null }) {
+  if (!trigger) return <span className="text-muted-foreground/40 text-[9px]">legacy</span>;
+  const tier = trigger.startsWith("candle_at") ? 1
+    : trigger.startsWith("candle_pull") ? 2
+    : trigger.startsWith("pullback") ? 3
+    : trigger.startsWith("bullish") ? 4 : 5;
+  const color = tier <= 2 ? "text-success border-success/30 bg-success/10"
+    : tier <= 4 ? "text-primary border-primary/30 bg-primary/10"
+    : "text-warning border-warning/30 bg-warning/10";
+  return (
+    <span className={cn("px-1.5 py-0.5 rounded border text-[9px] font-mono font-bold whitespace-nowrap", color)}>
+      {TRIGGER_LABELS[trigger] ?? trigger.toUpperCase()}
     </span>
   );
 }
@@ -687,53 +721,96 @@ function PositionsTab({ trades, onClose }: { trades: PaperTrade[]; onClose: (id:
             <th className="text-right py-2 px-2">ENTRY</th>
             <th className="text-right py-2 px-2">CURRENT</th>
             <th className="text-right py-2 px-2">P&L</th>
+            <th className="text-left py-2 px-2">RISK LEVELS</th>
+            <th className="text-left py-2 px-2">TRIGGER</th>
             <th className="text-right py-2 px-2">SCORE</th>
             <th className="text-center py-2 px-2">CYCLE</th>
-            <th className="text-right py-2 px-2">RSI@ENTRY</th>
             <th className="text-right py-2 px-2">HOLD</th>
             <th className="text-center py-2 px-2">CLOSE</th>
           </tr>
         </thead>
         <tbody>
-          {open.map(t => (
-            <tr key={t.id} className="border-b border-border/30 hover:bg-muted/20 transition-colors">
-              <td className="py-2 px-2">
-                <div className="font-bold text-primary">{t.ticker}</div>
-                <div className="text-muted-foreground/60 text-[10px] max-w-[120px] truncate">{t.name}</div>
-              </td>
-              <td className="text-right py-2 px-2">{formatCurrency(t.entryPrice)}</td>
-              <td className="text-right py-2 px-2">
-                {t.currentPrice ? formatCurrency(t.currentPrice) : <span className="text-muted-foreground">—</span>}
-              </td>
-              <td className="text-right py-2 px-2">
-                <PnlBadge pct={t.unrealizedPnlPct} dollar={t.unrealizedPnlDollar} />
-              </td>
-              <td className="text-right py-2 px-2">
-                <div className="flex items-center justify-end gap-1">
-                  <ScoreChip score={t.entryScore} dim />
-                  {t.currentScore != null && <><span className="text-muted-foreground/40">→</span><ScoreChip score={t.currentScore} /></>}
-                </div>
-              </td>
-              <td className="text-center py-2 px-2">
-                <div className="flex flex-col items-center gap-0.5">
-                  <CycleBadge phase={t.currentCyclePhase} />
-                  {t.currentWeeklyPatterns && t.currentWeeklyPatterns.length > 0 && (
-                    <div className="text-[9px] font-mono text-muted-foreground/50 max-w-[90px] truncate" title={t.currentWeeklyPatterns.join(", ")}>
-                      {t.currentWeeklyPatterns[0].replace("Weekly ", "W:")}
+          {open.map(t => {
+            const price  = t.currentPrice ?? t.entryPrice;
+            const stop   = t.trailingStopPrice ?? t.stopPrice;
+            const target = t.targetPrice;
+            // Progress bar: 0% = stop, 100% = target; position of current price
+            const pct = (stop != null && target != null && target > stop)
+              ? Math.max(0, Math.min(100, ((price - stop) / (target - stop)) * 100))
+              : null;
+            // Trailing stop is active when price crossed 33% of the way to target
+            const trailingActive = stop != null && target != null && t.peakPrice != null
+              && t.peakPrice >= t.entryPrice + (target - t.entryPrice) * 0.33;
+
+            return (
+              <tr key={t.id} className="border-b border-border/30 hover:bg-muted/20 transition-colors">
+                <td className="py-2 px-2">
+                  <div className="font-bold text-primary">{t.ticker}</div>
+                  <div className="text-muted-foreground/60 text-[10px] max-w-[100px] truncate">{t.name}</div>
+                </td>
+                <td className="text-right py-2 px-2">{formatCurrency(t.entryPrice)}</td>
+                <td className="text-right py-2 px-2">
+                  {t.currentPrice ? formatCurrency(t.currentPrice) : <span className="text-muted-foreground">—</span>}
+                </td>
+                <td className="text-right py-2 px-2">
+                  <PnlBadge pct={t.unrealizedPnlPct} dollar={t.unrealizedPnlDollar} />
+                </td>
+                <td className="py-2 px-2 min-w-[160px]">
+                  {stop != null && target != null ? (
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex items-center justify-between text-[9px] text-muted-foreground/60">
+                        <span className="text-destructive/70">▼{formatCurrency(stop)}</span>
+                        <span className="text-success/70">▲{formatCurrency(target)}</span>
+                      </div>
+                      {pct != null && (
+                        <div className="relative h-1.5 w-full rounded-full bg-muted/30 overflow-hidden">
+                          <div
+                            className={cn("absolute left-0 h-full rounded-full transition-all", pct >= 33 ? "bg-success/60" : "bg-warning/60")}
+                            style={{ width: `${pct}%` }}
+                          />
+                          <div className="absolute left-[33%] top-0 h-full w-px bg-muted-foreground/20" />
+                        </div>
+                      )}
+                      {trailingActive && (
+                        <div className="text-[9px] font-bold text-success/80">TRAIL ACTIVE</div>
+                      )}
+                      {t.atrPctAtEntry != null && (
+                        <div className="text-[9px] text-muted-foreground/40">ATR {t.atrPctAtEntry.toFixed(1)}%</div>
+                      )}
                     </div>
+                  ) : (
+                    <span className="text-muted-foreground/30 text-[9px]">legacy (% stop)</span>
                   )}
-                </div>
-              </td>
-              <td className="text-right py-2 px-2 text-muted-foreground">{t.entryRsi?.toFixed(1) ?? "—"}</td>
-              <td className="text-right py-2 px-2 text-muted-foreground">{t.holdDays ?? 0}d</td>
-              <td className="text-center py-2 px-2">
-                <button onClick={() => onClose(t.id)}
-                  className="px-2 py-0.5 rounded border border-destructive/40 text-destructive text-[10px] font-bold hover:bg-destructive/10 transition-colors">
-                  CLOSE
-                </button>
-              </td>
-            </tr>
-          ))}
+                </td>
+                <td className="py-2 px-2">
+                  <EntryTriggerBadge trigger={t.entryTrigger} />
+                </td>
+                <td className="text-right py-2 px-2">
+                  <div className="flex items-center justify-end gap-1">
+                    <ScoreChip score={t.entryScore} dim />
+                    {t.currentScore != null && <><span className="text-muted-foreground/40">→</span><ScoreChip score={t.currentScore} /></>}
+                  </div>
+                </td>
+                <td className="text-center py-2 px-2">
+                  <div className="flex flex-col items-center gap-0.5">
+                    <CycleBadge phase={t.currentCyclePhase} />
+                    {t.currentWeeklyPatterns && t.currentWeeklyPatterns.length > 0 && (
+                      <div className="text-[9px] font-mono text-muted-foreground/50 max-w-[80px] truncate" title={t.currentWeeklyPatterns.join(", ")}>
+                        {t.currentWeeklyPatterns[0].replace("Weekly ", "W:")}
+                      </div>
+                    )}
+                  </div>
+                </td>
+                <td className="text-right py-2 px-2 text-muted-foreground">{t.holdDays ?? 0}d</td>
+                <td className="text-center py-2 px-2">
+                  <button onClick={() => onClose(t.id)}
+                    className="px-2 py-0.5 rounded border border-destructive/40 text-destructive text-[10px] font-bold hover:bg-destructive/10 transition-colors">
+                    CLOSE
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -783,6 +860,7 @@ function HistoryTab({ trades }: { trades: PaperTrade[] }) {
             <th className="text-right py-2 px-2">EXIT</th>
             <SortTh label="P&L %" k="pnlPercent" />
             <th className="text-left py-2 px-2">REASON</th>
+            <th className="text-left py-2 px-2">TRIGGER</th>
             <SortTh label="HOLD" k="holdDays" />
             <th className="text-right py-2 px-2">SCORE</th>
             <SortTh label="DATE" k="exitAt" />
@@ -793,12 +871,13 @@ function HistoryTab({ trades }: { trades: PaperTrade[] }) {
             <tr key={t.id} className="border-b border-border/30 hover:bg-muted/20 transition-colors">
               <td className="py-2 px-2">
                 <div className="font-bold text-foreground">{t.ticker}</div>
-                <div className="text-muted-foreground/50 text-[10px] truncate max-w-[110px]">{t.name}</div>
+                <div className="text-muted-foreground/50 text-[10px] truncate max-w-[100px]">{t.name}</div>
               </td>
               <td className="text-right py-2 px-2 text-muted-foreground">{formatCurrency(t.entryPrice)}</td>
               <td className="text-right py-2 px-2 text-muted-foreground">{t.exitPrice ? formatCurrency(t.exitPrice) : "—"}</td>
               <td className="text-right py-2 px-2"><PnlBadge pct={t.pnlPercent} dollar={t.pnlDollar} /></td>
               <td className="py-2 px-2"><ExitReasonBadge reason={t.exitReason} /></td>
+              <td className="py-2 px-2"><EntryTriggerBadge trigger={t.entryTrigger} /></td>
               <td className="text-right py-2 px-2 text-muted-foreground">{(t.holdDays ?? 0)}d</td>
               <td className="text-right py-2 px-2">
                 <span className="inline-flex items-center gap-1">
