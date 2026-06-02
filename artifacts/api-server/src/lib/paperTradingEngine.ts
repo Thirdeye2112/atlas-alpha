@@ -78,6 +78,13 @@ const BULLISH_CANDLES = [
   "tweezer_bottom", "abandoned_baby_bullish",
 ];
 
+const BEARISH_CANDLES = [
+  "bearish_engulfing", "shooting_star", "evening_star", "evening_doji_star",
+  "bearish_harami", "bearish_harami_cross", "gravestone_doji",
+  "dark_cloud_cover", "three_black_crows", "bearish_marubozu",
+  "tweezer_top", "abandoned_baby_bearish", "hanging_man",
+];
+
 const CONTINUATION_PATTERNS = [
   "bull_flag", "ascending_triangle", "symmetrical_triangle",
   "rectangle_base", "cup_and_handle", "inverse_head_and_shoulders",
@@ -124,57 +131,86 @@ interface EntryLevels {
  * (mean-reversion → 1.5:1; gap/squeeze → 2:1) after scanner categories are known.
  */
 function computeEntryLevels(a: AnalysisResult): EntryLevels | null {
-  const price  = a.quote.price as number;
-  const atrPct = a.volatility.atrPercent;
-  const atr    = price * atrPct / 100;
+  const price   = a.quote.price as number;
+  const atrPct  = a.volatility.atrPercent;
+  const atr     = price * atrPct / 100;
+  const score   = a.atlasScore.overall;
+  const rsi     = a.momentum.rsi;
+  const isShort = a.atlasScore.direction === "bearish";
 
   const patterns         = (a.patterns?.patterns ?? []) as string[];
-  const hasBullishCandle = patterns.some(p =>
-    BULLISH_CANDLES.some(b => p.toLowerCase().includes(b))
-  );
+  const hasBullishCandle = patterns.some(p => BULLISH_CANDLES.some(b => p.toLowerCase().includes(b)));
+  const hasBearishCandle = patterns.some(p => BEARISH_CANDLES.some(b => p.toLowerCase().includes(b)));
 
-  // Support proximity
   const sma20        = a.trend.sma20;
   const lowerBB      = a.volatility.bollingerLower;
+  const upperBB      = a.volatility.bollingerUpper ?? 0;
   const pctFromSma20 = ((price - sma20) / sma20) * 100;
   const nearSma20    = Math.abs(pctFromSma20) <= 3;
   const nearLowerBB  = lowerBB > 0 && ((price - lowerBB) / lowerBB) * 100 <= 2;
-  const nearSupport  = nearSma20 || nearLowerBB;
+  const nearUpperBB  = upperBB > 0 && ((upperBB - price) / price) * 100 <= 2;
+  const nearSupport    = nearSma20 || nearLowerBB;
+  const nearResistance = nearSma20 || nearUpperBB;
 
-  const score = a.atlasScore.overall;
-  const rsi   = a.momentum.rsi;
+  if (isShort) {
+    // ── Short entry tiers (stop ABOVE entry, target BELOW) ────────────────────
+
+    // Short Tier 1 — Ideal: bearish candle at a resistance level → tight 1× ATR stop
+    if (hasBearishCandle && nearResistance) {
+      const d = 1.0 * atr;
+      return { stopPrice: price + d, targetPrice: price - d * 3, atrPct, trigger: "bearish_candle_at_resistance" };
+    }
+    // Short Tier 2 — Good: bearish candle with RSI elevated (overbought momentum)
+    if (hasBearishCandle && rsi > 60) {
+      const d = 1.5 * atr;
+      return { stopPrice: price + d, targetPrice: price - d * 3, atrPct, trigger: "bearish_candle_reversal" };
+    }
+    // Short Tier 3 — Good: price extended above SMA20 in confirmed downtrend
+    if (pctFromSma20 > 3 && score >= 65 && a.atlasScore.trendScore >= 60) {
+      const d = 1.5 * atr;
+      return { stopPrice: price + d, targetPrice: price - d * 3, atrPct, trigger: "short_at_extension" };
+    }
+    // Short Tier 4 — Acceptable: any bearish candle with good score
+    if (hasBearishCandle && score >= 65) {
+      const d = 1.5 * atr;
+      return { stopPrice: price + d, targetPrice: price - d * 3, atrPct, trigger: "bearish_candle_downtrend" };
+    }
+    // Short Tier 5 — Strong bearish momentum entry
+    if (score >= 78 && a.atlasScore.trendScore >= 65 && a.atlasScore.momentumScore >= 60) {
+      const d = 2.0 * atr;
+      return { stopPrice: price + d, targetPrice: price - d * 3, atrPct, trigger: "strong_bearish_momentum" };
+    }
+    return null;
+  }
+
+  // ── Long entry tiers (stop BELOW entry, target ABOVE) ─────────────────────
 
   // Tier 1 — Ideal: bullish candle AT a support level → tight 1× ATR stop
   if (hasBullishCandle && nearSupport) {
-    const stopDist = 1.0 * atr;
-    return { stopPrice: price - stopDist, targetPrice: price + stopDist * 3, atrPct, trigger: "candle_at_support" };
+    const d = 1.0 * atr;
+    return { stopPrice: price - d, targetPrice: price + d * 3, atrPct, trigger: "candle_at_support" };
   }
-
   // Tier 2 — Good: bullish candle on an RSI pullback (not yet overbought)
   if (hasBullishCandle && rsi < 52) {
-    const stopDist = 1.5 * atr;
-    return { stopPrice: price - stopDist, targetPrice: price + stopDist * 3, atrPct, trigger: "candle_pullback" };
+    const d = 1.5 * atr;
+    return { stopPrice: price - d, targetPrice: price + d * 3, atrPct, trigger: "candle_pullback" };
   }
-
   // Tier 3 — Good: price has pulled back to SMA20 region in an uptrend
   if (nearSma20 && score >= 65 && a.atlasScore.trendScore >= 60) {
-    const stopDist = 1.5 * atr;
-    return { stopPrice: price - stopDist, targetPrice: price + stopDist * 3, atrPct, trigger: "pullback_to_sma20" };
+    const d = 1.5 * atr;
+    return { stopPrice: price - d, targetPrice: price + d * 3, atrPct, trigger: "pullback_to_sma20" };
   }
-
   // Tier 4 — Acceptable: any bullish candle in an uptrend (not extended >8%)
   if (hasBullishCandle && score >= 65 && pctFromSma20 < 8) {
-    const stopDist = 1.5 * atr;
-    return { stopPrice: price - stopDist, targetPrice: price + stopDist * 3, atrPct, trigger: "bullish_candle_uptrend" };
+    const d = 1.5 * atr;
+    return { stopPrice: price - d, targetPrice: price + d * 3, atrPct, trigger: "bullish_candle_uptrend" };
   }
-
   // Tier 5 — Acceptable: very strong score + strong trend, momentum entry
   if (score >= 78 && a.atlasScore.trendScore >= 65 && a.atlasScore.momentumScore >= 60) {
-    const stopDist = 2.0 * atr;  // wider stop for momentum chases
-    return { stopPrice: price - stopDist, targetPrice: price + stopDist * 3, atrPct, trigger: "strong_momentum_immediate" };
+    const d = 2.0 * atr;
+    return { stopPrice: price - d, targetPrice: price + d * 3, atrPct, trigger: "strong_momentum_immediate" };
   }
 
-  // No confirmation — skip this cycle, wait for better setup
   return null;
 }
 
@@ -359,8 +395,13 @@ async function closePosition(
   exitScore: number,
   exitReason: string,
 ): Promise<void> {
-  const pnlPercent = ((exitPrice - trade.entryPrice) / trade.entryPrice) * 100;
-  const pnlDollar  = (trade.shares ?? 0) * (exitPrice - trade.entryPrice);
+  const isShort    = trade.entryDirection === "bearish";
+  const pnlPercent = isShort
+    ? ((trade.entryPrice - exitPrice) / trade.entryPrice) * 100
+    : ((exitPrice - trade.entryPrice) / trade.entryPrice) * 100;
+  const pnlDollar  = isShort
+    ? (trade.shares ?? 0) * (trade.entryPrice - exitPrice)
+    : (trade.shares ?? 0) * (exitPrice - trade.entryPrice);
 
   await db
     .update(paperTradesTable)
@@ -437,32 +478,50 @@ export async function runBotCycle(): Promise<BotCycleResult> {
         catch { continue; }
       }
 
-      const score         = analysis.atlasScore.overall;
-      const direction     = analysis.atlasScore.direction;
-      const price         = analysis.quote.price as number;
-      const holdDays      = Math.floor((Date.now() - new Date(trade.entryAt).getTime()) / 86400000);
-      const unrealizedPct = ((price - trade.entryPrice) / trade.entryPrice) * 100;
+      const score     = analysis.atlasScore.overall;
+      const direction = analysis.atlasScore.direction;
+      const price     = analysis.quote.price as number;
+      const holdDays  = Math.floor((Date.now() - new Date(trade.entryAt).getTime()) / 86400000);
+      const isShort   = trade.entryDirection === "bearish";
 
-      // ── Update trailing stop and peak price ─────────────────────────────────
-      const newPeak = Math.max(trade.peakPrice ?? trade.entryPrice, price);
+      // P&L is inverted for shorts: profit when price falls
+      const unrealizedPct = isShort
+        ? ((trade.entryPrice - price) / trade.entryPrice) * 100
+        : ((price - trade.entryPrice) / trade.entryPrice) * 100;
 
-      // ATR for trailing calculation — prefer stored entry ATR for consistency
+      // ── Update peak/nadir and trailing stop ─────────────────────────────────
+      // Longs track the highest price seen (peak); shorts track the lowest (nadir)
+      const newPeak = isShort
+        ? Math.min(trade.peakPrice ?? trade.entryPrice, price)
+        : Math.max(trade.peakPrice ?? trade.entryPrice, price);
+
       const entryAtrPct = trade.atrPctAtEntry ?? analysis.volatility.atrPercent;
       const entryAtr    = trade.entryPrice * entryAtrPct / 100;
 
-      // Activate trailing stop once 33%+ of the way to target
-      let newTrailingStop = trade.trailingStopPrice ?? trade.stopPrice ?? (trade.entryPrice * (1 - (config.stopLossPct || 4) / 100));
+      // Activate trailing stop once 33%+ of the way toward target
+      let newTrailingStop = trade.trailingStopPrice ?? trade.stopPrice ??
+        (isShort
+          ? trade.entryPrice * (1 + (config.stopLossPct || 4) / 100)
+          : trade.entryPrice * (1 - (config.stopLossPct || 4) / 100));
+
       if (trade.targetPrice && trade.stopPrice) {
-        const targetDist  = trade.targetPrice - trade.entryPrice;
-        const activationThreshold = trade.entryPrice + targetDist * 0.33;
-        if (price >= activationThreshold) {
-          // Trail at 1.5× entry ATR below running peak; never go below entry (breakeven) once activated
-          const trailLevel = newPeak - 1.5 * entryAtr;
-          newTrailingStop  = Math.max(newTrailingStop, trailLevel, trade.entryPrice * 0.998);
+        const targetDist = isShort
+          ? trade.entryPrice - trade.targetPrice   // positive: target is below entry
+          : trade.targetPrice - trade.entryPrice;  // positive: target is above entry
+        const activationThreshold = isShort
+          ? trade.entryPrice - targetDist * 0.33
+          : trade.entryPrice + targetDist * 0.33;
+        const activated = isShort ? price <= activationThreshold : price >= activationThreshold;
+        if (activated) {
+          const trailLevel = isShort
+            ? newPeak + 1.5 * entryAtr   // trail above nadir for shorts
+            : newPeak - 1.5 * entryAtr;  // trail below peak for longs
+          newTrailingStop = isShort
+            ? Math.min(newTrailingStop, trailLevel, trade.entryPrice * 1.002)
+            : Math.max(newTrailingStop, trailLevel, trade.entryPrice * 0.998);
         }
       }
 
-      // Persist peak / trailing stop updates
       if (newPeak !== (trade.peakPrice ?? 0) || Math.abs(newTrailingStop - (trade.trailingStopPrice ?? 0)) > 0.001) {
         await db.update(paperTradesTable)
           .set({ peakPrice: newPeak, trailingStopPrice: newTrailingStop })
@@ -472,18 +531,22 @@ export async function runBotCycle(): Promise<BotCycleResult> {
       // ── Exit decision ────────────────────────────────────────────────────────
       let exitReason: string | null = null;
 
-      // 1. Trailing stop hit (once trailing is active — price fell from peak)
+      // 1. Trailing stop hit (once trailing is active)
       if (trade.stopPrice && trade.targetPrice) {
-        const targetDist = trade.targetPrice - trade.entryPrice;
-        const trailingActive = newPeak >= trade.entryPrice + targetDist * 0.33;
-        if (trailingActive && price <= newTrailingStop) {
-          exitReason = "trailing_stop";
-        }
+        const targetDist = isShort
+          ? trade.entryPrice - trade.targetPrice
+          : trade.targetPrice - trade.entryPrice;
+        const trailingActive = isShort
+          ? newPeak <= trade.entryPrice - targetDist * 0.33
+          : newPeak >= trade.entryPrice + targetDist * 0.33;
+        const trailingHit = isShort ? price >= newTrailingStop : price <= newTrailingStop;
+        if (trailingActive && trailingHit) exitReason = "trailing_stop";
       }
 
       // 2. Initial ATR stop hit (before trailing is active)
-      if (!exitReason && trade.stopPrice && price <= trade.stopPrice) {
-        exitReason = "stop_loss";
+      if (!exitReason && trade.stopPrice) {
+        const stopHit = isShort ? price >= trade.stopPrice : price <= trade.stopPrice;
+        if (stopHit) exitReason = "stop_loss";
       }
 
       // 3. Fallback: fixed % stop for legacy trades without stopPrice
@@ -491,24 +554,26 @@ export async function runBotCycle(): Promise<BotCycleResult> {
         exitReason = "stop_loss";
       }
 
-      // 4. Distribution signal detected → protect capital even if in profit
-      if (!exitReason && hasDistributionSignal(analysis)) {
+      // 4. Distribution signal on long / continuation signal on short → protect capital
+      if (!exitReason && !isShort && hasDistributionSignal(analysis)) {
         exitReason = "distribution_signal";
       }
 
-      // 5. Target reached → let winner run if continuation pattern present
-      if (!exitReason && trade.targetPrice && price >= trade.targetPrice) {
-        if (hasContinuationSignal(analysis)) {
-          // Tighten trailing stop to 1× ATR (closer trail to lock in more profit)
-          const tightTrail = newPeak - 1.0 * entryAtr;
-          if (tightTrail > newTrailingStop) {
-            await db.update(paperTradesTable)
-              .set({ trailingStopPrice: tightTrail })
-              .where(eq(paperTradesTable.id, trade.id));
+      // 5. Target reached → let winner run if continuation signal present
+      if (!exitReason && trade.targetPrice) {
+        const targetHit = isShort ? price <= trade.targetPrice : price >= trade.targetPrice;
+        if (targetHit) {
+          if (hasContinuationSignal(analysis)) {
+            const tightTrail = isShort ? newPeak + 1.0 * entryAtr : newPeak - 1.0 * entryAtr;
+            const isTighter  = isShort ? tightTrail < newTrailingStop : tightTrail > newTrailingStop;
+            if (isTighter) {
+              await db.update(paperTradesTable)
+                .set({ trailingStopPrice: tightTrail })
+                .where(eq(paperTradesTable.id, trade.id));
+            }
+          } else {
+            exitReason = "take_profit";
           }
-          // Don't exit — let trailing stop handle it
-        } else {
-          exitReason = "take_profit";
         }
       }
 
@@ -521,8 +586,10 @@ export async function runBotCycle(): Promise<BotCycleResult> {
       if (!exitReason && score < config.exitScoreThreshold) {
         exitReason = "score_drop";
       }
-      if (!exitReason && config.exitOnDirectionFlip && trade.entryDirection === "bullish" && direction !== "bullish") {
-        exitReason = "direction_flip";
+      // Direction flip: longs exit when direction turns bearish, shorts when bullish
+      if (!exitReason && config.exitOnDirectionFlip) {
+        if (!isShort && direction === "bearish") exitReason = "direction_flip";
+        if (isShort  && direction === "bullish") exitReason = "direction_flip";
       }
 
       // 8. Time exit — ONLY for losing or flat positions; winners keep running
@@ -618,22 +685,21 @@ export async function runBotCycle(): Promise<BotCycleResult> {
 
           // Apply scanner-category-based stop widening and position sizing
           const { categories, positionMultiplier, stopMultiplier } = verdict.scannerInfo;
-          // Category-specific R:R: mean-reversion → 1.5:1, gap/squeeze → 2:1, else 3:1
-          const rrMult = getRRMultiplier(categories);
+          const rrMult   = getRRMultiplier(categories);
+          const isShortEntry = a.atlasScore.direction === "bearish";
           if (stopMultiplier !== 1.0 && levels.stopPrice) {
             const quotePrice = a.quote.price as number;
-            // riskDist is positive (distance from entry down to stop)
-            const riskDist    = quotePrice - levels.stopPrice;
+            // riskDist is always positive: distance from entry to stop
+            const riskDist    = isShortEntry ? levels.stopPrice - quotePrice : quotePrice - levels.stopPrice;
             const newRiskDist = riskDist * stopMultiplier;
-            levels.stopPrice  = quotePrice - newRiskDist;
+            levels.stopPrice   = isShortEntry ? quotePrice + newRiskDist : quotePrice - newRiskDist;
             if (levels.targetPrice) {
-              levels.targetPrice = quotePrice + newRiskDist * rrMult;
+              levels.targetPrice = isShortEntry ? quotePrice - newRiskDist * rrMult : quotePrice + newRiskDist * rrMult;
             }
           } else if (rrMult !== 3.0 && levels.stopPrice && levels.targetPrice) {
-            // No stop widening but R:R should differ — re-derive target from risk distance
             const quotePrice = a.quote.price as number;
-            const riskDist   = quotePrice - levels.stopPrice;
-            levels.targetPrice = quotePrice + riskDist * rrMult;
+            const riskDist   = isShortEntry ? levels.stopPrice - quotePrice : quotePrice - levels.stopPrice;
+            levels.targetPrice = isShortEntry ? quotePrice - riskDist * rrMult : quotePrice + riskDist * rrMult;
           }
 
           await openPosition(a, config, levels, aiNotes, categories, positionMultiplier);
@@ -694,8 +760,13 @@ export async function getEnrichedTrades(status: "open" | "closed" | "all" = "all
 
     const currentPrice        = analysis.quote.price as number;
     const currentScore        = analysis.atlasScore.overall;
-    const unrealizedPnlPct    = ((currentPrice - trade.entryPrice) / trade.entryPrice) * 100;
-    const unrealizedPnlDollar = (trade.shares ?? 0) * (currentPrice - trade.entryPrice);
+    const tradeIsShort        = trade.entryDirection === "bearish";
+    const unrealizedPnlPct    = tradeIsShort
+      ? ((trade.entryPrice - currentPrice) / trade.entryPrice) * 100
+      : ((currentPrice - trade.entryPrice) / trade.entryPrice) * 100;
+    const unrealizedPnlDollar = tradeIsShort
+      ? (trade.shares ?? 0) * (trade.entryPrice - currentPrice)
+      : (trade.shares ?? 0) * (currentPrice - trade.entryPrice);
     const currentCyclePhase     = analysis.marketCycle?.cyclePhase;
     const currentWeeklyPatterns = analysis.marketCycle?.weeklyPatterns;
 
@@ -736,7 +807,11 @@ export async function getBotStats(): Promise<BotStats> {
   for (const t of open) {
     const analysis = job.analyses.find(a => (a.quote.ticker as string) === t.ticker);
     if (analysis) {
-      unrealizedPnl += (t.shares ?? 0) * ((analysis.quote.price as number) - t.entryPrice);
+      const cp = analysis.quote.price as number;
+      const sh = t.shares ?? 0;
+      unrealizedPnl += t.entryDirection === "bearish"
+        ? sh * (t.entryPrice - cp)
+        : sh * (cp - t.entryPrice);
     }
   }
   const realizedPnl = closed.reduce((s, t) => s + (t.pnlDollar ?? 0), 0);

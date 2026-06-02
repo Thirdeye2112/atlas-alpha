@@ -296,6 +296,25 @@ const BOT_PRESETS: BotPreset[] = [
       { field: "rsi",           operator: "between", value: "38", value2: "52" },
     ],
   },
+  {
+    label: "BEAR SHORT",
+    color: "border-destructive/50 text-destructive hover:bg-destructive/10",
+    criteria: [
+      { field: "score",     operator: "gte",     value: "70" },
+      { field: "direction", operator: "eq",      value: "bearish" },
+      { field: "rsi",       operator: "between", value: "48", value2: "72" },
+    ],
+  },
+  {
+    label: "SHORT BREAKDOWN",
+    color: "border-destructive/50 text-destructive hover:bg-destructive/10",
+    criteria: [
+      { field: "score",         operator: "gte", value: "72" },
+      { field: "direction",     operator: "eq",  value: "bearish" },
+      { field: "trendScore",    operator: "gte", value: "65" },
+      { field: "momentumScore", operator: "gte", value: "60" },
+    ],
+  },
 ];
 
 // ── API helpers ───────────────────────────────────────────────────────────────
@@ -797,7 +816,8 @@ function ConfigTab({ config, onSaved }: { config: BotConfig; onSaved: () => void
               className="bg-background border border-border rounded px-2 py-1 text-xs font-mono text-foreground w-16 text-center focus:outline-none focus:border-primary" />
           </label>
           <label className="flex items-center justify-between cursor-pointer">
-            <span className="text-xs font-mono text-foreground">Exit on direction flip to bearish</span>
+            <span className="text-xs font-mono text-foreground">Exit on direction flip</span>
+            <span className="text-[10px] font-mono text-muted-foreground/50 ml-1">(long→bear / short→bull)</span>
             <button onClick={() => setDirFlip(v => !v)}
               className={cn("w-10 h-5 rounded-full transition-colors relative", dirFlip ? "bg-primary" : "bg-muted")}>
               <span className={cn("absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform", dirFlip ? "left-5" : "left-0.5")} />
@@ -944,21 +964,40 @@ function PositionsTab({ trades, onClose }: { trades: PaperTrade[]; onClose: (id:
         </thead>
         <tbody>
           {open.map(t => {
-            const price  = t.currentPrice ?? t.entryPrice;
-            const stop   = t.trailingStopPrice ?? t.stopPrice;
-            const target = t.targetPrice;
-            // Progress bar: 0% = stop, 100% = target; position of current price
-            const pct = (stop != null && target != null && target > stop)
-              ? Math.max(0, Math.min(100, ((price - stop) / (target - stop)) * 100))
-              : null;
-            // Trailing stop is active when price crossed 33% of the way to target
-            const trailingActive = stop != null && target != null && t.peakPrice != null
-              && t.peakPrice >= t.entryPrice + (target - t.entryPrice) * 0.33;
+            const price   = t.currentPrice ?? t.entryPrice;
+            const stop    = t.trailingStopPrice ?? t.stopPrice;
+            const target  = t.targetPrice;
+            const isShort = t.entryDirection === "bearish";
+            // Progress bar: 0% = stop (worst), 100% = target (best)
+            // For longs: stop < entry < target; for shorts: target < entry < stop
+            const pct = (stop != null && target != null) ? (
+              isShort && stop > target
+                ? Math.max(0, Math.min(100, ((stop - price) / (stop - target)) * 100))
+                : (!isShort && target > stop)
+                  ? Math.max(0, Math.min(100, ((price - stop) / (target - stop)) * 100))
+                  : null
+            ) : null;
+            // Trailing stop is active when price moved 33%+ toward target
+            const trailingActive = stop != null && target != null && t.peakPrice != null && (
+              isShort
+                ? t.peakPrice <= t.entryPrice - (t.entryPrice - target) * 0.33
+                : t.peakPrice >= t.entryPrice + (target - t.entryPrice) * 0.33
+            );
 
             return (
               <tr key={t.id} className="border-b border-border/30 hover:bg-muted/20 transition-colors">
                 <td className="py-2 px-2">
-                  <div className="font-bold text-primary">{t.ticker}</div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="font-bold text-primary">{t.ticker}</div>
+                    <span className={cn(
+                      "text-[9px] font-bold font-mono px-1 py-0.5 rounded border",
+                      isShort
+                        ? "text-destructive border-destructive/40 bg-destructive/10"
+                        : "text-success border-success/40 bg-success/10",
+                    )}>
+                      {isShort ? "SHORT" : "LONG"}
+                    </span>
+                  </div>
                   <div className="text-muted-foreground/60 text-[10px] max-w-[100px] truncate">{t.name}</div>
                   {t.scannerCategories && t.scannerCategories.length > 0 && (
                     <div className="flex flex-wrap gap-0.5 mt-0.5">
@@ -977,8 +1016,17 @@ function PositionsTab({ trades, onClose }: { trades: PaperTrade[]; onClose: (id:
                   {stop != null && target != null ? (
                     <div className="flex flex-col gap-0.5">
                       <div className="flex items-center justify-between text-[9px] text-muted-foreground/60">
-                        <span className="text-destructive/70">▼{formatCurrency(stop)}</span>
-                        <span className="text-success/70">▲{formatCurrency(target)}</span>
+                        {isShort ? (
+                          <>
+                            <span className="text-success/70">▼{formatCurrency(target)}</span>
+                            <span className="text-destructive/70">▲{formatCurrency(stop)}</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-destructive/70">▼{formatCurrency(stop)}</span>
+                            <span className="text-success/70">▲{formatCurrency(target)}</span>
+                          </>
+                        )}
                       </div>
                       {pct != null && (
                         <div className="relative h-1.5 w-full rounded-full bg-muted/30 overflow-hidden">
