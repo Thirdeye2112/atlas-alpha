@@ -28,6 +28,7 @@ interface BotConfig {
   takeProfitPct: number;
   stopLossPct: number;
   tickerWhitelist: string;
+  aiGateEnabled: boolean;
   updatedAt: string;
 }
 
@@ -139,6 +140,13 @@ const CS_FIELDS: CsFieldConfig[] = [
   { key: "distFrom52wHigh",    label: "vs 52W High %",       type: "number", hint: "e.g. -10 = within 10%" },
   { key: "priceVsSma40Weekly", label: "vs Weekly SMA200 %",  type: "number", hint: "e.g. 5.0" },
   { key: "pattern",            label: "Pattern",             type: "pattern" },
+  // ── Candle structure ─────────────────────────────────────────────────────
+  { key: "distributionCandles", label: "Distribution Candles", type: "number", hint: "upper wick >40% in last 5" },
+  { key: "climaxBars",          label: "Climax Bars",          type: "number", hint: "vol >2× avg + green in last 5" },
+  { key: "downDayVolumeRatio",  label: "Down/Up Vol Ratio",    type: "number", hint: ">1.2 = distribution pressure" },
+  { key: "parabolicMovePct",    label: "Parabolic Move %",     type: "number", hint: "% from 60-bar low to high" },
+  { key: "consecutiveRedDays",  label: "Consecutive Red Days", type: "number", hint: "current red streak" },
+  { key: "priceExtensionPct",   label: "Extension from SMA20 %", type: "number", hint: "% above 20-day avg" },
 ];
 
 const CS_OPS: Record<CsFieldType, { value: string; label: string }[]> = {
@@ -332,6 +340,7 @@ function ConfigTab({ config, onSaved }: { config: BotConfig; onSaved: () => void
   const [takeProfitPct, setTakeProfitPct] = useState(config.takeProfitPct);
   const [stopLossPct, setStopLossPct]     = useState(config.stopLossPct);
   const [tickerWhitelist, setTickerWhitelist] = useState(config.tickerWhitelist);
+  const [aiGateEnabled, setAiGateEnabled]     = useState(config.aiGateEnabled ?? false);
 
   function handleTakeProfitChange(val: number) {
     setTakeProfitPct(val);
@@ -350,6 +359,7 @@ function ConfigTab({ config, onSaved }: { config: BotConfig; onSaved: () => void
         takeProfitPct,
         stopLossPct,
         tickerWhitelist,
+        aiGateEnabled,
         maxPositions:        maxPos,
         positionSizePct:     posSizePct,
         virtualPortfolio:    portfolio,
@@ -525,6 +535,27 @@ function ConfigTab({ config, onSaved }: { config: BotConfig; onSaved: () => void
             <input type="number" min={1} max={365} value={maxHold} onChange={e => setMaxHold(Number(e.target.value))}
               className="bg-background border border-border rounded px-2 py-1 text-xs font-mono text-foreground w-16 text-center focus:outline-none focus:border-primary" />
           </label>
+        </div>
+
+        <div className="bg-card border border-border rounded-md p-4 flex flex-col gap-3">
+          <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">AI Entry Gate</div>
+          <label className="flex items-center justify-between cursor-pointer">
+            <div>
+              <div className="text-xs font-mono text-foreground">Enable AI candle analysis</div>
+              <div className="text-[10px] font-mono text-muted-foreground/60 mt-0.5">
+                Claude reviews candle structure, wick patterns, parabolic moves &amp; calibration before every entry
+              </div>
+            </div>
+            <button onClick={() => setAiGateEnabled(v => !v)}
+              className={cn("w-10 h-5 rounded-full transition-colors relative flex-shrink-0 ml-4", aiGateEnabled ? "bg-primary" : "bg-muted")}>
+              <span className={cn("absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform", aiGateEnabled ? "left-5" : "left-0.5")} />
+            </button>
+          </label>
+          {aiGateEnabled && (
+            <div className="text-[10px] font-mono text-primary/70 bg-primary/5 rounded px-2 py-1.5 leading-relaxed">
+              ✦ Active — each entry candidate is sent to Claude with last 5 candles, risk metrics, and backtest calibration. Rejected picks are logged to console.
+            </div>
+          )}
         </div>
 
         <div className="bg-card border border-border rounded-md p-4 flex flex-col gap-3">

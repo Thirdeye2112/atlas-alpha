@@ -109,6 +109,13 @@ function getFieldValue(a: AnalysisResult, field: string): FieldValue {
     case "weeklyRsi":           return a.marketCycle?.weeklyRsi ?? a.momentum.rsi;
     case "priceVsSma40Weekly":  return a.marketCycle?.priceVsSma40Weekly ?? 0;
     case "pattern":             return (a.patterns?.patterns ?? []) as string[];
+    // ── Candle structure fields ───────────────────────────────────────────
+    case "distributionCandles":   return a.recentCandles?.distributionCandles ?? 0;
+    case "climaxBars":            return a.recentCandles?.climaxBars ?? 0;
+    case "downDayVolumeRatio":    return a.recentCandles?.downDayVolumeRatio ?? 1;
+    case "parabolicMovePct":      return a.recentCandles?.parabolicMovePct ?? 0;
+    case "consecutiveRedDays":    return a.recentCandles?.consecutiveRedDays ?? 0;
+    case "priceExtensionPct":     return a.recentCandles?.priceExtensionPct ?? 0;
     default:                    return 0;
   }
 }
@@ -168,7 +175,75 @@ export async function updateConfig(patch: Partial<Omit<BotConfig, "id">>): Promi
 
 // ── Position helpers ──────────────────────────────────────────────────────────
 
-async function openPosition(a: AnalysisResult, config: BotConfig): Promise<void> {
+// ── AI Entry Gate ─────────────────────────────────────────────────────────────
+
+async function aiEntryGate(a: AnalysisResult): Promise<{ enter: boolean; reasoning: string }> {
+  const ticker = a.quote.ticker as string;
+  const rc     = a.recentCandles;
+
+  const candleLines = rc
+    ? rc.last5Bars.map(b =>
+        `  ${b.date}: ${b.direction.toUpperCase().padEnd(5)} body${b.bodyPct >= 0 ? "+" : ""}${b.bodyPct.toFixed(1)}%` +
+        ` | wick↑${b.upperWickPct.toFixed(0)}% wick↓${b.lowerWickPct.toFixed(0)}%` +
+        ` | vol ${b.volumeVsAvg.toFixed(2)}× avg | gap ${b.gapPct >= 0 ? "+" : ""}${b.gapPct.toFixed(1)}%`
+      ).join("\n")
+    : "  N/A";
+
+  const prompt = `You are a quant trading analyst for the Atlas Alpha platform. Decide whether to enter a long paper trade.
+
+TICKER: ${ticker}
+ATLAS SCORE: ${a.atlasScore.overall}/100 | DIRECTION: ${a.atlasScore.direction} | BULL PROB: ${a.atlasScore.bullishProbability}%
+CYCLE: ${a.marketCycle?.cyclePhase ?? "unknown"} (strength ${a.marketCycle?.cycleStrength ?? 0}) | Weekly patterns: ${a.marketCycle?.weeklyPatterns?.join(", ") || "none"}
+DAILY PATTERNS: ${a.patterns?.patterns?.join(", ") || "none"}
+EXHAUSTION: signal=${a.exhaustion.exhaustionSignal} | distTop=${a.exhaustion.distributionTop} | parabolic=${a.exhaustion.parabolicRise}
+PULLBACK CLASS: ${a.pullbackSetup?.classification ?? "unknown"}
+
+CANDLE STRUCTURE — last 5 bars (oldest → newest):
+${candleLines}
+
+RISK METRICS:
+- Distribution candles (upper wick >40% of range) in last 5 bars: ${rc?.distributionCandles ?? 0}
+- Buying climax bars (vol >2× avg, green) in last 5 bars: ${rc?.climaxBars ?? 0}
+- Down-day / up-day volume ratio (last 10 bars): ${rc?.downDayVolumeRatio?.toFixed(2) ?? "1.00"}× (>1.2 = distribution pressure)
+- Parabolic move: +${rc?.parabolicMovePct ?? 0}% in ${rc?.parabolicMoveDays ?? 0} trading days
+- Consecutive red days: ${rc?.consecutiveRedDays ?? 0}
+- Extension above SMA20: ${rc?.priceExtensionPct ?? 0}%
+- Largest recent gap-up: +${rc?.largestGapPct ?? 0}%
+
+SYSTEM NARRATIVE (includes backtest calibration / contrarian warnings):
+${a.atlasScore.signalNarrative}
+
+Based on this full picture — candle structure, distribution signals, parabolic move context, exhaustion, and calibration — should the bot enter a long position now?
+
+Respond with JSON only (no markdown, no text outside the JSON object):
+{"enter": true, "confidence": 85, "reasoning": "one concise sentence explaining the decision"}`;
+
+  try {
+    const client = new Anthropic({
+      apiKey:  process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
+      baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
+    });
+    const msg = await client.messages.create({
+      model:      "claude-sonnet-4-6",
+      max_tokens: 256,
+      messages:   [{ role: "user", content: prompt }],
+    });
+    const text       = msg.content.filter(b => b.type === "text").map(b => (b as { type: "text"; text: string }).text).join("");
+    const jsonMatch  = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error("No JSON in AI gate response");
+    const parsed = JSON.parse(jsonMatch[0]) as { enter: boolean; confidence: number; reasoning: string };
+    logger.info({ ticker, enter: parsed.enter, confidence: parsed.confidence, reasoning: parsed.reasoning }, "AI gate decision");
+    return {
+      enter:     !!parsed.enter,
+      reasoning: `[AI Gate ${parsed.enter ? "✓" : "✗"} ${parsed.confidence}% conf] ${parsed.reasoning}`,
+    };
+  } catch (err) {
+    logger.warn({ ticker, err }, "AI gate error — defaulting to enter");
+    return { enter: true, reasoning: "[AI Gate unavailable — defaulted to enter]" };
+  }
+}
+
+async function openPosition(a: AnalysisResult, config: BotConfig, aiNotes?: string | null): Promise<void> {
   const price      = a.quote.price as number;
   const posValue   = (config.virtualPortfolio * config.positionSizePct) / 100;
   const shares     = posValue / price;
@@ -190,6 +265,7 @@ async function openPosition(a: AnalysisResult, config: BotConfig): Promise<void>
     positionValue:      posValue,
     shares,
     status:             "open",
+    aiNotes:            aiNotes ?? null,
   });
 
   logger.info({ ticker, price, score: a.atlasScore.overall }, "Bot opened position");
@@ -319,7 +395,16 @@ export async function runBotCycle(): Promise<BotCycleResult> {
       candidates.sort((a, b) => b.atlasScore.overall - a.atlasScore.overall);
 
       for (const a of candidates.slice(0, slotsAvailable)) {
-        await openPosition(a, config);
+        let aiNotes: string | null = null;
+        if (config.aiGateEnabled) {
+          const gate = await aiEntryGate(a);
+          if (!gate.enter) {
+            logger.info({ ticker: a.quote.ticker, reasoning: gate.reasoning }, "AI gate blocked entry");
+            continue;
+          }
+          aiNotes = gate.reasoning;
+        }
+        await openPosition(a, config, aiNotes);
         newEntries.push(a.quote.ticker as string);
       }
     }

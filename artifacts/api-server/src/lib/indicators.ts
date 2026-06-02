@@ -1911,3 +1911,116 @@ export function calcMarketCycle(weeklyBars: OHLCVBar[]): MarketCycleResult | nul
     weeklyRsi,
   };
 }
+
+// ── Recent Candle Structure ───────────────────────────────────────────────────
+
+export interface CandleBar {
+  date:          string;
+  direction:     "up" | "down" | "doji";
+  bodyPct:       number;       // % change open → close
+  upperWickPct:  number;       // upper wick as % of full candle range
+  lowerWickPct:  number;       // lower wick as % of full candle range
+  volumeVsAvg:   number;       // volume / 20-day avg volume
+  gapPct:        number;       // (open − prev close) / prev close × 100
+}
+
+export interface RecentCandleStructure {
+  last5Bars:           CandleBar[];
+  distributionCandles: number;   // upper wick >40% of range in last 5 bars
+  climaxBars:          number;   // vol >2× avg AND green in last 5 (buying climax)
+  downDayVolumeRatio:  number;   // avg vol on red / avg vol on green (last 10 bars)
+  parabolicMovePct:    number;   // max % gain from any 60-bar rolling low → subsequent high
+  parabolicMoveDays:   number;   // trading days that move took
+  consecutiveRedDays:  number;   // current streak of red closes
+  priceExtensionPct:   number;   // % above 20-day SMA
+  largestGapPct:       number;   // largest positive gap (open > prev close) in last 5 bars
+}
+
+export function calcRecentCandleStructure(bars: OHLCVBar[]): RecentCandleStructure | null {
+  if (bars.length < 30) return null;
+
+  const len      = bars.length;
+  const avgVol20 = bars.slice(-20).reduce((s, b) => s + b.volume, 0) / 20;
+  const sma20    = bars.slice(-20).reduce((s, b) => s + b.close,  0) / 20;
+  const last5    = bars.slice(-5);
+  const last10   = bars.slice(-10);
+  const current  = bars[len - 1];
+
+  // Per-candle summary for last 5 bars ─────────────────────────────────────
+  const last5Bars: CandleBar[] = last5.map((b, i) => {
+    const prevClose   = i === 0 ? (bars[len - 6]?.close ?? b.open) : last5[i - 1].close;
+    const range       = b.high - b.low;
+    const bodyAbs     = Math.abs(b.close - b.open);
+    const bodyPct     = b.open > 0 ? ((b.close - b.open) / b.open) * 100 : 0;
+    const upperWick   = range > 0 ? ((b.high - Math.max(b.open, b.close)) / range) * 100 : 0;
+    const lowerWick   = range > 0 ? ((Math.min(b.open, b.close) - b.low) / range) * 100 : 0;
+    const volumeVsAvg = avgVol20 > 0 ? b.volume / avgVol20 : 1;
+    const gapPct      = prevClose > 0 ? ((b.open - prevClose) / prevClose) * 100 : 0;
+    const direction: "up" | "down" | "doji" =
+      range > 0 && bodyAbs / range < 0.1 ? "doji"
+      : b.close >= b.open ? "up" : "down";
+    return {
+      date:         b.time,
+      direction,
+      bodyPct:      +bodyPct.toFixed(2),
+      upperWickPct: +upperWick.toFixed(1),
+      lowerWickPct: +lowerWick.toFixed(1),
+      volumeVsAvg:  +volumeVsAvg.toFixed(2),
+      gapPct:       +gapPct.toFixed(2),
+    };
+  });
+
+  // Distribution candles — seller rejection at highs
+  const distributionCandles = last5Bars.filter(b => b.upperWickPct > 40).length;
+
+  // Buying climax — high-volume green bars (buyer exhaustion)
+  const climaxBars = last5.filter(b => b.close >= b.open && b.volume > avgVol20 * 2).length;
+
+  // Down-day / up-day volume ratio over last 10 bars
+  const downBars   = last10.filter(b => b.close < b.open);
+  const upBars     = last10.filter(b => b.close >= b.open);
+  const avgDownVol = downBars.length > 0 ? downBars.reduce((s, b) => s + b.volume, 0) / downBars.length : 0;
+  const avgUpVol   = upBars.length   > 0 ? upBars.reduce((s, b)   => s + b.volume, 0) / upBars.length   : 1;
+  const downDayVolumeRatio = +(avgDownVol / Math.max(avgUpVol, 1)).toFixed(2);
+
+  // Parabolic move: max % gain from any local low → subsequent high in last 60 bars
+  const lookback = bars.slice(-60);
+  let parabolicMovePct  = 0;
+  let parabolicMoveDays = 0;
+  for (let i = 1; i < lookback.length - 3; i++) {
+    const prevLow = lookback[i - 1]?.low ?? Infinity;
+    const nextLow = lookback[i + 1]?.low ?? Infinity;
+    if (lookback[i].low < prevLow && lookback[i].low < nextLow) {
+      const base = lookback[i].low;
+      for (let j = i + 3; j < lookback.length; j++) {
+        const movePct = ((lookback[j].high - base) / base) * 100;
+        if (movePct > parabolicMovePct) {
+          parabolicMovePct  = movePct;
+          parabolicMoveDays = j - i;
+        }
+      }
+    }
+  }
+
+  // Consecutive red closes from most recent bar backwards
+  let consecutiveRedDays = 0;
+  for (let i = len - 1; i >= 0; i--) {
+    if (bars[i].close < bars[i].open) consecutiveRedDays++;
+    else break;
+  }
+
+  const priceExtensionPct = +(sma20 > 0 ? ((current.close - sma20) / sma20) * 100 : 0).toFixed(1);
+  const largestGapPct     = +Math.max(0, ...last5Bars.map(b => b.gapPct)).toFixed(2);
+
+  return {
+    last5Bars,
+    distributionCandles,
+    climaxBars,
+    downDayVolumeRatio,
+    parabolicMovePct:  +parabolicMovePct.toFixed(1),
+    parabolicMoveDays,
+    consecutiveRedDays,
+    priceExtensionPct,
+    largestGapPct,
+  };
+}

@@ -15,6 +15,7 @@ export const botConfigTable = pgTable("bot_config", {
   takeProfitPct:       doublePrecision("take_profit_pct").notNull().default(0),
   stopLossPct:         doublePrecision("stop_loss_pct").notNull().default(0),
   tickerWhitelist:     text("ticker_whitelist").notNull().default(""),
+  aiGateEnabled:       boolean("ai_gate_enabled").notNull().default(false),
   virtualPortfolio:    doublePrecision("virtual_portfolio").notNull().default(100000.0),
   updatedAt:           timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

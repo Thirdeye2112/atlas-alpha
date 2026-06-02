@@ -3,11 +3,12 @@ import {
   calcTrend, calcMomentum, calcVolume, calcVolatility, calcOptions,
   calcPatterns, calcRelativeStrength, calcChartSignals, calcRegimeIndicators,
   calcExhaustion, calcFibLevels, calcVolumeProfile, calcWeeklyContext, calcMarketCycle,
+  calcRecentCandleStructure,
   type TrendResult, type MomentumResult, type VolumeResult,
   type VolatilityResult, type OptionsResult, type PatternResult,
   type RelativeStrengthResult, type ChartSignal, type RegimeIndicators,
   type ExhaustionResult, type FibLevelsResult, type VolumeProfileResult,
-  type WeeklyContextResult, type MarketCycleResult,
+  type WeeklyContextResult, type MarketCycleResult, type RecentCandleStructure,
 } from "./indicators.js";
 import { calcAtlasScore, type AtlasAlphaScore } from "./scoring.js";
 import { calcPatternOverlaysMultiTF, type PatternOverlay } from "./patternOverlays.js";
@@ -37,6 +38,7 @@ export interface AnalysisResult {
   weeklyContext: WeeklyContextResult | null;
   marketCycle: MarketCycleResult | null;
   pullbackSetup: PullbackReversalResult | null;
+  recentCandles: RecentCandleStructure | null;
   historicalDate?: string;
   cachedAt: string;
 }
@@ -82,7 +84,8 @@ function buildResult(
   const volumeProfile = lightMode ? null : calcVolumeProfile(bars);
   const weeklyContext = lightMode ? null : calcWeeklyContext(weeklyBars);
   const marketCycle   = lightMode ? null : calcMarketCycle(weeklyBars);
-  const pullbackSetup = calcPullbackReversal(bars, trend, momentum, volume, exhaustion);
+  const pullbackSetup  = calcPullbackReversal(bars, trend, momentum, volume, exhaustion);
+  const recentCandles  = calcRecentCandleStructure(bars);
 
   return {
     quote: quoteOverride,
@@ -103,6 +106,7 @@ function buildResult(
     weeklyContext,
     marketCycle,
     pullbackSetup,
+    recentCandles,
     ...(historicalDate ? { historicalDate } : {}),
     cachedAt: new Date().toISOString(),
   };
