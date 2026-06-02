@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { runWarmup, startScheduler, startLearningScheduler } from "./lib/warmup";
+import { startBotScheduler } from "./lib/botScheduler";
 import { hydrateFromDb } from "./lib/dbCache";
 import { initCalibrationFromDB } from "./lib/calibrationStore";
 
@@ -46,4 +47,9 @@ app.listen(port, (err) => {
   // snapshot engine keeps accumulating signal state and resolving outcomes
   // even when no one has the app open.
   startLearningScheduler();
+
+  // Autonomous bot cycle scheduler: fires runBotCycle() every 30 min between
+  // 09:30–16:00 ET on trading days when bot is enabled. Also starts the
+  // background enhancement loop (calibration building, sim refresh, self-learning).
+  startBotScheduler();
 });

@@ -59,6 +59,7 @@ interface PaperTrade {
   positionValue: number | null;
   status: string;
   aiNotes: string | null;
+  scannerCategories?: string[] | null;
   currentPrice?: number;
   currentScore?: number;
   unrealizedPnlPct?: number;
@@ -109,6 +110,55 @@ interface BotStatus {
   closedCount: number;
   winRate: number;
   virtualPortfolioValue: number;
+}
+
+interface SchedulerState {
+  started: boolean;
+  isRunning: boolean;
+  lastRunAt: string | null;
+  nextRunAt: string | null;
+  msUntilNext: number | null;
+  cycleCount: number;
+  lastExited: string[];
+  lastEntered: string[];
+}
+
+interface MarketContext {
+  regime: "risk_on" | "neutral" | "risk_off";
+  regimeScore: number;
+  breadthPct50: number | null;
+  breadthPct200: number | null;
+  vix: number | null;
+  minScoreOverride: number | null;
+  allowNewEntries: boolean;
+  reason: string;
+}
+
+interface IntelligenceState {
+  lastMarketContext: MarketContext | null;
+  lastAdaptation: { adapted: boolean; oldScoreMin: number; newScoreMin: number; actualWinRate: number; expectedWinRate: number; reason: string } | null;
+  lastAdaptedAt: string | null;
+  backgroundRunCount: number;
+  calibrationsPending: number;
+  simCacheBuckets: number;
+  simCacheAgeMin: number | null;
+}
+
+interface BotIntelligenceData {
+  intelligence: IntelligenceState;
+  marketContext: MarketContext;
+}
+
+interface AdaptationLogEntry {
+  id: number;
+  adaptedAt: string;
+  trigger: string;
+  oldScoreMin: number;
+  newScoreMin: number;
+  actualWinRate: number | null;
+  expectedWinRate: number | null;
+  tradesAnalyzed: number | null;
+  notes: string | null;
 }
 
 interface LearningStats {
@@ -359,6 +409,169 @@ function EntryTriggerBadge({ trigger }: { trigger: string | null }) {
     <span className={cn("px-1.5 py-0.5 rounded border text-[9px] font-mono font-bold whitespace-nowrap", color)}>
       {TRIGGER_LABELS[trigger] ?? trigger.toUpperCase()}
     </span>
+  );
+}
+
+// ── Intelligence panel components ─────────────────────────────────────────────
+
+const CATEGORY_COLORS: Record<string, string> = {
+  high_prob_long:      "bg-success/15 text-success border-success/25",
+  institutional_accum: "bg-success/10 text-success/80 border-success/20",
+  breakout:            "bg-primary/15 text-primary border-primary/25",
+  gap_setup_long:      "bg-primary/10 text-primary/80 border-primary/20",
+  mean_reversion:      "bg-cyan-500/15 text-cyan-400 border-cyan-500/25",
+  gamma_squeeze:       "bg-orange-500/15 text-orange-400 border-orange-500/25",
+  short_squeeze:       "bg-warning/15 text-warning border-warning/25",
+};
+
+const CATEGORY_LABELS: Record<string, string> = {
+  high_prob_long:      "HIGH PROB",
+  institutional_accum: "INST ACCUM",
+  breakout:            "BREAKOUT",
+  gap_setup_long:      "GAP SETUP",
+  mean_reversion:      "MEAN REV",
+  gamma_squeeze:       "GAMMA SQ",
+  short_squeeze:       "SHORT SQ",
+};
+
+function CategoryBadge({ cat }: { cat: string }) {
+  const color = CATEGORY_COLORS[cat] ?? "bg-muted/20 text-muted-foreground border-border";
+  return (
+    <span className={cn("px-1.5 py-0.5 rounded border text-[9px] font-mono font-bold", color)}>
+      {CATEGORY_LABELS[cat] ?? cat.toUpperCase().replace(/_/g, " ")}
+    </span>
+  );
+}
+
+function useCountdown(nextRunAt: string | null | undefined) {
+  const [text, setText] = useState<string | null>(null);
+  useEffect(() => {
+    if (!nextRunAt) { setText(null); return; }
+    function update() {
+      const ms = Math.max(0, new Date(nextRunAt!).getTime() - Date.now());
+      const min = Math.floor(ms / 60000);
+      const sec = Math.floor((ms % 60000) / 1000);
+      setText(min > 0 ? `${min}m ${sec}s` : `${sec}s`);
+    }
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
+  }, [nextRunAt]);
+  return text;
+}
+
+function IntelligencePanel({
+  intelligenceData,
+  scheduler,
+}: {
+  intelligenceData: BotIntelligenceData | undefined;
+  scheduler: SchedulerState | undefined;
+}) {
+  const ctx   = intelligenceData?.marketContext;
+  const intel = intelligenceData?.intelligence;
+  const countdown = useCountdown(scheduler?.nextRunAt);
+
+  const regimeColor = ctx?.regime === "risk_on" ? "text-success"
+    : ctx?.regime === "risk_off" ? "text-destructive" : "text-warning";
+  const regimeLabel = ctx?.regime === "risk_on" ? "RISK ON"
+    : ctx?.regime === "risk_off" ? "RISK OFF" : "NEUTRAL";
+
+  return (
+    <div className="bg-card/40 border border-border/60 rounded-md px-3 py-2 flex flex-wrap gap-x-5 gap-y-1.5 text-xs font-mono">
+
+      {/* Scheduler */}
+      <div className="flex items-center gap-1.5">
+        <span className="text-muted-foreground/60 uppercase tracking-wider text-[9px]">AUTO</span>
+        {scheduler?.isRunning ? (
+          <span className="text-warning animate-pulse">● RUNNING</span>
+        ) : countdown ? (
+          <span className="text-foreground/80">⧖ {countdown}</span>
+        ) : (
+          <span className="text-muted-foreground">waiting</span>
+        )}
+        {(scheduler?.cycleCount ?? 0) > 0 && (
+          <span className="text-muted-foreground/40 text-[10px]">#{scheduler!.cycleCount}</span>
+        )}
+      </div>
+
+      {/* Divider */}
+      <div className="text-border/60 hidden sm:block">|</div>
+
+      {/* Market regime */}
+      <div className="flex items-center gap-1.5">
+        <span className="text-muted-foreground/60 uppercase tracking-wider text-[9px]">MARKET</span>
+        {ctx ? (
+          <>
+            <span className={regimeColor}>{regimeLabel}</span>
+            {ctx.breadthPct50 !== null && (
+              <span className="text-muted-foreground/70">{ctx.breadthPct50}%&gt;SMA50</span>
+            )}
+            {ctx.vix !== null && (
+              <span className={ctx.vix > 25 ? "text-warning" : "text-muted-foreground/50"}>
+                VIX {ctx.vix.toFixed(1)}
+              </span>
+            )}
+          </>
+        ) : (
+          <span className="text-muted-foreground/40">loading…</span>
+        )}
+      </div>
+
+      {/* Entry gate */}
+      {ctx && (
+        <>
+          <div className="text-border/60 hidden sm:block">|</div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-muted-foreground/60 uppercase tracking-wider text-[9px]">GATE</span>
+            {!ctx.allowNewEntries ? (
+              <span className="text-destructive">✗ BLOCKED</span>
+            ) : ctx.minScoreOverride !== null ? (
+              <span className="text-warning">⚠ MIN SCORE≥{ctx.minScoreOverride}</span>
+            ) : (
+              <span className="text-success">✓ OPEN</span>
+            )}
+            {ctx.minScoreOverride !== null && (
+              <span className="text-muted-foreground/50 text-[10px]">(breadth {ctx.breadthPct50}%)</span>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Background loop */}
+      {intel && (intel.simCacheBuckets > 0 || intel.calibrationsPending > 0 || intel.backgroundRunCount > 0) && (
+        <>
+          <div className="text-border/60 hidden sm:block">|</div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-muted-foreground/60 uppercase tracking-wider text-[9px]">BG</span>
+            {intel.simCacheBuckets > 0 && (
+              <span className="text-muted-foreground/60">{intel.simCacheBuckets} sim</span>
+            )}
+            {intel.calibrationsPending > 0 && (
+              <span className="text-primary/80">+{intel.calibrationsPending} calib</span>
+            )}
+            {intel.backgroundRunCount > 0 && (
+              <span className="text-muted-foreground/40">{intel.backgroundRunCount} loops</span>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Last self-learning adaptation */}
+      {intel?.lastAdaptation?.adapted && (
+        <>
+          <div className="text-border/60 hidden sm:block">|</div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-muted-foreground/60 uppercase tracking-wider text-[9px]">ADAPTED</span>
+            <span className="text-warning">
+              {intel.lastAdaptation.oldScoreMin}→{intel.lastAdaptation.newScoreMin}
+            </span>
+            <span className="text-muted-foreground/50 text-[10px]">
+              ({intel.lastAdaptation.actualWinRate.toFixed(0)}% vs {intel.lastAdaptation.expectedWinRate.toFixed(0)}%)
+            </span>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -747,6 +960,11 @@ function PositionsTab({ trades, onClose }: { trades: PaperTrade[]; onClose: (id:
                 <td className="py-2 px-2">
                   <div className="font-bold text-primary">{t.ticker}</div>
                   <div className="text-muted-foreground/60 text-[10px] max-w-[100px] truncate">{t.name}</div>
+                  {t.scannerCategories && t.scannerCategories.length > 0 && (
+                    <div className="flex flex-wrap gap-0.5 mt-0.5">
+                      {(t.scannerCategories as string[]).map(cat => <CategoryBadge key={cat} cat={cat} />)}
+                    </div>
+                  )}
                 </td>
                 <td className="text-right py-2 px-2">{formatCurrency(t.entryPrice)}</td>
                 <td className="text-right py-2 px-2">
@@ -1365,6 +1583,116 @@ function LearningTab() {
           {" · "} min 3 obs per cluster
         </div>
       )}
+
+      {/* Threshold adaptation log */}
+      <AdaptationLogSection />
+    </div>
+  );
+}
+
+function AdaptationLogSection() {
+  const qc = useQueryClient();
+
+  const { data: log = [], isLoading } = useQuery<AdaptationLogEntry[]>({
+    queryKey:  ["bot-adaptation-log"],
+    queryFn:   () => apiFetch("bot/adaptation-log?limit=20"),
+    staleTime: 60_000,
+  });
+
+  const selfLearnMutation = useMutation({
+    mutationFn: () => apiFetch("bot/self-learn", { method: "POST", body: "{}" }),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ["bot-adaptation-log"] }),
+  });
+
+  return (
+    <div className="bg-card border border-border rounded">
+      <div className="px-4 py-2.5 border-b border-border flex items-center justify-between">
+        <div>
+          <span className="text-xs font-mono font-bold text-foreground">Self-Learning Threshold Log</span>
+          <span className="ml-2 text-[10px] font-mono text-muted-foreground">
+            auto-adapts min score based on live vs simulated win rates
+          </span>
+        </div>
+        <button
+          onClick={() => selfLearnMutation.mutate()}
+          disabled={selfLearnMutation.isPending}
+          className="px-2.5 py-1 rounded border border-cyan-500/30 text-cyan-400 text-[10px] font-mono font-bold hover:bg-cyan-500/10 transition-colors disabled:opacity-50">
+          {selfLearnMutation.isPending ? "RUNNING…" : "▶ RUN NOW"}
+        </button>
+      </div>
+
+      {selfLearnMutation.isSuccess && (
+        <div className="px-4 py-2 text-xs font-mono border-b border-border/50">
+          {(selfLearnMutation.data as { adapted?: boolean; reason?: string })?.adapted
+            ? <span className="text-success">✓ Adapted: {(selfLearnMutation.data as { reason?: string })?.reason}</span>
+            : <span className="text-muted-foreground">No change: {(selfLearnMutation.data as { reason?: string })?.reason}</span>
+          }
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="px-4 py-4 text-xs font-mono text-muted-foreground/40">Loading…</div>
+      ) : log.length === 0 ? (
+        <div className="px-4 py-4 text-xs font-mono text-muted-foreground/40 text-center">
+          No threshold adaptations yet — the bot needs ≥30 closed paper trades to compare against sim expectations.
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs font-mono">
+            <thead>
+              <tr className="border-b border-border/60 text-muted-foreground text-[10px] uppercase tracking-wider">
+                <th className="px-3 py-2 text-left">When</th>
+                <th className="px-3 py-2 text-left">Trigger</th>
+                <th className="px-3 py-2 text-right">Old Min</th>
+                <th className="px-3 py-2 text-right">New Min</th>
+                <th className="px-3 py-2 text-right">Actual Win%</th>
+                <th className="px-3 py-2 text-right">Expected Win%</th>
+                <th className="px-3 py-2 text-right">Trades</th>
+                <th className="px-3 py-2 text-left">Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {log.map(e => {
+                const delta = e.newScoreMin - e.oldScoreMin;
+                return (
+                  <tr key={e.id} className="border-b border-border/30 hover:bg-muted/10 transition-colors">
+                    <td className="px-3 py-1.5 text-muted-foreground whitespace-nowrap">
+                      {new Date(e.adaptedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    </td>
+                    <td className="px-3 py-1.5">
+                      <span className={cn(
+                        "px-1.5 py-0.5 rounded text-[9px] font-bold",
+                        e.trigger === "underperform" ? "bg-destructive/15 text-destructive"
+                          : e.trigger === "outperform" ? "bg-success/15 text-success"
+                          : "bg-muted/30 text-muted-foreground"
+                      )}>
+                        {e.trigger.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="px-3 py-1.5 text-right text-muted-foreground">{e.oldScoreMin}</td>
+                    <td className="px-3 py-1.5 text-right font-bold">
+                      <span className={delta > 0 ? "text-warning" : "text-success"}>
+                        {delta > 0 ? "+" : ""}{delta} → {e.newScoreMin}
+                      </span>
+                    </td>
+                    <td className={cn("px-3 py-1.5 text-right",
+                      e.actualWinRate != null && e.actualWinRate >= 55 ? "text-success"
+                        : e.actualWinRate != null && e.actualWinRate < 45 ? "text-destructive"
+                        : "text-muted-foreground")}>
+                      {e.actualWinRate != null ? `${e.actualWinRate.toFixed(1)}%` : "—"}
+                    </td>
+                    <td className="px-3 py-1.5 text-right text-muted-foreground">
+                      {e.expectedWinRate != null ? `${e.expectedWinRate.toFixed(1)}%` : "—"}
+                    </td>
+                    <td className="px-3 py-1.5 text-right text-muted-foreground">{e.tradesAnalyzed ?? "—"}</td>
+                    <td className="px-3 py-1.5 text-muted-foreground/60 text-[10px] max-w-[200px] truncate">{e.notes ?? ""}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -1563,6 +1891,18 @@ export default function BotLab() {
     refetchInterval: 60000,
   });
 
+  const { data: intelligenceData } = useQuery<BotIntelligenceData>({
+    queryKey:       ["bot-intelligence"],
+    queryFn:        () => apiFetch("bot/intelligence"),
+    refetchInterval: 30000,
+  });
+
+  const { data: scheduler } = useQuery<SchedulerState>({
+    queryKey:       ["bot-scheduler"],
+    queryFn:        () => apiFetch("bot/scheduler"),
+    refetchInterval: 10000,
+  });
+
   const toggleEnabled = useMutation({
     mutationFn: () => apiFetch<BotConfig>("bot/config", {
       method: "PUT",
@@ -1659,6 +1999,9 @@ export default function BotLab() {
           </button>
         </div>
       </div>
+
+      {/* Intelligence panel */}
+      <IntelligencePanel intelligenceData={intelligenceData} scheduler={scheduler} />
 
       {/* Run result flash */}
       {runCycleMutation.isSuccess && runCycleMutation.data && (() => {

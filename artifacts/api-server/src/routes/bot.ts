@@ -13,6 +13,13 @@ import {
   getBotRunState,
   computeSignalPerformance,
 } from "../lib/paperTradingEngine.js";
+import { getSchedulerState } from "../lib/botScheduler.js";
+import {
+  getIntelligenceState,
+  getMarketContext,
+  getAdaptationLog,
+  runSelfLearning,
+} from "../lib/botIntelligence.js";
 import { logger } from "../lib/logger.js";
 
 /**
@@ -244,6 +251,43 @@ router.get("/bot/learned-patterns", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "GET /bot/learned-patterns failed");
     res.status(500).json({ error: "Failed to get learned patterns" });
+  }
+});
+
+// ── Intelligence & scheduler ──────────────────────────────────────────────────
+
+router.get("/bot/intelligence", (req, res): void => {
+  try {
+    const intelligence = getIntelligenceState();
+    const marketContext = getMarketContext();
+    res.json({ intelligence, marketContext });
+  } catch (err) {
+    req.log.error({ err }, "GET /bot/intelligence failed");
+    res.status(500).json({ error: "Failed to get intelligence state" });
+  }
+});
+
+router.get("/bot/scheduler", (_req, res): void => {
+  res.json(getSchedulerState());
+});
+
+router.get("/bot/adaptation-log", async (req, res): Promise<void> => {
+  try {
+    const limit = Math.min(Number(req.query["limit"] ?? 20), 100);
+    res.json(await getAdaptationLog(limit));
+  } catch (err) {
+    req.log.error({ err }, "GET /bot/adaptation-log failed");
+    res.status(500).json({ error: "Failed to get adaptation log" });
+  }
+});
+
+router.post("/bot/self-learn", async (req, res): Promise<void> => {
+  try {
+    const result = await runSelfLearning();
+    res.json(result ?? { adapted: false, reason: "no adaptation needed — win rates within tolerance" });
+  } catch (err) {
+    req.log.error({ err }, "POST /bot/self-learn failed");
+    res.status(500).json({ error: "Self-learning failed" });
   }
 });
 

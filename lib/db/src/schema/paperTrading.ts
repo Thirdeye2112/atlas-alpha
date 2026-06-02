@@ -54,6 +54,8 @@ export const paperTradesTable = pgTable("paper_trades", {
   targetPrice:        doublePrecision("target_price"),
   trailingStopPrice:  doublePrecision("trailing_stop_price"),
   peakPrice:          doublePrecision("peak_price"),
+  // Intelligence / scanner context
+  scannerCategories:  jsonb("scanner_categories").default([]),
   status:             text("status").notNull().default("open"),
   aiNotes:            text("ai_notes"),
   createdAt:          timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -62,3 +64,19 @@ export const paperTradesTable = pgTable("paper_trades", {
 export const insertPaperTradeSchema = createInsertSchema(paperTradesTable).omit({ id: true, createdAt: true });
 export type InsertPaperTrade = z.infer<typeof insertPaperTradeSchema>;
 export type PaperTrade = typeof paperTradesTable.$inferSelect;
+
+// ── Bot adaptation log — tracks self-learning threshold changes ────────────────
+
+export const botAdaptationLogTable = pgTable("bot_adaptation_log", {
+  id:              serial("id").primaryKey(),
+  adaptedAt:       timestamp("adapted_at", { withTimezone: true }).notNull().defaultNow(),
+  trigger:         text("trigger").notNull().default("self_learning"),
+  oldScoreMin:     doublePrecision("old_score_min").notNull(),
+  newScoreMin:     doublePrecision("new_score_min").notNull(),
+  actualWinRate:   doublePrecision("actual_win_rate"),
+  expectedWinRate: doublePrecision("expected_win_rate"),
+  tradesAnalyzed:  integer("trades_analyzed"),
+  notes:           text("notes"),
+});
+
+export type BotAdaptationLog = typeof botAdaptationLogTable.$inferSelect;

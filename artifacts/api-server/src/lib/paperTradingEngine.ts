@@ -6,6 +6,7 @@ import { smartEntryGate } from "./entryGate.js";
 import { runFullAnalysis, type AnalysisResult } from "./analysisEngine.js";
 import { analysisCache } from "./cache.js";
 import { logger } from "./logger.js";
+import { getMarketContext, getIntelligenceVerdict, type MarketContext } from "./botIntelligence.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -286,9 +287,17 @@ export async function updateConfig(patch: Partial<Omit<BotConfig, "id">>): Promi
 // ── Position helpers ──────────────────────────────────────────────────────────
 
 
-async function openPosition(a: AnalysisResult, config: BotConfig, levels: EntryLevels, aiNotes?: string | null): Promise<void> {
+async function openPosition(
+  a: AnalysisResult,
+  config: BotConfig,
+  levels: EntryLevels,
+  aiNotes?: string | null,
+  scannerCategories?: string[],
+  positionMultiplier = 1.0,
+): Promise<void> {
   const price    = a.quote.price as number;
-  const posValue = (config.virtualPortfolio * config.positionSizePct) / 100;
+  const basePosValue = (config.virtualPortfolio * config.positionSizePct) / 100;
+  const posValue = basePosValue * positionMultiplier;
   const shares   = posValue / price;
   const ticker   = a.quote.ticker as string;
 
@@ -309,8 +318,9 @@ async function openPosition(a: AnalysisResult, config: BotConfig, levels: EntryL
     atrPctAtEntry:      levels.atrPct,
     stopPrice:          levels.stopPrice,
     targetPrice:        levels.targetPrice,
-    trailingStopPrice:  levels.stopPrice,  // trailing stop starts at initial stop
+    trailingStopPrice:  levels.stopPrice,
     peakPrice:          price,
+    scannerCategories:  (scannerCategories ?? []) as unknown as Record<string, unknown>[],
     positionValue:      posValue,
     shares,
     status:             "open",
@@ -319,8 +329,10 @@ async function openPosition(a: AnalysisResult, config: BotConfig, levels: EntryL
 
   logger.info(
     { ticker, price, score: a.atlasScore.overall, trigger: levels.trigger,
-      stop: levels.stopPrice.toFixed(2), target: levels.targetPrice.toFixed(2) },
-    "Bot opened position"
+      stop: levels.stopPrice.toFixed(2), target: levels.targetPrice.toFixed(2),
+      categories: (scannerCategories ?? []).join(",") || "none",
+      sizeMult: positionMultiplier.toFixed(2) },
+    "Bot opened position",
   );
 }
 
@@ -491,55 +503,94 @@ export async function runBotCycle(): Promise<BotCycleResult> {
     const slotsAvailable = config.maxPositions - remainingOpen.length;
 
     if (slotsAvailable > 0) {
-      const criteria = (config.entryCriteria ?? []) as CustomCriterion[];
-      const heldSet  = new Set(remainingOpen.map(t => t.ticker));
+      // ── Intelligence layer: market context gate (once per cycle) ────────────
+      const marketCtx: MarketContext = getMarketContext();
+      if (!marketCtx.allowNewEntries) {
+        logger.info({ reason: marketCtx.reason }, "Bot intelligence: market gate blocking all new entries this cycle");
+      } else {
+        const criteria = (config.entryCriteria ?? []) as CustomCriterion[];
+        const heldSet  = new Set(remainingOpen.map(t => t.ticker));
 
-      const whitelist = config.tickerWhitelist
-        ? config.tickerWhitelist.split(",").map(t => t.trim().toUpperCase()).filter(Boolean)
-        : [];
+        const whitelist = config.tickerWhitelist
+          ? config.tickerWhitelist.split(",").map(t => t.trim().toUpperCase()).filter(Boolean)
+          : [];
 
-      let pool = analyses
-        .filter(a => !heldSet.has(a.quote.ticker as string))
-        .filter(a => whitelist.length === 0 || whitelist.includes((a.quote.ticker as string).toUpperCase()));
+        let pool = analyses
+          .filter(a => !heldSet.has(a.quote.ticker as string))
+          .filter(a => whitelist.length === 0 || whitelist.includes((a.quote.ticker as string).toUpperCase()));
 
-      if (whitelist.length > 0) {
-        const cachedTickers = new Set(pool.map(a => (a.quote.ticker as string).toUpperCase()));
-        const missing = whitelist.filter(t => !cachedTickers.has(t) && !heldSet.has(t));
-        if (missing.length > 0) {
-          const freshResults = await Promise.allSettled(missing.map(t => runFullAnalysis(t)));
-          for (const r of freshResults) {
-            if (r.status === "fulfilled") pool.push(r.value);
+        if (whitelist.length > 0) {
+          const cachedTickers = new Set(pool.map(a => (a.quote.ticker as string).toUpperCase()));
+          const missing = whitelist.filter(t => !cachedTickers.has(t) && !heldSet.has(t));
+          if (missing.length > 0) {
+            const freshResults = await Promise.allSettled(missing.map(t => runFullAnalysis(t)));
+            for (const r of freshResults) {
+              if (r.status === "fulfilled") pool.push(r.value);
+            }
           }
         }
-      }
 
-      const candidates = pool.filter(a => criteria.length === 0 || criteria.every(c => applyCustomCriterion(a, c)));
-      candidates.sort((a, b) => b.atlasScore.overall - a.atlasScore.overall);
+        let candidates = pool.filter(a => criteria.length === 0 || criteria.every(c => applyCustomCriterion(a, c)));
 
-      let filled = 0;
-      for (const a of candidates) {
-        if (filled >= slotsAvailable) break;
-
-        // Require candle confirmation + support-level check before entering
-        const levels = computeEntryLevels(a);
-        if (!levels) {
-          logger.info({ ticker: a.quote.ticker }, "Bot: no candle/support confirmation — waiting for better setup");
-          continue;
+        // Apply market-context minimum score override (weak breadth → raise bar)
+        if (marketCtx.minScoreOverride !== null) {
+          const before = candidates.length;
+          candidates = candidates.filter(a => a.atlasScore.overall >= marketCtx.minScoreOverride!);
+          if (candidates.length < before) {
+            logger.info(
+              { filtered: before - candidates.length, minScore: marketCtx.minScoreOverride },
+              "Bot intelligence: breadth filter raised minimum score",
+            );
+          }
         }
 
-        let aiNotes: string | null = null;
-        if (config.aiGateEnabled) {
-          const gate = smartEntryGate(a);
-          if (!gate.enter) {
-            logger.info({ ticker: a.quote.ticker, reasoning: gate.reasoning }, "Smart gate blocked entry");
+        candidates.sort((a, b) => b.atlasScore.overall - a.atlasScore.overall);
+
+        let filled = 0;
+        for (const a of candidates) {
+          if (filled >= slotsAvailable) break;
+
+          // Require candle confirmation + support-level check before entering
+          const levels = computeEntryLevels(a);
+          if (!levels) {
+            logger.info({ ticker: a.quote.ticker }, "Bot: no candle/support confirmation — waiting for better setup");
             continue;
           }
-          aiNotes = gate.reasoning;
-        }
 
-        await openPosition(a, config, levels, aiNotes);
-        newEntries.push(a.quote.ticker as string);
-        filled++;
+          // ── Per-ticker intelligence gates (sim + calibration + scanner categories) ──
+          const verdict = await getIntelligenceVerdict(a, marketCtx);
+          if (!verdict.overallAllow) {
+            logger.info(
+              { ticker: a.quote.ticker, blockedBy: verdict.blockedBy,
+                simReason: verdict.simGate.reason, calibReason: verdict.calibGate.reason },
+              "Bot intelligence: entry blocked",
+            );
+            continue;
+          }
+
+          let aiNotes: string | null = null;
+          if (config.aiGateEnabled) {
+            const gate = smartEntryGate(a);
+            if (!gate.enter) {
+              logger.info({ ticker: a.quote.ticker, reasoning: gate.reasoning }, "Smart gate blocked entry");
+              continue;
+            }
+            aiNotes = gate.reasoning;
+          }
+
+          // Apply scanner-category-based stop widening and position sizing
+          const { categories, positionMultiplier, stopMultiplier } = verdict.scannerInfo;
+          if (stopMultiplier !== 1.0 && levels.stopPrice) {
+            const quotePrice  = a.quote.price as number;
+            const stopDist    = levels.stopPrice - quotePrice;
+            const newStopDist = stopDist * stopMultiplier;
+            levels.stopPrice  = quotePrice + newStopDist;
+          }
+
+          await openPosition(a, config, levels, aiNotes, categories, positionMultiplier);
+          newEntries.push(a.quote.ticker as string);
+          filled++;
+        }
       }
     }
 
