@@ -1,11 +1,12 @@
 import { SCANNER_UNIVERSE } from "./scannerUniverse.js";
-import { runFullAnalysis } from "./analysisEngine.js";
+import { runFullAnalysis, type AnalysisResult } from "./analysisEngine.js";
 import { fetchYahooRaw } from "./marketData.js";
 import { runOhlcvBackfill, getBackfillState } from "./ohlcvStore.js";
 import { analysisCache, ohlcvCache, quoteCache } from "./cache.js";
 import { getOrStartScanJob } from "./scanJob.js";
 import { initSimState } from "./historicalSimEngine.js";
 import { resolveOutcomes } from "./snapshotEngine.js";
+import { runEodPipeline } from "./eodPipeline.js";
 import { logger } from "./logger.js";
 
 // ── Warmup state ──────────────────────────────────────────────────────────────
@@ -66,22 +67,28 @@ export async function runWarmup(label = "startup"): Promise<void> {
 
   logger.info({ tickers: SCANNER_UNIVERSE.length, label }, "Cache warmup starting");
 
+  const collectedAnalyses: AnalysisResult[] = [];
+
   for (let i = 0; i < SCANNER_UNIVERSE.length; i += BATCH_SIZE) {
     const batch = SCANNER_UNIVERSE.slice(i, i + BATCH_SIZE);
 
-    await Promise.allSettled(
-      batch.map(async ticker => {
-        try {
-          // lightMode: skips display-only signals (chart pins, structural patterns)
-          // — 30% faster warmup; dashboard requests still get full analysis on demand.
-          await runFullAnalysis(ticker, true);
-          state.loaded++;
-        } catch (err) {
-          state.failed++;
-          logger.warn({ ticker, err }, "Warmup: ticker failed");
-        }
-      })
+    const batchResults = await Promise.allSettled(
+      batch.map(ticker =>
+        // lightMode: skips display-only signals (chart pins, structural patterns)
+        // — 30% faster warmup; dashboard requests still get full analysis on demand.
+        runFullAnalysis(ticker, true)
+      )
     );
+
+    for (const r of batchResults) {
+      if (r.status === "fulfilled") {
+        state.loaded++;
+        collectedAnalyses.push(r.value);
+      } else {
+        state.failed++;
+        logger.warn({ err: r.reason }, "Warmup: ticker failed");
+      }
+    }
 
     // Brief pause between batches to avoid Yahoo Finance rate limits
     if (i + BATCH_SIZE < SCANNER_UNIVERSE.length) {
@@ -98,6 +105,14 @@ export async function runWarmup(label = "startup"): Promise<void> {
     { loaded: state.loaded, failed: state.failed, durationMs, label },
     "Cache warmup complete"
   );
+
+  // After market-close warmup: run the EOD pipeline with locked final-bar analyses.
+  // Fire-and-forget — warmup is already marked complete above.
+  if (label === "market-close" && collectedAnalyses.length > 0) {
+    runEodPipeline(collectedAnalyses).catch(err =>
+      logger.error({ err }, "EOD pipeline failed")
+    );
+  }
 
   // Fire-and-forget: ensure all tickers (now ~580 after S&P 500 + NASDAQ 100 expansion)
   // have 2Y of daily bars in ohlcv_history. runOhlcvBackfill internally diffs each ticker
