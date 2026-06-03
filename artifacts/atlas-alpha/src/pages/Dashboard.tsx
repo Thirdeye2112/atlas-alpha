@@ -1225,6 +1225,132 @@ export default function Dashboard() {
             );
           })()}
 
+          {/* Past Month Highlights — patterns, signal timeline, key levels */}
+          {!displayLoading && displayAnalysis && (() => {
+            const price      = displayAnalysis.quote.price as number;
+            const res        = displayAnalysis.patterns.resistanceLevel as number | null;
+            const sup        = displayAnalysis.patterns.supportLevel as number | null;
+            const move       = displayAnalysis.atlasScore.expectedMovePercent;
+            const dir        = displayAnalysis.atlasScore.direction;
+            const allSignals = (displayAnalysis.chartSignals as ChartSignalMarker[]) ?? [];
+            const cutoff     = new Date(); cutoff.setDate(cutoff.getDate() - 35);
+            const recentSigs = allSignals
+              .filter(s => new Date(s.date) >= cutoff)
+              .sort((a, b) => a.date.localeCompare(b.date));
+            const resHit = res != null && price >= res * 0.995;
+            const supHit = sup != null && price <= sup * 1.005 && price >= sup * 0.995;
+            const overlays   = (displayAnalysis.patternOverlays as PatternOverlay[]) ?? [];
+            const t1Prices   = overlays.map(ov => ov.targets.find(t => t.role === "target")?.price).filter((v): v is number => v != null);
+            const patternTgt = t1Prices.length > 0
+              ? (dir === "bullish" ? Math.max(...t1Prices) : Math.min(...t1Prices))
+              : null;
+            const moveTgt    = price * (1 + (dir === "bullish" ? 1 : -1) * move / 100);
+            const pats       = (displayAnalysis.patterns as { patterns: string[]; marketStructure?: string }).patterns ?? [];
+            const mktStr     = (displayAnalysis.patterns as { marketStructure?: string }).marketStructure;
+            return (
+              <div className="bg-card border border-border rounded-md p-3">
+                <div className="text-[9px] font-mono text-muted-foreground/50 tracking-widest font-bold mb-2.5">
+                  PAST MONTH — SIGNALS &amp; TARGETS
+                </div>
+                <div className="flex gap-4 min-w-0">
+
+                  {/* Patterns */}
+                  <div className="flex flex-col gap-1.5 w-[140px] shrink-0">
+                    <div className="text-[8px] font-mono text-muted-foreground/35 tracking-widest uppercase mb-0.5">Patterns</div>
+                    {pats.length > 0 ? pats.map((p, i) => {
+                      const isBull = !/bear|breakdown|head.and.shoulders|double.top/i.test(p);
+                      return (
+                        <span key={i} className={cn(
+                          "text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border tracking-wide w-fit",
+                          isBull
+                            ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/25"
+                            : "text-red-400 bg-red-500/10 border-red-500/25"
+                        )}>
+                          {isBull ? "▲" : "▼"} {p}
+                        </span>
+                      );
+                    }) : <span className="text-[9px] font-mono text-muted-foreground/40">—</span>}
+                    {mktStr && (
+                      <span className="mt-1 text-[8px] font-mono text-muted-foreground/40 tracking-widest uppercase">{mktStr}</span>
+                    )}
+                  </div>
+
+                  {/* Signal timeline */}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[8px] font-mono text-muted-foreground/35 tracking-widest uppercase mb-1.5">Signal Timeline — 35 days</div>
+                    {recentSigs.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {recentSigs.map((s, i) => {
+                          const isBull   = s.direction === "bull";
+                          const isStrong = s.strength === "strong";
+                          return (
+                            <div key={i}
+                              title={`${s.date} · ${s.label} · ${s.strength}`}
+                              className={cn(
+                                "flex flex-col items-center text-[8px] font-mono px-1.5 py-0.5 rounded border cursor-default select-none",
+                                isBull
+                                  ? isStrong
+                                    ? "text-emerald-300 border-emerald-400/60 bg-emerald-500/12"
+                                    : "text-emerald-500/70 border-emerald-500/25 bg-emerald-500/6"
+                                  : isStrong
+                                    ? "text-red-300 border-red-400/60 bg-red-500/12"
+                                    : "text-red-500/70 border-red-500/25 bg-red-500/6"
+                              )}>
+                              <span className="font-bold leading-tight">{s.label}</span>
+                              <span className="text-muted-foreground/50 leading-tight">{s.date.slice(5)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <span className="text-[9px] font-mono text-muted-foreground/40">No signals in window</span>
+                    )}
+                  </div>
+
+                  {/* Key levels */}
+                  <div className="flex flex-col gap-2 w-[168px] shrink-0 border-l border-border pl-4">
+                    <div className="text-[8px] font-mono text-muted-foreground/35 tracking-widest uppercase mb-0.5">Key Levels</div>
+                    {res != null && (
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-[9px] font-mono text-muted-foreground/55">RESISTANCE</span>
+                        <span className="flex items-center gap-1.5">
+                          <span className="text-[12px] font-bold text-red-400 font-mono tabular-nums">${res.toFixed(2)}</span>
+                          {resHit && (
+                            <span className="text-[8px] font-bold px-1 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/40 tracking-wide whitespace-nowrap">HIT ✓</span>
+                          )}
+                        </span>
+                      </div>
+                    )}
+                    {sup != null && (
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-[9px] font-mono text-muted-foreground/55">SUPPORT</span>
+                        <span className="flex items-center gap-1.5">
+                          <span className="text-[12px] font-bold text-emerald-400 font-mono tabular-nums">${sup.toFixed(2)}</span>
+                          {supHit && (
+                            <span className="text-[8px] font-bold px-1 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/40 tracking-wide whitespace-nowrap">HELD ✓</span>
+                          )}
+                        </span>
+                      </div>
+                    )}
+                    <div className="border-t border-border/50 pt-2 space-y-1.5">
+                      {patternTgt != null && (
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-[9px] font-mono text-muted-foreground/55">PATTERN TGT</span>
+                          <span className="text-[12px] font-bold text-amber-400 font-mono tabular-nums">${patternTgt.toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-[9px] font-mono text-muted-foreground/55">MOVE TGT ±{move?.toFixed(1)}%</span>
+                        <span className="text-[12px] font-bold text-warning font-mono tabular-nums">${moveTgt.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Core Analytics */}
           {displayLoading ? (
             <div className="flex-1 flex items-center justify-center text-muted-foreground animate-pulse text-sm">
