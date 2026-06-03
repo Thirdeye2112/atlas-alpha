@@ -1,6 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { runWarmup, startScheduler, startLearningScheduler, startResolutionScheduler } from "./lib/warmup";
+import { startLearningScheduler, startResolutionScheduler } from "./lib/warmup";
 import { startBotScheduler } from "./lib/botScheduler";
 import { hydrateFromDb } from "./lib/dbCache";
 import { initCalibrationFromDB } from "./lib/calibrationStore";
@@ -35,13 +35,9 @@ app.listen(port, (err) => {
     Promise.all([
       hydrateFromDb(),
       initCalibrationFromDB(),
-    ])
-      .then(() => runWarmup("startup"))
-      .catch(err => logger.error({ err }, "Startup warmup failed"));
+    ]).catch(err => logger.error({ err }, "Startup DB hydration failed"));
+    // Yahoo Finance warmup scheduler disabled — re-enable startScheduler() if needed
   });
-
-  // Schedule twice-daily cache refreshes: market open (09:30 ET) and close (16:30 ET)
-  startScheduler();
 
   // Learning scheduler: triggers a full scan every 30 min on weekdays so the
   // snapshot engine keeps accumulating signal state and resolving outcomes

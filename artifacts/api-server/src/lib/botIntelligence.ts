@@ -594,7 +594,7 @@ export async function runSelfLearning(): Promise<AdaptationResult | null> {
 
 // ── Background enhancement loop ───────────────────────────────────────────────
 
-const BG_INTERVAL_MS        = 5  * 60 * 1000;
+const BG_INTERVAL_MS        = 24 * 60 * 60 * 1000; // once per day
 const SELF_LEARNING_EVERY_MS = 60 * 60 * 1000;
 let lastSelfLearning = 0;
 let bgStarted        = false;
@@ -649,7 +649,7 @@ export function startBackgroundEnhancement(): void {
   // Kickoff: load sim gate cache 10s after server starts
   setTimeout(() => { void loadSimGateCache(); }, 10_000);
 
-  logger.info("Bot background enhancement loop started (5-min interval)");
+  logger.info("Bot background enhancement loop started (once-per-day interval)");
 }
 
 // ── Adaptation log query ──────────────────────────────────────────────────────
