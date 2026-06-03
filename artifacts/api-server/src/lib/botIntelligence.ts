@@ -594,7 +594,7 @@ export async function runSelfLearning(): Promise<AdaptationResult | null> {
 
 // ── Background enhancement loop ───────────────────────────────────────────────
 
-const BG_INTERVAL_MS        = 24 * 60 * 60 * 1000; // once per day
+const BG_INTERVAL_MS        = 5 * 60 * 1000; // every 5 minutes
 const SELF_LEARNING_EVERY_MS = 60 * 60 * 1000;
 let lastSelfLearning = 0;
 let bgStarted        = false;
