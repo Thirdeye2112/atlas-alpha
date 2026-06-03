@@ -654,15 +654,6 @@ export default function LightweightChart({
         }
       }
 
-      if (param.point && param.time) {
-        const price = candlestickSeries.coordinateToPrice(param.point.y);
-        const timeStr = timeToString(param.time);
-        if (price != null && timeStr) {
-          hoverRef.current = { time: timeStr, price };
-        }
-      } else {
-        hoverRef.current = null;
-      }
       if (activeToolRef.current !== "pointer") paintCanvas();
     });
 
@@ -747,10 +738,37 @@ export default function LightweightChart({
       }
     };
 
+    const handleMouseMove = (e: MouseEvent) => {
+      if (activeToolRef.current === "pointer") return;
+      const container = chartContainerRef.current;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const price = candlestickSeries.coordinateToPrice(y);
+      const time  = chart.timeScale().coordinateToTime(x);
+      const timeStr = timeToString(time);
+      if (price != null && timeStr) {
+        hoverRef.current = { time: timeStr, price };
+      }
+      paintCanvas();
+    };
+
+    const handleMouseLeave = () => {
+      hoverRef.current = null;
+      paintCanvas();
+    };
+
+    const container = chartContainerRef.current;
+    container?.addEventListener("mousemove", handleMouseMove);
+    container?.addEventListener("mouseleave", handleMouseLeave);
+
     window.addEventListener("resize", handleResize);
     window.addEventListener("keydown", handleKeyDown);
 
     return () => {
+      container?.removeEventListener("mousemove", handleMouseMove);
+      container?.removeEventListener("mouseleave", handleMouseLeave);
       window.removeEventListener("resize", handleResize);
       window.removeEventListener("keydown", handleKeyDown);
       chart.remove();
