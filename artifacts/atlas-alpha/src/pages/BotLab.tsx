@@ -1475,8 +1475,13 @@ function SimLabTab() {
     enabled:   simStatus?.status !== "idle",
   });
 
-  const runSim = useMutation({
-    mutationFn: () => apiFetch<{ started: boolean }>("bot/sim-run", { method: "POST" }),
+  const runSim = useMutation<{ started: boolean }, Error, boolean>({
+    mutationFn: (force: boolean) =>
+      apiFetch<{ started: boolean }>("bot/sim-run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ force }),
+      }),
     onSuccess:  () => { void refetchStatus(); void refetchResults(); },
   });
 
@@ -1498,17 +1503,27 @@ function SimLabTab() {
             Results show which score ranges and conditions historically lead to winning trades.
           </p>
         </div>
-        <button
-          onClick={() => runSim.mutate()}
-          disabled={isRunning || runSim.isPending}
-          className={cn(
-            "flex items-center gap-1.5 px-4 py-2 rounded font-mono text-xs font-bold tracking-wider transition-colors shrink-0",
-            isRunning || runSim.isPending
-              ? "bg-muted text-muted-foreground cursor-not-allowed"
-              : "bg-violet-700 text-white hover:bg-violet-600"
-          )}>
-          {isRunning ? "◎ RUNNING…" : isDone ? "↺ RE-RUN" : "▶ RUN SIM"}
-        </button>
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          <button
+            onClick={() => runSim.mutate(false)}
+            disabled={isRunning || runSim.isPending}
+            className={cn(
+              "flex items-center gap-1.5 px-4 py-2 rounded font-mono text-xs font-bold tracking-wider transition-colors",
+              isRunning || runSim.isPending
+                ? "bg-muted text-muted-foreground cursor-not-allowed"
+                : "bg-violet-700 text-white hover:bg-violet-600"
+            )}>
+            {isRunning ? "◎ RUNNING…" : isDone ? "↺ UPDATE" : "▶ RUN SIM"}
+          </button>
+          {isDone && !isRunning && (
+            <button
+              onClick={() => { if (confirm("Wipe all sim data and recompute from scratch?")) runSim.mutate(true); }}
+              disabled={runSim.isPending}
+              className="text-[10px] font-mono text-muted-foreground hover:text-destructive transition-colors">
+              ↺ full rerun
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Progress */}

@@ -84,12 +84,12 @@ export async function initSimState(): Promise<void> {
   }
 }
 
-export function startSimJob(): void {
+export function startSimJob(force = false): void {
   if (state.status === "running") {
     logger.warn("Historical sim already running — ignoring duplicate start");
     return;
   }
-  runHistoricalSim().catch(err => {
+  runHistoricalSim(force).catch(err => {
     state.status = "error";
     state.error  = String(err);
     logger.error({ err }, "Historical simulation failed");
@@ -219,14 +219,34 @@ function simEntryGate(
 
 // ── Main simulation ───────────────────────────────────────────────────────────
 
-export async function runHistoricalSim(): Promise<void> {
+export async function runHistoricalSim(force = false): Promise<void> {
   const tickers = SCANNER_UNIVERSE;
+
+  // ── Force mode: wipe existing data so we start fresh ──────────────────────
+  if (force) {
+    await db.execute(sql`TRUNCATE TABLE sim_trades`);
+    logger.info("Sim: force mode — existing data wiped");
+  }
+
+  // ── Query existing progress so incremental runs only process new bars ─────
+  // Maps ticker → last sim_date already stored in DB (e.g. "2025-06-01")
+  const existingRows = await db.execute(sql`
+    SELECT ticker, MAX(sim_date) AS last_date, COUNT(*) AS n
+    FROM sim_trades
+    GROUP BY ticker
+  `);
+  const lastDateByTicker = new Map<string, string>();
+  let existingTotal = 0;
+  for (const row of existingRows.rows as { ticker: string; last_date: string; n: string }[]) {
+    lastDateByTicker.set(row.ticker, row.last_date);
+    existingTotal += Number(row.n);
+  }
 
   Object.assign(state, {
     status:           "running",
     tickersProcessed: 0,
     totalTickers:     tickers.length,
-    tradesRecorded:   0,
+    tradesRecorded:   existingTotal,   // start from existing total so counter never drops
     currentTicker:    null,
     startedAt:        new Date().toISOString(),
     completedAt:      null,
@@ -235,7 +255,7 @@ export async function runHistoricalSim(): Promise<void> {
   });
 
   const t0 = Date.now();
-  logger.info({ tickers: tickers.length }, "Historical simulation started");
+  logger.info({ tickers: tickers.length, existing: existingTotal, force }, "Historical simulation started");
 
   // ── Load all daily bars in one query ────────────────────────────────────
   // Group by ticker in memory — avoids 605 individual SELECT calls.
@@ -275,10 +295,34 @@ export async function runHistoricalSim(): Promise<void> {
       continue;
     }
 
+    // ── Incremental start index ─────────────────────────────────────────────
+    // If we already have data for this ticker, find where we left off and start
+    // from the next bar.  Walk back MAX_HORIZON bars as a safety margin so bars
+    // near the old tail (whose forward returns may have been partial) get
+    // recomputed with a full future window.  Use UPSERT for those overlap rows.
+    const lastDate = lastDateByTicker.get(ticker);
+    let startIdx = MIN_BARS;
+    let useUpsert = false;
+    if (lastDate) {
+      const lastKnownIdx = bars.findIndex(b => b.date === lastDate);
+      if (lastKnownIdx !== -1) {
+        // Recompute from (lastKnownIdx - MAX_HORIZON) to pick up any partial rows,
+        // but never go below MIN_BARS
+        startIdx  = Math.max(MIN_BARS, lastKnownIdx - MAX_HORIZON + 1);
+        useUpsert = true;
+      }
+    }
+
+    // Nothing new to process for this ticker
+    if (startIdx >= bars.length - MAX_HORIZON) {
+      state.tickersProcessed++;
+      continue;
+    }
+
     try {
       const rows: (typeof simTradesTable.$inferInsert)[] = [];
 
-      for (let i = MIN_BARS; i < bars.length - MAX_HORIZON; i++) {
+      for (let i = startIdx; i < bars.length - MAX_HORIZON; i++) {
         const slice    = bars.slice(0, i + 1);
         const spySlice = spyBars.slice(0, Math.min(i + 1, spyBars.length));
         const qqqSlice = qqqBars.slice(0, Math.min(i + 1, qqqBars.length));
@@ -365,14 +409,39 @@ export async function runHistoricalSim(): Promise<void> {
         });
       }
 
-      // Batch upsert — chunks of 500 to keep SQL size manageable
+      // Batch write — chunks of 500 to keep SQL size manageable.
+      // useUpsert is true when we walked back MAX_HORIZON bars as an overlap window;
+      // those rows may already exist so we update the PnL columns with newly complete
+      // forward data.  Purely new rows use onConflictDoNothing as a safety net.
       for (let k = 0; k < rows.length; k += 500) {
-        await db
-          .insert(simTradesTable)
-          .values(rows.slice(k, k + 500))
-          .onConflictDoNothing();
+        const chunk = rows.slice(k, k + 500);
+        if (useUpsert) {
+          await db
+            .insert(simTradesTable)
+            .values(chunk)
+            .onConflictDoUpdate({
+              target: [simTradesTable.ticker, simTradesTable.simDate],
+              set: {
+                pnl5d:         sql`EXCLUDED.pnl_5d`,
+                pnl10d:        sql`EXCLUDED.pnl_10d`,
+                pnl20d:        sql`EXCLUDED.pnl_20d`,
+                stoppedOut:    sql`EXCLUDED.stopped_out`,
+                maxAdverseExc: sql`EXCLUDED.max_adverse_exc`,
+              },
+            });
+        } else {
+          await db
+            .insert(simTradesTable)
+            .values(chunk)
+            .onConflictDoNothing();
+        }
       }
-      state.tradesRecorded += rows.length;
+      // Only count genuinely new rows (beyond the overlap window) to avoid
+      // inflating the running total with re-upserted rows
+      const newRowCount = lastDate
+        ? rows.filter(r => r.simDate! > lastDate).length
+        : rows.length;
+      state.tradesRecorded += newRowCount;
 
     } catch (err) {
       logger.warn({ ticker, err }, "Sim: ticker failed, skipping");

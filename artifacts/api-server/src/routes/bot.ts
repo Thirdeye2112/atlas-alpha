@@ -205,8 +205,9 @@ router.post("/bot/sim-run", async (req, res): Promise<void> => {
     res.status(409).json({ error: "Simulation already running", status: getSimStatus() });
     return;
   }
-  startSimJob();
-  res.json({ started: true, status: getSimStatus() });
+  const force = req.body?.force === true;
+  startSimJob(force);
+  res.json({ started: true, force, status: getSimStatus() });
 });
 
 router.get("/bot/sim-status", (_req, res): void => {
