@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import {
   createChart,
   ColorType,
@@ -11,11 +11,30 @@ import {
   CandlestickData,
   LineStyle,
   createSeriesMarkers,
+  Time,
 } from "lightweight-charts";
 import { OHLCVBar } from "@workspace/api-client-react";
 import type { PatternOverlay } from "@workspace/api-client-react";
 
 export type { PatternOverlay };
+
+export type DrawingTool = "pointer" | "trendline" | "hline" | "ray" | "rectangle";
+
+export interface DrawingObject {
+  id: string;
+  type: "trendline" | "hline" | "ray" | "rectangle";
+  color: string;
+  p1: { time: string; price: number };
+  p2: { time: string; price: number } | null;
+}
+
+const TOOL_COLORS: Record<DrawingTool, string> = {
+  pointer:   "#60a5fa",
+  trendline: "#60a5fa",
+  hline:     "#fbbf24",
+  ray:       "#a78bfa",
+  rectangle: "#34d399",
+};
 
 export interface ChartPriceLine {
   price: number;
@@ -24,7 +43,6 @@ export interface ChartPriceLine {
   lineStyle: "solid" | "dashed" | "dotted";
 }
 
-/** A full-width time series line (e.g. anchored VWAP) rendered over the chart. */
 export interface ChartLineSeries {
   label: string;
   color: string;
@@ -46,7 +64,6 @@ export interface ExtendedHoursPoint {
   type: "pre" | "post";
 }
 
-/** Per-bar Atlas Score overlay — one entry per OHLCV bar, value 0–100. */
 export interface ScoreOverlayPoint {
   time: string;
   score: number;
@@ -57,17 +74,16 @@ interface Props {
   height?: number;
   onCandleClick?: (date: string, close: number) => void;
   priceLines?: ChartPriceLine[];
-  /** Full-width time-series lines (e.g. anchored VWAP, custom indicators) */
   lineSeries?: ChartLineSeries[];
   signals?: ChartSignalMarker[];
-  /** When true: suppress candle signals, render pivot swing highs/lows instead */
   showSwingPoints?: boolean;
-  /** Number of surrounding bars a swing point must dominate. Higher = sparser marks. */
   swingLookback?: number;
   patternOverlays?: PatternOverlay[];
   extendedHours?: ExtendedHoursPoint;
-  /** Per-bar score overlay rendered as a color-coded histogram strip below the candles. */
   scoreOverlay?: ScoreOverlayPoint[];
+  activeTool?: DrawingTool;
+  drawings?: DrawingObject[];
+  onDrawingsChange?: (drawings: DrawingObject[]) => void;
 }
 
 function toChartTime(time: string): UTCTimestamp | string {
@@ -84,7 +100,14 @@ function toDateString(time: UTCTimestamp | string): string {
   return String(time);
 }
 
-/** Advance a YYYY-MM-DD date string by N calendar days, skipping weekends. */
+function timeToString(t: Time | undefined | null): string | null {
+  if (t == null) return null;
+  if (typeof t === "number") return new Date((t as number) * 1000).toISOString().slice(0, 10);
+  if (typeof t === "string") return t;
+  const bd = t as { year: number; month: number; day: number };
+  return `${bd.year}-${String(bd.month).padStart(2, "0")}-${String(bd.day).padStart(2, "0")}`;
+}
+
 function nextTradingDay(dateStr: string, skip = 1): string {
   const d = new Date(dateStr + "T12:00:00Z");
   let added = 0;
@@ -111,7 +134,6 @@ function calcSMA(closes: number[], period: number): (number | null)[] {
   });
 }
 
-/** Returns a human-readable description for a chart signal label. */
 function describeSignal(label: string): string {
   if (label.startsWith("GAP+")) return `— gapped up ${label.slice(4)} above prior close`;
   if (label.startsWith("GAP-")) return `— gapped down ${label.slice(4)} below prior close`;
@@ -145,11 +167,6 @@ interface SwingPoint {
   price: number;
 }
 
-/**
- * Detect pivot swing highs and lows.
- * A pivot high at bar[i] if its high is the local maximum over [i-N, i+N].
- * A pivot low at bar[i] if its low is the local minimum over [i-N, i+N].
- */
 function computeSwingPoints(data: FormattedBar[], lookback: number): SwingPoint[] {
   const points: SwingPoint[] = [];
   const n = data.length;
@@ -179,11 +196,126 @@ export default function LightweightChart({
   patternOverlays = [],
   extendedHours,
   scoreOverlay = [],
+  activeTool = "pointer",
+  drawings = [],
+  onDrawingsChange,
 }: Props) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const tooltipRef        = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<IChartApi | null>(null);
-  const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const chartRef          = useRef<IChartApi | null>(null);
+  const seriesRef         = useRef<ISeriesApi<"Candlestick"> | null>(null);
+
+  const drawingCanvasRef  = useRef<HTMLCanvasElement>(null);
+  const pendingRef        = useRef<DrawingObject | null>(null);
+  const hoverRef          = useRef<{ time: string; price: number } | null>(null);
+  const drawingsRef       = useRef<DrawingObject[]>(drawings);
+  const activeToolRef     = useRef<DrawingTool>(activeTool);
+
+  const paintCanvas = useCallback(() => {
+    const canvas = drawingCanvasRef.current;
+    const chart  = chartRef.current;
+    const series = seriesRef.current;
+    if (!canvas || !chart || !series) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const ctx  = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.scale(dpr, dpr);
+
+    const W = canvas.width  / dpr;
+
+    const pending = pendingRef.current;
+    const hover   = hoverRef.current;
+    const ghost   = (pending && hover)
+      ? { ...pending, p2: hover } as DrawingObject
+      : null;
+
+    const all = ghost ? [...drawingsRef.current, ghost] : [...drawingsRef.current];
+
+    for (const d of all) {
+      const isGhost = d === ghost;
+      ctx.globalAlpha = isGhost ? 0.55 : 0.88;
+      ctx.strokeStyle = d.color;
+      ctx.lineWidth   = 1.5;
+      ctx.setLineDash([]);
+
+      if (d.type === "hline") {
+        const y = series.priceToCoordinate(d.p1.price);
+        if (y == null) continue;
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(W, y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.globalAlpha = isGhost ? 0.45 : 0.75;
+        ctx.font = `9px "JetBrains Mono", "Fira Code", monospace`;
+        ctx.fillStyle = d.color;
+        ctx.textAlign = "right";
+        ctx.fillText(d.p1.price.toFixed(2), W - 5, y - 4);
+
+      } else if (d.type === "trendline" && d.p2) {
+        const x1 = chart.timeScale().timeToCoordinate(d.p1.time as Time);
+        const y1 = series.priceToCoordinate(d.p1.price);
+        const x2 = chart.timeScale().timeToCoordinate(d.p2.time as Time);
+        const y2 = series.priceToCoordinate(d.p2.price);
+        if (x1 == null || y1 == null || x2 == null || y2 == null) continue;
+        ctx.setLineDash(isGhost ? [5, 4] : []);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.globalAlpha = isGhost ? 0.45 : 0.7;
+        ctx.fillStyle = d.color;
+        ctx.beginPath(); ctx.arc(x1, y1, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x2, y2, 3, 0, Math.PI * 2); ctx.fill();
+
+      } else if (d.type === "ray" && d.p2) {
+        const x1 = chart.timeScale().timeToCoordinate(d.p1.time as Time);
+        const y1 = series.priceToCoordinate(d.p1.price);
+        const x2 = chart.timeScale().timeToCoordinate(d.p2.time as Time);
+        const y2 = series.priceToCoordinate(d.p2.price);
+        if (x1 == null || y1 == null || x2 == null || y2 == null) continue;
+        const dx = x2 - x1;
+        ctx.setLineDash(isGhost ? [5, 4] : []);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        if (Math.abs(dx) > 0.5) {
+          const slope = (y2 - y1) / dx;
+          ctx.lineTo(W, y1 + slope * (W - x1));
+        } else {
+          ctx.lineTo(x2, y2);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.globalAlpha = isGhost ? 0.45 : 0.7;
+        ctx.fillStyle = d.color;
+        ctx.beginPath(); ctx.arc(x1, y1, 3, 0, Math.PI * 2); ctx.fill();
+
+      } else if (d.type === "rectangle" && d.p2) {
+        const x1 = chart.timeScale().timeToCoordinate(d.p1.time as Time);
+        const y1 = series.priceToCoordinate(d.p1.price);
+        const x2 = chart.timeScale().timeToCoordinate(d.p2.time as Time);
+        const y2 = series.priceToCoordinate(d.p2.price);
+        if (x1 == null || y1 == null || x2 == null || y2 == null) continue;
+        const rx = Math.min(x1, x2);
+        const ry = Math.min(y1, y2);
+        const rw = Math.abs(x2 - x1);
+        const rh = Math.abs(y2 - y1);
+        ctx.fillStyle = d.color;
+        ctx.globalAlpha = isGhost ? 0.05 : 0.10;
+        ctx.fillRect(rx, ry, rw, rh);
+        ctx.globalAlpha = isGhost ? 0.50 : 0.85;
+        ctx.strokeRect(rx, ry, rw, rh);
+      }
+    }
+
+    ctx.restore();
+  }, []);
 
   useEffect(() => {
     if (!chartContainerRef.current || data.length === 0) return;
@@ -242,8 +374,6 @@ export default function LightweightChart({
 
     candlestickSeries.setData(formattedData);
 
-    // When score overlay is active: three-pane layout (candles / score / volume).
-    // Explicit bottom margin on the candlestick scale keeps it in the top portion.
     const hasScore = scoreOverlay.length > 0;
     if (hasScore) {
       candlestickSeries.priceScale().applyOptions({
@@ -251,13 +381,11 @@ export default function LightweightChart({
       });
     }
 
-    // Volume histogram — bottom ~18–22% of chart, colored by candle direction
     const volumeSeries = chart.addSeries(HistogramSeries, {
       priceFormat: { type: "volume" },
       priceScaleId: "volume",
     });
     volumeSeries.priceScale().applyOptions({
-      // Slightly smaller when score strip is also shown
       scaleMargins: { top: hasScore ? 0.83 : 0.78, bottom: 0 },
     });
     volumeSeries.setData(
@@ -270,8 +398,6 @@ export default function LightweightChart({
       }))
     );
 
-    // ── Score overlay strip (1M view) — per-bar Atlas Score 0–100 ─────────────
-    // Each bar is colored by zone: green ≥65, amber 45–64, red <45.
     if (hasScore) {
       const scoreSeries = chart.addSeries(HistogramSeries, {
         priceFormat: { type: "price", precision: 0, minMove: 1 },
@@ -305,7 +431,6 @@ export default function LightweightChart({
       });
     }
 
-    // Moving average lines — SMA50, SMA87, SMA200 — computed from bar data, full-width
     const closes = data.map(d => d.close);
     const maConfigs: { period: number; color: string; title: string }[] = [
       { period: 50,  color: "#f97316", title: "SMA50"  },
@@ -331,7 +456,6 @@ export default function LightweightChart({
       maSeries.setData(maData);
     }
 
-    // Custom full-width line series (anchored VWAP, Fibonacci extensions, etc.)
     if (lineSeries.length > 0) {
       for (const ls of lineSeries) {
         const validData = ls.data.filter(d => d.value > 0 && isFinite(d.value));
@@ -349,7 +473,6 @@ export default function LightweightChart({
       }
     }
 
-    // Short right-side stubs for BB+/−, VWAP, SUP, RES — last 2 bars only
     if (priceLines.length > 0 && formattedData.length >= 2) {
       const lastBar  = formattedData[formattedData.length - 1];
       const prevBar  = formattedData[formattedData.length - 2];
@@ -371,7 +494,6 @@ export default function LightweightChart({
       }
     }
 
-    // ── Extended hours candle ─────────────────────────────────────────────────
     if (extendedHours && formattedData.length > 0) {
       const lastBar = formattedData[formattedData.length - 1];
       const lastDateStr = toDateString(lastBar.time);
@@ -407,13 +529,11 @@ export default function LightweightChart({
       }
     }
 
-    // ── Pattern overlay lines (diagonal trendlines for flags, triangles, etc.) ──
     if (patternOverlays.length > 0 && formattedData.length >= 2) {
       const lastBar  = formattedData[formattedData.length - 1];
       const stub5Bar = formattedData[Math.max(0, formattedData.length - 6)];
 
       for (const overlay of patternOverlays) {
-        // Draw each trendline segment
         for (const line of overlay.lines) {
           const validPts = line.points.filter(p => p.price > 0 && isFinite(p.price));
           if (validPts.length < 2) continue;
@@ -429,7 +549,6 @@ export default function LightweightChart({
           ls.setData(validPts.map(p => ({ time: p.date, value: p.price })));
         }
 
-        // Draw horizontal stubs for key price targets (breakout / target / stop)
         const isBullish = overlay.type === "bull-flag" || overlay.type === "ascending-triangle";
         for (const target of overlay.targets) {
           if (!target.price || !isFinite(target.price) || target.price <= 0) continue;
@@ -442,7 +561,6 @@ export default function LightweightChart({
             color = isBullish ? "rgba(34,197,94,0.75)" : "rgba(239,68,68,0.75)";
             lineStyle = LineStyle.Dashed;
           } else {
-            // breakout
             color = "rgba(251,191,36,0.80)";
             lineStyle = LineStyle.Dotted;
           }
@@ -463,7 +581,6 @@ export default function LightweightChart({
       }
     }
 
-    // ── Signal markers (candle-level — short timeframes only) ─────────────────
     if (signals.length > 0) {
       const dataTimeSet = new Set(formattedData.map(d => String(d.time)));
       const markers = signals
@@ -485,7 +602,6 @@ export default function LightweightChart({
       }
     }
 
-    // ── Swing point markers (longer timeframes — no text labels) ──────────────
     if (showSwingPoints && formattedData.length > swingLookback * 2 + 1) {
       const swings = computeSwingPoints(formattedData, swingLookback);
       const swingMarkers = swings.map(s => ({
@@ -505,75 +621,169 @@ export default function LightweightChart({
       }
     }
 
-    // ── Crosshair tooltip — shows signal details when hovering a marked candle ──
     const sigMap = new Map<string, ChartSignalMarker[]>();
     for (const s of signals) {
       const arr = sigMap.get(s.date) ?? [];
       arr.push(s);
       sigMap.set(s.date, arr);
     }
-    if (sigMap.size > 0) {
-      chart.subscribeCrosshairMove((param) => {
-        const el = tooltipRef.current;
-        if (!el) return;
-        if (!param.time || !param.point) { el.style.display = "none"; return; }
-        const dateStr = typeof param.time === "number"
-          ? new Date((param.time as number) * 1000).toISOString().slice(0, 10)
-          : String(param.time);
-        const sigs = sigMap.get(dateStr);
-        if (!sigs?.length) { el.style.display = "none"; return; }
-        const w = chartContainerRef.current?.clientWidth ?? 600;
-        const tx = param.point.x + 250 > w ? param.point.x - 258 : param.point.x + 8;
-        el.innerHTML =
-          `<div style="color:hsl(215,16%,42%);font-size:9px;letter-spacing:.08em;margin-bottom:5px;text-transform:uppercase">${dateStr}</div>` +
-          sigs.map(s => {
-            const c = s.direction === "bull" ? "#22c55e" : "#ef4444";
-            return `<div style="color:${c};margin-bottom:3px"><span style="font-weight:700">${s.label}</span> <span style="color:hsl(215,16%,52%);font-weight:400">${describeSignal(s.label)}</span></div>`;
-          }).join("");
-        el.style.left = `${tx}px`;
-        el.style.top  = `${Math.max(8, param.point.y - 25)}px`;
-        el.style.display = "block";
-      });
-    }
+
+    chart.subscribeCrosshairMove((param) => {
+      const el = tooltipRef.current;
+      if (el) {
+        if (!param.time || !param.point) { el.style.display = "none"; }
+        else {
+          const dateStr = typeof param.time === "number"
+            ? new Date((param.time as number) * 1000).toISOString().slice(0, 10)
+            : String(param.time);
+          const sigs = sigMap.get(dateStr);
+          if (!sigs?.length) { el.style.display = "none"; }
+          else {
+            const w = chartContainerRef.current?.clientWidth ?? 600;
+            const tx = param.point.x + 250 > w ? param.point.x - 258 : param.point.x + 8;
+            el.innerHTML =
+              `<div style="color:hsl(215,16%,42%);font-size:9px;letter-spacing:.08em;margin-bottom:5px;text-transform:uppercase">${dateStr}</div>` +
+              sigs.map(s => {
+                const c = s.direction === "bull" ? "#22c55e" : "#ef4444";
+                return `<div style="color:${c};margin-bottom:3px"><span style="font-weight:700">${s.label}</span> <span style="color:hsl(215,16%,52%);font-weight:400">${describeSignal(s.label)}</span></div>`;
+              }).join("");
+            el.style.left = `${tx}px`;
+            el.style.top  = `${Math.max(8, param.point.y - 25)}px`;
+            el.style.display = "block";
+          }
+        }
+      }
+
+      if (param.point && param.time) {
+        const price = candlestickSeries.coordinateToPrice(param.point.y);
+        const timeStr = timeToString(param.time);
+        if (price != null && timeStr) {
+          hoverRef.current = { time: timeStr, price };
+        }
+      } else {
+        hoverRef.current = null;
+      }
+      if (activeToolRef.current !== "pointer") paintCanvas();
+    });
+
+    chart.subscribeClick((param) => {
+      const tool = activeToolRef.current;
+
+      if (tool === "pointer") {
+        if (onCandleClick && param.time && seriesRef.current) {
+          const barData = param.seriesData.get(seriesRef.current) as CandlestickData | undefined;
+          if (barData) {
+            const dateStr = toDateString(param.time as UTCTimestamp | string);
+            onCandleClick(dateStr, barData.close);
+          }
+        }
+        return;
+      }
+
+      if (!param.point || !param.time) return;
+      const price = candlestickSeries.coordinateToPrice(param.point.y);
+      const timeStr = timeToString(param.time);
+      if (price == null || !timeStr) return;
+      const clickPt = { time: timeStr, price };
+
+      if (tool === "hline") {
+        onDrawingsChange?.([...drawingsRef.current, {
+          id: `d_${Date.now()}`,
+          type: "hline",
+          color: TOOL_COLORS.hline,
+          p1: clickPt,
+          p2: null,
+        }]);
+        return;
+      }
+
+      if (!pendingRef.current) {
+        pendingRef.current = {
+          id: `d_${Date.now()}`,
+          type: tool as "trendline" | "ray" | "rectangle",
+          color: TOOL_COLORS[tool],
+          p1: clickPt,
+          p2: null,
+        };
+      } else {
+        const completed: DrawingObject = { ...pendingRef.current, p2: clickPt };
+        pendingRef.current = null;
+        onDrawingsChange?.([...drawingsRef.current, completed]);
+      }
+      paintCanvas();
+    });
+
+    chart.timeScale().subscribeVisibleTimeRangeChange(paintCanvas);
+
+    const resizeCanvas = () => {
+      const canvas = drawingCanvasRef.current;
+      const container = chartContainerRef.current;
+      if (!canvas || !container) return;
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width  = container.clientWidth * dpr;
+      canvas.height = height * dpr;
+      canvas.style.width  = container.clientWidth + "px";
+      canvas.style.height = height + "px";
+      paintCanvas();
+    };
+    resizeCanvas();
 
     chart.timeScale().fitContent();
 
-    chartRef.current = chart;
-    seriesRef.current = candlestickSeries;
-
-    if (onCandleClick) {
-      chart.subscribeClick((param) => {
-        if (!param.time || !seriesRef.current) return;
-        const barData = param.seriesData.get(seriesRef.current) as CandlestickData | undefined;
-        if (!barData) return;
-        const dateStr = toDateString(param.time as UTCTimestamp | string);
-        onCandleClick(dateStr, barData.close);
-      });
-    }
+    chartRef.current   = chart;
+    seriesRef.current  = candlestickSeries;
 
     const handleResize = () => {
       if (chartContainerRef.current) {
         chart.applyOptions({ width: chartContainerRef.current.clientWidth });
       }
+      resizeCanvas();
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        pendingRef.current = null;
+        paintCanvas();
+      }
     };
 
     window.addEventListener("resize", handleResize);
+    window.addEventListener("keydown", handleKeyDown);
 
     return () => {
       window.removeEventListener("resize", handleResize);
+      window.removeEventListener("keydown", handleKeyDown);
       chart.remove();
-      chartRef.current = null;
+      chartRef.current  = null;
       seriesRef.current = null;
     };
-  }, [data, height, onCandleClick, priceLines, signals, showSwingPoints, swingLookback, patternOverlays, extendedHours, scoreOverlay]);
+  }, [data, height, priceLines, signals, showSwingPoints, swingLookback, patternOverlays, extendedHours, scoreOverlay, lineSeries, paintCanvas]);
+
+  useEffect(() => {
+    drawingsRef.current  = drawings;
+    activeToolRef.current = activeTool;
+    pendingRef.current   = null;
+    paintCanvas();
+  }, [drawings, activeTool, paintCanvas]);
+
+  const isDrawing = activeTool !== "pointer";
 
   return (
     <div
       className="w-full relative"
-      style={{ height, cursor: onCandleClick ? "crosshair" : "default" }}
+      style={{ height, cursor: isDrawing ? "crosshair" : onCandleClick ? "crosshair" : "default" }}
     >
       <div ref={chartContainerRef} style={{ width: "100%", height: "100%" }} />
-      {/* Signal tooltip — positioned by the crosshair subscription above */}
+      <canvas
+        ref={drawingCanvasRef}
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          pointerEvents: "none",
+          zIndex: 5,
+        }}
+      />
       <div
         ref={tooltipRef}
         style={{

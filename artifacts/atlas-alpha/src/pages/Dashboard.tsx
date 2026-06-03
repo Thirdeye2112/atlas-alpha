@@ -7,7 +7,7 @@ import {
   OHLCVBar,
 } from "@workspace/api-client-react";
 import WatchlistSidebar from "@/components/layout/WatchlistSidebar";
-import LightweightChart, { ChartPriceLine, ChartLineSeries, ChartSignalMarker, ExtendedHoursPoint, PatternOverlay, ScoreOverlayPoint } from "@/components/charts/LightweightChart";
+import LightweightChart, { ChartPriceLine, ChartLineSeries, ChartSignalMarker, ExtendedHoursPoint, PatternOverlay, ScoreOverlayPoint, DrawingTool, DrawingObject } from "@/components/charts/LightweightChart";
 import ScoreGauge from "@/components/charts/ScoreGauge";
 import MiniGauge from "@/components/charts/MiniGauge";
 import RsiMiniChart from "@/components/charts/RsiMiniChart";
@@ -854,6 +854,8 @@ export default function Dashboard() {
   const [showVwap, setShowVwap] = useState(false);
   const [vwapAnchor, setVwapAnchor] = useState<"3M" | "6M" | "1Y">("3M");
   const [scoreTimeline, setScoreTimeline] = useState<{ date: string; score: number }[] | null>(null);
+  const [drawingTool, setDrawingTool] = useState<DrawingTool>("pointer");
+  const [drawings, setDrawings] = useState<DrawingObject[]>([]);
 
   // Live analysis — staleTime matches server cache TTL (5 min) to avoid re-fetching fresh data
   const { data: analysis, isLoading: analysisLoading } = useGetStockAnalysis(ticker, {
@@ -1090,6 +1092,39 @@ export default function Dashboard() {
                   ))}
                 </div>
               )}
+              {/* Drawing tools */}
+              <div className="flex items-center gap-0.5 border-l border-border pl-2 ml-1">
+                {([
+                  { tool: "pointer"   as DrawingTool, icon: "↖", title: "Select (Esc)" },
+                  { tool: "trendline" as DrawingTool, icon: "╱", title: "Trend Line" },
+                  { tool: "hline"     as DrawingTool, icon: "―", title: "Horizontal Line" },
+                  { tool: "ray"       as DrawingTool, icon: "→", title: "Ray (extends right)" },
+                  { tool: "rectangle" as DrawingTool, icon: "▭", title: "Rectangle" },
+                ] as { tool: DrawingTool; icon: string; title: string }[]).map(({ tool, icon, title }) => (
+                  <button
+                    key={tool}
+                    title={title}
+                    onClick={() => setDrawingTool(tool)}
+                    className={cn(
+                      "w-6 h-6 text-[11px] font-mono rounded flex items-center justify-center transition-colors",
+                      drawingTool === tool
+                        ? "bg-primary/20 text-primary border border-primary/40"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted border border-transparent"
+                    )}
+                  >
+                    {icon}
+                  </button>
+                ))}
+                {drawings.length > 0 && (
+                  <button
+                    title="Clear all drawings"
+                    onClick={() => { setDrawings([]); setDrawingTool("pointer"); }}
+                    className="w-6 h-6 text-[10px] font-mono rounded flex items-center justify-center text-destructive/60 hover:text-destructive hover:bg-destructive/10 border border-transparent ml-0.5"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
               <span className="text-xs text-muted-foreground font-mono shrink-0">{ohlcv?.length || 0} BARS</span>
             </div>
             <ChartBacktestStrip
@@ -1116,6 +1151,9 @@ export default function Dashboard() {
                   swingLookback={timeframe.period === "6mo" ? 3 : timeframe.period === "1y" ? 4 : 5}
                   patternOverlays={displayAnalysis?.patternOverlays as PatternOverlay[] ?? []}
                   scoreOverlay={scoreOverlayData}
+                  activeTool={drawingTool}
+                  drawings={drawings}
+                  onDrawingsChange={setDrawings}
                   extendedHours={(() => {
                     if (!displayAnalysis || timeframe.interval !== "1d") return undefined;
                     const q = displayAnalysis.quote;
