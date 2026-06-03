@@ -288,6 +288,177 @@ export const SCANNER_UNIVERSE: string[] = [
 
   // ── Communication Services ────────────────────────────────────────────────
   "FOXA",   // Fox Corp Class A — S&P 500 news/media
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ── S&P 400 MID-CAP + HIGH-OPPORTUNITY EXPANSION ──────────────────────────
+  // Expands universe from ~373 → ~540 tickers for maximum signal coverage.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ── Financials — Regional Banks, Wealth, Insurance ───────────────────────
+  "WAL",    // Western Alliance Bancorp — Sunbelt commercial bank
+  "WBS",    // Webster Financial — mid-cap commercial bank
+  "WTFC",   // Wintrust Financial — Chicago-area commercial bank
+  "PNFP",   // Pinnacle Financial Partners — Southeast commercial bank
+  "UCBI",   // United Community Banks
+  "WAFD",   // Washington Federal — Pacific Northwest bank
+  "BOKF",   // BOK Financial — Southwest regional bank
+  "SFBS",   // ServisFirst Bancshares — correspondent banking
+  "EWBC",   // East West Bancorp — US-China cross-border banking
+  "IBOC",   // International Bancshares — Texas / Mexico border
+  "CATY",   // Cathay General Bancorp — US-China banking
+  "HWC",    // Hancock Whitney — Gulf South bank
+  "TCBI",   // Texas Capital Bancshares
+  "HLI",    // Houlihan Lokey — M&A advisory / investment bank
+  "HLNE",   // Hamilton Lane — private markets asset manager
+  "SEIC",   // SEI Investments — investment management platforms
+  "SF",     // Stifel Financial — wealth management / investment bank
+  "VIRT",   // Virtu Financial — market maker / high-frequency trading
+  "FAF",    // First American Financial — title insurance
+  "LNC",    // Lincoln National — life & annuity insurance
+  "KMPR",   // Kemper — specialty personal lines insurance
+  "FHI",    // Federated Hermes — active asset management
+  "HRB",    // H&R Block — tax preparation services
+  "SLM",    // Sallie Mae — consumer / student lending
+  "SKT",    // Tanger Factory Outlet Centers — retail REIT
+  "NHI",    // National Health Investors — senior housing REIT
+  "BRX",    // Brixmor Property Group — open-air retail REIT
+  "OFG",    // OFG Bancorp — Puerto Rico / Florida banking
+  "FHB",    // First Hawaiian — Pacific regional bank
+  "MCY",    // Mercury General — auto insurance
+  "WSFS",   // WSFS Financial — Delaware Valley bank
+  "CNA",    // CNA Financial — commercial P&C insurance
+
+  // ── Technology & Software ────────────────────────────────────────────────
+  "CACI",   // CACI International — defense IT / intelligence
+  "SAIC",   // Science Applications International — government IT
+  "EPAM",   // EPAM Systems — software engineering services
+  "QTWO",   // Q2 Holdings — digital banking software
+  "APPF",   // AppFolio — property management software
+  "SPSC",   // SPS Commerce — supply chain network
+  "BLKB",   // Blackbaud — nonprofit / education software
+  "EXLS",   // ExlService Holdings — analytics & BPO
+  "EVTC",   // EVERTEC — payment processing (Caribbean/LatAm)
+  "COHU",   // Cohu — semiconductor test equipment
+  "AEIS",   // Advanced Energy Industries — power conversion
+  "ONTO",   // Onto Innovation — process control metrology
+  "KLIC",   // Kulicke & Soffa — semiconductor packaging equipment
+  "FORM",   // FormFactor — wafer probe cards
+  "PLXS",   // Plexus — electronics manufacturing services
+  "SANM",   // Sanmina — electronics manufacturing services
+  "ACIW",   // ACI Worldwide — real-time payment software
+  "CSGS",   // CSG Systems — revenue management / telecom billing
+  "IDCC",   // InterDigital — wireless technology licensing
+  "GTLB",   // GitLab — DevSecOps platform
+  "FROG",   // JFrog — software supply chain / artifact management
+  "JAMF",   // Jamf — Apple enterprise device management
+  "BOX",    // Box — cloud content management
+  "WEX",    // WEX Inc — fleet / corporate payment solutions
+  "UI",     // Ubiquiti — enterprise networking equipment
+  "CALX",   // Calix — broadband access platforms
+  "CLFD",   // Clearfield — fiber optic equipment
+
+  // ── Healthcare — Devices, Diagnostics, Biotech ───────────────────────────
+  "DOCS",   // Doximity — physician professional network / telehealth
+  "HIMS",   // Hims & Hers — telehealth / consumer health
+  "NVCR",   // NovaCure — TTFields electric field cancer therapy
+  "GKOS",   // Glaukos — glaucoma / corneal health devices
+  "ATRC",   // AtriCure — cardiac surgery ablation devices
+  "MMSI",   // Merit Medical Systems — cardiovascular devices
+  "RGEN",   // Repligen — bioprocess equipment / chromatography
+  "HALO",   // Halozyme — ENHANZE drug delivery platform
+  "ASND",   // Ascendis Pharma — endocrinology rare disease
+  "ARWR",   // Arrowhead Pharmaceuticals — RNAi therapies
+  "ACAD",   // Acadia Pharmaceuticals — CNS / neuropsychiatric
+  "GH",     // Guardant Health — liquid biopsy / oncology
+  "NTRA",   // Natera — cell-free DNA prenatal / oncology
+  "EXAS",   // Exact Sciences — cancer screening (Cologuard)
+  "RXRX",   // Recursion Pharmaceuticals — AI drug discovery
+  "ACHC",   // Acadia Healthcare — behavioral health facilities
+  "AMED",   // Amedisys — home health & hospice
+  "CRVL",   // CorVel — workers' comp managed care
+  "CERT",   // Certara — biosimulation / drug development software
+  "PDCO",   // Patterson Companies — dental / animal health distribution
+  "SCI",    // Service Corporation International — funeral services
+  "PINC",   // Premier Inc — healthcare performance improvement
+  "NEO",    // NeoGenomics — oncology testing services
+  "HAE",    // Haemonetics — blood management / processing
+  "OMCL",   // Omnicell — pharmacy automation & dispensing
+
+  // ── Industrials, Defense & Specialty ─────────────────────────────────────
+  "BWXT",   // BWX Technologies — nuclear components (Navy / DOE)
+  "MOOG",   // Moog Inc — precision motion control (defense + aerospace)
+  "MSA",    // MSA Safety — safety equipment / gas detection
+  "POWL",   // Powell Industries — power distribution switchgear
+  "AAON",   // AAON Inc — commercial HVAC systems
+  "AGCO",   // AGCO Corporation — agricultural machinery (tractors)
+  "ALSN",   // Allison Transmission — automatic transmissions
+  "ARCB",   // ArcBest — LTL freight / logistics
+  "BECN",   // Beacon Roofing Supply — roofing / waterproofing
+  "CLH",    // Clean Harbors — hazardous waste / environmental
+  "CMC",    // Commercial Metals — steel / rebar manufacturer
+  "CR",     // Crane Company — engineered materials / fluid handling
+  "DY",     // Dycom Industries — specialty utility contracting
+  "ESAB",   // ESAB Corporation — welding / cutting solutions
+  "EXP",    // Eagle Materials — cement / wallboard / aggregates
+  "FELE",   // Franklin Electric — water / fuel pumping systems
+  "GMS",    // GMS Inc — ceilings & wallboard distribution
+  "GRC",    // Gorman-Rupp — pumps for water / wastewater
+  "HRI",    // Herc Holdings — equipment rental
+  "ITT",    // ITT Inc — motion / flow control components
+  "LAD",    // Lithia Motors — auto dealerships (US largest)
+  "LSTR",   // Landstar System — asset-light freight brokerage
+  "MATX",   // Matson — ocean container shipping (Hawaii / Pacific)
+  "MHO",    // M/I Homes — homebuilder (Midwest / Southeast)
+  "MLI",    // Mueller Industries — copper products / plumbing
+  "SITE",   // SiteOne Landscape Supply — wholesale landscape products
+  "TMHC",   // Taylor Morrison Home — homebuilder
+  "TREX",   // Trex Company — composite decking / railing
+  "TTC",    // Toro Company — outdoor maintenance equipment
+  "UFPI",   // UFP Industries — engineered wood / building products
+  "WMS",    // Advanced Drainage Systems — water management
+  "WOR",    // Worthington Enterprises — steel processing
+
+  // ── Energy (mid-cap E&P / services) ──────────────────────────────────────
+  "AR",     // Antero Resources — Appalachian natural gas
+  "DINO",   // HF Sinclair — independent petroleum refiner
+  "LBRT",   // Liberty Energy — oilfield services / pressure pumping
+  "RRC",    // Range Resources — Appalachian natural gas E&P
+  "SM",     // SM Energy — Permian Basin E&P
+  "SWN",    // Expand Energy (fka Southwestern Energy) — Appalachian gas
+  "WHD",    // Cactus Inc — wellhead / pressure control systems
+
+  // ── Consumer Discretionary (mid-cap retail & services) ───────────────────
+  "ANF",    // Abercrombie & Fitch — specialty apparel
+  "BOOT",   // Boot Barn — Western / work apparel & footwear
+  "COLM",   // Columbia Sportswear — outdoor / active apparel
+  "DKS",    // Dick's Sporting Goods — sporting goods retail
+  "FL",     // Foot Locker — athletic footwear retail
+  "HGV",    // Hilton Grand Vacations — timeshare / vacation ownership
+  "LOPE",   // Grand Canyon Education — higher education services
+  "PLNT",   // Planet Fitness — value fitness clubs
+  "SFM",    // Sprouts Farmers Market — specialty / natural grocery
+  "SIG",    // Signet Jewelers — jewelry / diamond retail
+  "THO",    // Thor Industries — recreational vehicles
+  "VFC",    // VF Corporation — outdoor / workwear brands
+  "VSCO",   // Victoria's Secret — lingerie / beauty retail
+  "YETI",   // YETI Holdings — premium outdoor / drinkware products
+  "CELH",   // Celsius Holdings — functional energy drinks
+  "CAVA",   // CAVA Group — Mediterranean fast-casual chain
+  "WING",   // Wingstop — chicken wings fast-casual franchise
+
+  // ── High-volume Growth & Emerging Themes ─────────────────────────────────
+  "SMCI",   // Super Micro Computer — AI server / rack infrastructure
+  "MSTR",   // Strategy (MicroStrategy) — Bitcoin treasury / BI software
+  "HOOD",   // Robinhood Markets — retail brokerage / crypto
+  "RIVN",   // Rivian Automotive — EV delivery vans / trucks
+  "LCID",   // Lucid Group — luxury EV sedans
+  "RKLB",   // Rocket Lab — small-class orbital launch vehicles
+  "IONQ",   // IonQ — trapped-ion quantum computing
+  "JOBY",   // Joby Aviation — electric air taxi (eVTOL)
+  "ACHR",   // Archer Aviation — electric air taxi
+  "AXSM",   // Axsome Therapeutics — CNS rare diseases
+  "KRYS",   // Krystal Biotech — gene therapy dermatology
+  "BROS",   // Dutch Bros — drive-thru coffee chain
 ];
 
 // ── Asset-type metadata ────────────────────────────────────────────────────

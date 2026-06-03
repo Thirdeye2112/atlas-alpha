@@ -2,6 +2,6 @@ import NodeCache from "node-cache";
 
 export const quoteCache    = new NodeCache({ stdTTL: 60,   checkperiod: 30  });
 export const analysisCache = new NodeCache({ stdTTL: 300,  checkperiod: 60  });
-export const scannerCache  = new NodeCache({ stdTTL: 1800, checkperiod: 300 });
+export const scannerCache  = new NodeCache({ stdTTL: 2700, checkperiod: 300 }); // 45 min — expanded ~540-ticker universe
 export const ohlcvCache    = new NodeCache({ stdTTL: 900,  checkperiod: 120 }); // 15 min — daily bars barely change
 export const marketCache   = new NodeCache({ stdTTL: 60,   checkperiod: 30  });

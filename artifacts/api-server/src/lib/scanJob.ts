@@ -1,5 +1,5 @@
 /**
- * Shared scan job — one background pass over all 373 tickers, shared across all 10 scanner tabs.
+ * Shared scan job — one background pass over all ~540 tickers, shared across all scanner tabs.
  * Each batch completion updates the analyses array so any scanner endpoint can apply its own
  * filter/sort to whatever is available right now, enabling progressive (streaming) results.
  */
@@ -10,8 +10,9 @@ import { logger } from "./logger.js";
 import { db, signalLogTable } from "@workspace/db";
 import { saveSnapshotsBatch, resolveOutcomes } from "./snapshotEngine.js";
 
-const JOB_TTL_MS = 30 * 60 * 1000; // keep a completed job for 30 min before re-scanning
-const BATCH_SIZE  = 10;
+const JOB_TTL_MS    = 45 * 60 * 1000; // keep a completed job for 45 min before re-scanning
+const BATCH_SIZE    = 10;
+const BATCH_DELAY_MS = 50;            // ms between batches — gentle on Yahoo Finance at ~540 tickers
 
 export interface ScanJob {
   analyses: AnalysisResult[];
@@ -93,6 +94,11 @@ async function runJobBackground(job: ScanJob): Promise<void> {
       }
     }
     job.done = Math.min(i + BATCH_SIZE, SCANNER_UNIVERSE.length);
+
+    // Brief pause between batches to stay gentle on Yahoo Finance
+    if (i + BATCH_SIZE < SCANNER_UNIVERSE.length) {
+      await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS));
+    }
   }
 
   job.done        = job.total;
