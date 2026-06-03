@@ -1,0 +1,32 @@
+Install the latest PowerShell for new features and improvements! https://aka.ms/PSWindows
+
+PS C:\Users\napan> cd "C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform"
+PS C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform> pnpm --filter @workspace/atlas-alpha run dev
+
+> @workspace/atlas-alpha@0.0.0 dev C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform\artifacts\atlas-alpha
+> vite --config vite.config.ts --host 0.0.0.0
+
+✘ [ERROR] Expected identifier but found end of file
+
+    vite.config.ts:76:0:
+      76 │
+         ╵ ^
+
+failed to load config from C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform\artifacts\atlas-alpha\vite.config.ts
+error when starting dev server:
+Error: Build failed with 1 error:
+vite.config.ts:76:0: ERROR: Expected identifier but found end of file
+    at failureErrorWithLog (C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform\node_modules\.pnpm\esbuild@0.27.3\node_modules\esbuild\lib\main.js:1467:15)
+    at C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform\node_modules\.pnpm\esbuild@0.27.3\node_modules\esbuild\lib\main.js:926:25
+    at runOnEndCallbacks (C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform\node_modules\.pnpm\esbuild@0.27.3\node_modules\esbuild\lib\main.js:1307:45)
+    at buildResponseToResult (C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform\node_modules\.pnpm\esbuild@0.27.3\node_modules\esbuild\lib\main.js:924:7)
+    at C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform\node_modules\.pnpm\esbuild@0.27.3\node_modules\esbuild\lib\main.js:951:16
+    at responseCallbacks.<computed> (C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform\node_modules\.pnpm\esbuild@0.27.3\node_modules\esbuild\lib\main.js:603:9)
+    at handleIncomingPacket (C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform\node_modules\.pnpm\esbuild@0.27.3\node_modules\esbuild\lib\main.js:658:12)
+    at Socket.readFromStdout (C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform\node_modules\.pnpm\esbuild@0.27.3\node_modules\esbuild\lib\main.js:581:7)
+    at Socket.emit (node:events:509:28)
+    at addChunk (node:internal/streams/readable:563:12)
+C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform\artifacts\atlas-alpha:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/atlas-alpha@0.0.0 dev: `vite --config vite.config.ts --host 0.0.0.0`
+Exit status 1
+PS C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform>
