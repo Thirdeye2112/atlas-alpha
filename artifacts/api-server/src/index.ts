@@ -4,6 +4,7 @@ import { startLearningScheduler, startResolutionScheduler, startScheduler } from
 import { startBotScheduler } from "./lib/botScheduler";
 import { hydrateFromDb } from "./lib/dbCache";
 import { initCalibrationFromDB } from "./lib/calibrationStore";
+import { loadDynamicUniverse } from "./lib/dynamicUniverse";
 
 const rawPort = process.env["PORT"];
 
@@ -32,11 +33,16 @@ app.listen(port, (err) => {
   // Also load persisted calibration coefficients from DB so P(+) is available
   // immediately without waiting for the first backtest run.
   setImmediate(() => {
+    // Load dynamic universe from Nasdaq screener first, then kick off warmup scan.
+    // Falls back to static universe silently if Nasdaq API is unavailable.
+    loadDynamicUniverse()
+      .catch(err => logger.warn({ err }, "Dynamic universe load failed"))
+      .finally(() => startScheduler());
+
     Promise.all([
       hydrateFromDb(),
       initCalibrationFromDB(),
     ]).catch(err => logger.error({ err }, "Startup DB hydration failed"));
-    startScheduler();
   });
 
   // Learning scheduler: triggers a full scan every 30 min on weekdays so the

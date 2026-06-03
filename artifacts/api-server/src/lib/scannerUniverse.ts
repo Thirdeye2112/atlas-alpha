@@ -1,3 +1,26 @@
+/**
+ * Returns the live scanner universe — starts as the hardcoded list and grows
+ * after loadDynamicUniverse() merges in fresh tickers from the Nasdaq screener.
+ */
+let _universe: string[] | null = null;
+
+export function getUniverse(): string[] {
+  return _universe ?? SCANNER_UNIVERSE;
+}
+
+/**
+ * Adds tickers not already present in the universe.
+ * Called once at startup by loadDynamicUniverse().
+ * Returns the count of newly-added tickers.
+ */
+export function extendUniverse(tickers: string[]): number {
+  const base = _universe ?? [...SCANNER_UNIVERSE];
+  const existing = new Set(base);
+  const additions = tickers.filter(t => !existing.has(t));
+  _universe = [...base, ...additions];
+  return additions.length;
+}
+
 export const SCANNER_UNIVERSE: string[] = [
   // ── Mega-cap Tech & Communication ─────────────────────────────────────────
   "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "AVGO", "ORCL", "NFLX",

@@ -3,7 +3,7 @@
  * Each batch completion updates the analyses array so any scanner endpoint can apply its own
  * filter/sort to whatever is available right now, enabling progressive (streaming) results.
  */
-import { SCANNER_UNIVERSE } from "./scannerUniverse.js";
+import { getUniverse } from "./scannerUniverse.js";
 import { runFullAnalysis, type AnalysisResult } from "./analysisEngine.js";
 import { SCORE_VERSION } from "./scoring.js";
 import { logger } from "./logger.js";
@@ -39,10 +39,11 @@ export function getOrStartScanJob(): ScanJob {
   }
 
   // Start a fresh job
+  const universe = getUniverse();
   const job: ScanJob = {
     analyses:  [],
     done:      0,
-    total:     SCANNER_UNIVERSE.length,
+    total:     universe.length,
     complete:  false,
     startedAt: now,
   };
@@ -57,13 +58,14 @@ export function getOrStartScanJob(): ScanJob {
 }
 
 async function runJobBackground(job: ScanJob): Promise<void> {
+  const universe = getUniverse();
   const logRows: Array<typeof signalLogTable.$inferInsert> = [];
 
-  for (let i = 0; i < SCANNER_UNIVERSE.length; i += BATCH_SIZE) {
+  for (let i = 0; i < universe.length; i += BATCH_SIZE) {
     // Abort if a newer job has been started
     if (job !== currentJob) return;
 
-    const batch = SCANNER_UNIVERSE.slice(i, i + BATCH_SIZE);
+    const batch = universe.slice(i, i + BATCH_SIZE);
     const results = await Promise.allSettled(
       // lightMode=true: skips calcChartSignals + calcPatterns (display-only,
       // unused by any scanner filter) — ~30% less CPU per 373-ticker pass.
