@@ -100,7 +100,7 @@ function gapSetupScanResponse(
   // Drop zero-score rows (stocks where the gap already fired intraday ≥1.5% —
   // their elevated ATR/BB/RVOL is aftermath, not a forward signal).
   const rows = job.analyses
-    .filter(filter)
+    .filter(a => liquidityFilter(a) && filter(a))
     .map(a => toGapSetupRow(a, direction) as Record<string, unknown>)
     .filter(r => (r.gapSetupScore as number) > 0)
     .sort((a, b) => (b.gapSetupScore as number) - (a.gapSetupScore as number))
@@ -149,10 +149,17 @@ function toRow(a: AnalysisResult) {
 type Filter = (a: AnalysisResult) => boolean;
 type Sorter = (a: AnalysisResult, b: AnalysisResult) => number;
 
+/** Minimum 3-month average daily volume — filters out illiquid names across all scanner tabs. */
+const MIN_AVG_VOLUME = 1_000_000;
+
+function liquidityFilter(a: AnalysisResult): boolean {
+  return (a.quote.avgVolume as number ?? 0) >= MIN_AVG_VOLUME;
+}
+
 function scanResponse(filter: Filter, sort: Sorter, limit: number) {
   const job = getOrStartScanJob();
   const rows = job.analyses
-    .filter(filter)
+    .filter(a => liquidityFilter(a) && filter(a))
     .sort(sort)
     .slice(0, limit)
     .map(toRow);
