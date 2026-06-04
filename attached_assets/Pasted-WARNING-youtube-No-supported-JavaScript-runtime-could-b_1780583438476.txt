@@ -1,0 +1,20 @@
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[youtube] 5eVbjSephrk: Downloading android vr player API JSON
+[info] 5eVbjSephrk: Downloading subtitles: en
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+[info] 5eVbjSephrk: Downloading 1 format(s): 18
+[info] Writing video subtitles to: C:\Users\napan\OneDrive\Desktop\subs_temp\20260531_5eVbjSephrk_Oscar Carboni Explains Market Inflation and Says. ＂I Want My Money Back!＂ OMNIPHX 6⧸1⧸26 Video #3079.en.vtt
+[download] Sleeping 5.00 seconds ...
+WARNING: The extractor specified to use impersonation for this download, but no impersonate target is available. If you encounter errors, then see  https://github.com/yt-dlp/yt-dlp#impersonation  for information on installing the required dependencies
+[download] Destination: C:\Users\napan\OneDrive\Desktop\subs_temp\20260531_5eVbjSephrk_Oscar Carboni Explains Market Inflation and Says. ＂I Want My Money Back!＂ OMNIPHX 6⧸1⧸26 Video #3079.en.vtt
+[download] 100% of   83.65KiB in 00:00:00 at 620.30KiB/s
+[download] Downloading item 4 of 2468
+[youtube] Extracting URL: https://www.youtube.com/watch?v=wYDHU3qtD9g
+[youtube] wYDHU3qtD9g: Downloading webpage
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[youtube] wYDHU3qtD9g: Downloading android vr player API JSON
+[info] wYDHU3qtD9g: Downloading subtitles: en
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+[info] wYDHU3qtD9g: Downloading 1 format(s): 18
+[info] Writing video subtitles to: C:\Users\napan\OneDrive\Desktop\subs_temp\20260528_wYDHU3qtD9g_Part II Oscar Carboni Explains Why Stock Market Keeps Rallying Up. 05⧸29⧸26 #OMNIPHX Video #3078.en.vtt
+[download] Sleeping 5.00 seconds ...
