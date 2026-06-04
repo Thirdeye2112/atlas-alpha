@@ -12,6 +12,7 @@
 - [OHLCV cache architecture](ohlcv-cache-architecture.md) — weekly/monthly must go direct to Yahoo (not DB store); blob cache needs coverage validation or stale 2Y data serves for 5Y/ALL
 - [TA overlays v2](ta-overlays-v2.md) — Fib/VolumeProfile/WeeklyContext added to AnalysisResult; calcOptions now takes optional bars param; pivot RSI divergence uses findPivotLows/Highs helpers; LightweightChart lineSeries prop for full-width time-series
 - [Market cycle detection](market-cycle-detection.md) — Weinstein Stage Analysis in calcMarketCycle(); scan job is lightMode (no marketCycle); getEnrichedTrades prefers full cache analysis:${ticker} over scan job for cycle data
+- [Local deployment](local-deployment.md) — Atlas runs on user's Windows laptop; Replit is editor only; GitHub Thirdeye2112/Replit-Quant is the sync bridge; push via GITHUB_TOKEN secret
 - [Continuous learning system](continuous-learning-system.md) — signal_snapshots table; snapshotEngine.ts saves+resolves+mines; smartEntryGate extracted to entryGate.ts; CalibrationEntry.isContrarian = rankIC < 0 (not stored)
 - [Scoring alignment penalty](scoring-alignment.md) — alignmentScore field in AtlasAlphaScore; stdDev of 5 sub-scores penalises confidenceScore (not overall); max 15% at stdDev≥55
 - [Paper trading R:R by category](paper-trading-rr.md) — getRRMultiplier() in paperTradingEngine; mean_reversion→1.5:1, gap/squeeze→2:1, default→3:1; applied at call site after categories known
