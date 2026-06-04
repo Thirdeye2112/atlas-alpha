@@ -1,0 +1,84 @@
+Found 2468 videos. Downloading subtitles...
+
+--- Batch 1/124 ---
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+WARNING: The extractor specified to use impersonation for this download, but no impersonate target is available. If you encounter errors, then see  https://github.com/yt-dlp/yt-dlp#impersonation  for information on installing the required dependencies
+ERROR: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+  SKIP: Oscar Carboni Says The OMNI Turns to The Dark-Side 4 St | ERROR: Unable to download video subtitles for 'en
+Traceback (most recent call last):
+  File "C:\Users\napan\OneDrive\Desktop\scrape.py", line 50, in <module>
+    ydl.download([url])
+    ~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\YoutubeDL.py", line 3670, in download
+    self.__download_wrapper(self.extract_info)(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        url, force_generic_extractor=self.params.get('force_generic_extractor', False))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\YoutubeDL.py", line 3643, in wrapper
+    res = func(*args, **kwargs)
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\YoutubeDL.py", line 1687, in extract_info
+    return self.__extract_info(url, self.get_info_extractor(key), download, extra_info, process)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\YoutubeDL.py", line 1698, in wrapper
+    return func(self, *args, **kwargs)
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\YoutubeDL.py", line 1833, in __extract_info
+    ie_result = ie.extract(url)
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\extractor\common.py", line 765, in extract
+    ie_result = self._real_extract(url)
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\extractor\youtube\_video.py", line 3920, in _real_extract
+    webpage, webpage_ytcfg, initial_data, is_premium_subscriber, player_responses, player_url = self._initial_extract(
+                                                                                                ~~~~~~~~~~~~~~~~~~~~~^
+        url, smuggled_data, webpage_url, self._webpage_client, video_id)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\extractor\youtube\_video.py", line 3898, in _initial_extract
+    webpage = self._download_initial_webpage(webpage_url, webpage_client, video_id)
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\extractor\youtube\_video.py", line 3810, in _download_initial_webpage
+    webpage = self._download_webpage_with_retries(
+        webpage_url, video_id, query=query,
+        headers=traverse_obj(self._get_default_ytcfg(webpage_client), {
+            'User-Agent': ('INNERTUBE_CONTEXT', 'client', 'userAgent', {str}),
+        }))
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\extractor\youtube\_base.py", line 947, in _download_webpage_with_retries
+    return self._download_webpage(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\extractor\common.py", line 1202, in _download_webpage
+    return self.__download_webpage(url_or_request, video_id, note, errnote, None, fatal, *args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\extractor\common.py", line 1153, in download_content
+    res = getattr(self, download_handle.__name__)(url_or_request, video_id, **kwargs)
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\extractor\common.py", line 982, in _download_webpage_handle
+    content = self._webpage_read_content(urlh, url_or_request, video_id, note, errnote, fatal,
+                                         encoding=encoding, data=data)
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\extractor\common.py", line 1045, in _webpage_read_content
+    webpage_bytes = urlh.read()
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\networking\_requests.py", line 134, in read
+    data = self._real_read(amt)
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\networking\_requests.py", line 128, in _real_read
+    return b''.join(iter(read_chunk, b''))
+           ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\urllib3\response.py", line 1110, in read
+    data = self._raw_read(amt)
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\urllib3\response.py", line 1022, in _raw_read
+    data = self._fp_read(amt, read1=read1) if not fp_closed else b""
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\urllib3\response.py", line 1005, in _fp_read
+    return self._fp.read(amt) if amt is not None else self._fp.read()
+           ~~~~~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\http\client.py", line 478, in read
+    return self._read_chunked(amt)
+           ~~~~~~~~~~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\http\client.py", line 608, in _read_chunked
+    value.append(self._safe_read(chunk_left))
+                 ~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Python314\Lib\http\client.py", line 648, in _safe_read
+    data = self.fp.read(cursize)
+  File "C:\Python314\Lib\socket.py", line 729, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python314\Lib\ssl.py", line 1304, in recv_into
+    return self.read(nbytes, buffer)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\ssl.py", line 1138, in read
+    return self._sslobj.read(len, buffer)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
