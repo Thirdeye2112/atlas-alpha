@@ -1,0 +1,54 @@
+import scrapetube
+from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api._errors import NoTranscriptFound, TranscriptsDisabled
+
+# Oscar Carboni's YouTube Channel ID
+CHANNEL_ID = "UCez8uA1o_fDYsrSf4auWSjg"
+OUTPUT_FILE = "oscar_carboni_all_transcripts.txt"
+
+print("Fetching video list from channel... Please wait.")
+# Fetch all videos from the channel
+videos = scrapetube.get_channel(CHANNEL_ID)
+
+# Open the single master file to append transcripts continuously
+with open(OUTPUT_FILE, "w", encoding="utf-8") as master_file:
+    master_file.write("OSCAR CARBONI OMNI TRADING ACADEMY - TRANSCRIPT HISTORY\n")
+    master_file.write("=====================================================\n\n")
+
+    for video in videos:
+        video_id = video['videoId']
+        
+        # Extract title and publication date text safely
+        title_text = "Unknown Title"
+        if 'title' in video and 'runs' in video['title']:
+            title_text = "".join([r.get('text', '') for r in video['title']['runs']])
+            
+        date_text = "Unknown Date"
+        if 'publishedTimeText' in video and 'simpleText' in video['publishedTimeText']:
+            date_text = video['publishedTimeText']['simpleText']
+
+        print(f"Processing: {title_text} ({date_text})")
+        
+        try:
+            # Fetch the transcript data
+            transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
+            
+            # Write a clear, scannable header for this specific video
+            master_file.write(f"VIDEO TITLE: {title_text}\n")
+            master_file.write(f"PUBLISHED:   {date_text}\n")
+            master_file.write(f"VIDEO URL:   https://youtu.be{video_id}\n")
+            master_file.write("-" * 50 + "\n")
+            
+            # Combine the text fragments into paragraphs for readability
+            full_text = " ".join([entry['text'] for entry in transcript_list])
+            master_file.write(full_text + "\n\n")
+            master_file.write("=" * 80 + "\n\n")
+            
+        except (NoTranscriptFound, TranscriptsDisabled):
+            print(f"Skipping (No transcript): {title_text}")
+            master_file.write(f"VIDEO TITLE: {title_text} ({date_text})\n")
+            master_file.write("[Transcripts are unavailable or disabled for this video]\n")
+            master_file.write("=" * 80 + "\n\n")
+        except Exception as e:
+            print(f"Error processing {title_text}: {e}")
+print(f"Finished! All data has been saved to: {OUTPUT_FILE}")
