@@ -1,4 +1,4 @@
-import { SCANNER_UNIVERSE } from "./scannerUniverse.js";
+import { getUniverse } from "./scannerUniverse.js";
 import { runFullAnalysis, type AnalysisResult } from "./analysisEngine.js";
 import { fetchYahooRaw } from "./marketData.js";
 import { runOhlcvBackfill, getBackfillState } from "./ohlcvStore.js";
@@ -27,7 +27,7 @@ const state: WarmupState = {
   status: "idle",
   loaded: 0,
   failed: 0,
-  total: SCANNER_UNIVERSE.length,
+  total: getUniverse().length,
   startedAt: null,
   completedAt: null,
   durationMs: null,
@@ -37,7 +37,7 @@ const state: WarmupState = {
 
 export function getWarmupState(): WarmupState {
   // Count how many tickers currently have an analysis cached
-  state.cachedTickers = SCANNER_UNIVERSE.filter(t =>
+  state.cachedTickers = getUniverse().filter(t =>
     analysisCache.has(`analysis:${t}`) || analysisCache.has(`scan:${t}`)
   ).length;
   return { ...state };
@@ -65,12 +65,13 @@ export async function runWarmup(label = "startup"): Promise<void> {
   state.completedAt = null;
   state.durationMs  = null;
 
-  logger.info({ tickers: SCANNER_UNIVERSE.length, label }, "Cache warmup starting");
+  const universe = getUniverse();
+  logger.info({ tickers: universe.length, label }, "Cache warmup starting");
 
   const collectedAnalyses: AnalysisResult[] = [];
 
-  for (let i = 0; i < SCANNER_UNIVERSE.length; i += BATCH_SIZE) {
-    const batch = SCANNER_UNIVERSE.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < universe.length; i += BATCH_SIZE) {
+    const batch = universe.slice(i, i + BATCH_SIZE);
 
     const batchResults = await Promise.allSettled(
       batch.map(ticker =>
@@ -91,7 +92,7 @@ export async function runWarmup(label = "startup"): Promise<void> {
     }
 
     // Brief pause between batches to avoid Yahoo Finance rate limits
-    if (i + BATCH_SIZE < SCANNER_UNIVERSE.length) {
+    if (i + BATCH_SIZE < universe.length) {
       await new Promise(r => setTimeout(r, BATCH_DELAY));
     }
   }
@@ -120,7 +121,7 @@ export async function runWarmup(label = "startup"): Promise<void> {
   // full 2Y seed; existing tickers only fetch the missing tail (last bar → today).
   // Rate-limited to 5 tickers/batch with 1.5s delay to avoid Yahoo Finance throttling.
   if (!getBackfillState().running) {
-    runOhlcvBackfill(SCANNER_UNIVERSE, fetchYahooRaw).catch(err =>
+    runOhlcvBackfill(getUniverse(), fetchYahooRaw).catch(err =>
       logger.error({ err, label }, "OHLCV backfill failed")
     );
   }

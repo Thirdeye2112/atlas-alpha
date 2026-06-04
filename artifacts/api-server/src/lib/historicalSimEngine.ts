@@ -27,7 +27,7 @@ import {
   type ExhaustionResult,
 } from "./indicators.js";
 import { calcAtlasScore } from "./scoring.js";
-import { SCANNER_UNIVERSE } from "./scannerUniverse.js";
+import { getUniverse } from "./scannerUniverse.js";
 import { logger } from "./logger.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -220,7 +220,7 @@ function simEntryGate(
 // ── Main simulation ───────────────────────────────────────────────────────────
 
 export async function runHistoricalSim(force = false): Promise<void> {
-  const tickers = SCANNER_UNIVERSE;
+  const tickers = getUniverse();
 
   // ── Force mode: wipe existing data so we start fresh ──────────────────────
   if (force) {

@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { getWarmupState, getCacheStats } from "../lib/warmup.js";
-import { SCANNER_UNIVERSE } from "../lib/scannerUniverse.js";
+import { getUniverse } from "../lib/scannerUniverse.js";
 
 const router: IRouter = Router();
 
@@ -22,7 +22,7 @@ router.get("/cache/status", (_req, res): void => {
       nextRefreshLabel:  warmup.nextRefreshLabel,
     },
     cache: stats,
-    universe: SCANNER_UNIVERSE.length,
+    universe: getUniverse().length,
   });
 });
 

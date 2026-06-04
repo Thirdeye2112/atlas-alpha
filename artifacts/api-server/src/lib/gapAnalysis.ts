@@ -2,7 +2,7 @@ import {
   RSI, MACD, BollingerBands, SMA, ATR, OBV,
 } from "technicalindicators";
 import { fetchOHLCV, type OHLCVBar } from "./marketData.js";
-import { SCANNER_UNIVERSE } from "./scannerUniverse.js";
+import { getUniverse } from "./scannerUniverse.js";
 import { logger } from "./logger.js";
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
@@ -434,10 +434,10 @@ export async function runGapAnalysis(threshold = 5): Promise<GapAnalysisResult> 
     return cached.result;
   }
 
-  logger.info({ threshold, tickers: SCANNER_UNIVERSE.length }, "Gap analysis: starting computation");
+  const tickers = getUniverse();
+  logger.info({ threshold, tickers: tickers.length }, "Gap analysis: starting computation");
   const cohorts = makeCohorts();
   const allGaps: GapEvent[] = [];
-  const tickers = SCANNER_UNIVERSE;
   const setupBt: SetupBacktestCounters = {
     setupDays: 0, gapWithin1d: 0, gapWithin2d: 0, gapWithin3d: 0,
     totalMagnitude: 0, magnitudeCount: 0, totalDays: 0, totalGapDays: 0,

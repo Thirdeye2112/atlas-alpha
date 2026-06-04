@@ -14,7 +14,7 @@ import { calcAtlasScore, type AtlasAlphaScore } from "./scoring.js";
 import { calcPatternOverlaysMultiTF, type PatternOverlay } from "./patternOverlays.js";
 import { calcPullbackReversal, type PullbackReversalResult } from "./pullbackReversal.js";
 import { analysisCache } from "./cache.js";
-import { SCANNER_UNIVERSE } from "./scannerUniverse.js";
+import { getUniverse } from "./scannerUniverse.js";
 import { calibrationStore } from "./calibrationStore.js";
 import { runCalibrationBackground } from "./backtestEngine.js";
 import { logger } from "./logger.js";
@@ -218,7 +218,7 @@ export async function runHistoricalAnalysis(ticker: string, asOf: string): Promi
 export function getCachedBreadth(): { total: number; pctAboveSma50: number | null; pctAboveSma200: number | null } {
   let aboveSma50 = 0, aboveSma200 = 0, total = 0;
 
-  for (const ticker of SCANNER_UNIVERSE) {
+  for (const ticker of getUniverse()) {
     // Check full-mode cache first; fall back to scanner light-mode cache
     const cached = analysisCache.get<AnalysisResult>(`analysis:${ticker}`)
                 ?? analysisCache.get<AnalysisResult>(`scan:${ticker}`);

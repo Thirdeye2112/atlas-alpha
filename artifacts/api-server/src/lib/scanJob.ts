@@ -95,10 +95,10 @@ async function runJobBackground(job: ScanJob): Promise<void> {
         });
       }
     }
-    job.done = Math.min(i + BATCH_SIZE, SCANNER_UNIVERSE.length);
+    job.done = Math.min(i + BATCH_SIZE, universe.length);
 
     // Brief pause between batches to stay gentle on Yahoo Finance
-    if (i + BATCH_SIZE < SCANNER_UNIVERSE.length) {
+    if (i + BATCH_SIZE < universe.length) {
       await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS));
     }
   }
