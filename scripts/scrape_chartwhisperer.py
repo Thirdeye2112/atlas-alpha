@@ -43,6 +43,10 @@ with open(OUTPUT_FILE, "w", encoding="utf-8") as out:
             "subtitlesformat": "vtt",
             "outtmpl": os.path.join(SUBS_DIR, "%(id)s.%(ext)s"),
             "cookies_from_browser": ("chrome",),
+            "ignoreerrors": True,
+            "retries": 3,
+            "sleep_interval": 3,
+            "max_sleep_interval": 6,
         }
 
         try:
@@ -75,13 +79,17 @@ with open(OUTPUT_FILE, "w", encoding="utf-8") as out:
             processed += 1
 
         except Exception as e:
+            err_str = str(e)
             out.write("VIDEO TITLE: " + title + "\n[No transcript]\n")
             out.write("=" * 80 + "\n\n")
             out.flush()
-            print("  SKIP: " + title[:55] + " | " + str(e)[:60])
+            print("  SKIP: " + title[:55] + " | " + err_str[:60])
             skipped += 1
+            if "429" in err_str:
+                print("  [429 rate limit - backing off 90s...]")
+                time.sleep(90)
 
-        time.sleep(2.0 + random.uniform(0, 1.0))
+        time.sleep(4.0 + random.uniform(0, 2.0))
         if (i + 1) % COOLDOWN_EVERY == 0:
             print("  [Cooldown " + str(COOLDOWN_SECONDS) + "s...]")
             time.sleep(COOLDOWN_SECONDS)
