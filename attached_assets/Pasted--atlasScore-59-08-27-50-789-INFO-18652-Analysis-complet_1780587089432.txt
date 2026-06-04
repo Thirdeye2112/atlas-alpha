@@ -1,0 +1,27 @@
+    atlasScore: 59
+[08:27:50.789] INFO (18652): Analysis complete
+    ticker: "FOXA"
+    atlasScore: 57
+[08:27:50.789] INFO (18652): Scan job complete
+    total: 592
+[08:27:50.976] INFO (18652): Signal log written to DB
+    count: 592
+[08:27:50.976] INFO (18652): Signal snapshots saved
+    count: 592
+    date: "2026-06-04"
+[08:28:54.033] INFO (18652): Bot scheduler: autonomous cycle complete
+    exited: 0
+    entered: 0
+    cycle: 1
+[08:28:54.041] ERROR (18652): Background AI analysis failed
+    err: {
+      "type": "Error",
+      "message": "Could not resolve authentication method. Expected one of apiKey, authToken, credentials, config, or profile to be set. Or for one of the \"X-Api-Key\" or \"Authorization\" headers to be explicitly omitted",
+      "stack":
+          Error: Could not resolve authentication method. Expected one of apiKey, authToken, credentials, config, or profile to be set. Or for one of the "X-Api-Key" or "Authorization" headers to be explicitly omitted
+              at Anthropic.validateHeaders (C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform\node_modules\.pnpm\@anthropic-ai+sdk@0.100.1_zod@3.25.76\node_modules\@anthropic-ai\sdk\src\client.ts:754:11)
+              at Anthropic.buildHeaders (C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform\node_modules\.pnpm\@anthropic-ai+sdk@0.100.1_zod@3.25.76\node_modules\@anthropic-ai\sdk\src\client.ts:1346:10)
+              at async Anthropic.buildRequest (C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform\node_modules\.pnpm\@anthropic-ai+sdk@0.100.1_zod@3.25.76\node_modules\@anthropic-ai\sdk\src\client.ts:1294:24)
+              at async Anthropic.makeRequest (C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform\node_modules\.pnpm\@anthropic-ai+sdk@0.100.1_zod@3.25.76\node_modules\@anthropic-ai\sdk\src\client.ts:950:35)
+              at async generateAiAnalysis (C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform\artifacts\api-server\src\lib\paperTradingEngine.ts:1070:19)
+    }
