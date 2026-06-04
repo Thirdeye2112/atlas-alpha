@@ -1,0 +1,44 @@
+PS C:\Users\napan> cd C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform\artifacts\api-server
+PS C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform\artifacts\api-server> node --enable-source-maps .\dist\index.mjs
+C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform\lib\db\src\index.ts:8
+  throw new Error(
+        ^
+
+Error: DATABASE_URL must be set. Did you forget to provision a database?
+    at ../../lib/db/src/index.ts (C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform\lib\db\src\index.ts:8:9)
+    at __init (file:///C:/Users/napan/OneDrive/Documents/Replit/Quant-Signal-Platform/artifacts/api-server/dist/index.mjs:22:56)
+    at src/lib/dbCache.ts (C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform\artifacts\api-server\src\lib\dbCache.ts:6:1)
+    at __init (file:///C:/Users/napan/OneDrive/Documents/Replit/Quant-Signal-Platform/artifacts/api-server/dist/index.mjs:22:56)
+    at src/lib/marketData.ts (C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform\artifacts\api-server\src\lib\marketData.ts:3:1)
+    at __init (file:///C:/Users/napan/OneDrive/Documents/Replit/Quant-Signal-Platform/artifacts/api-server/dist/index.mjs:22:56)
+    at <anonymous> (C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform\artifacts\api-server\src\routes\stock.ts:2:1)
+    at ModuleJob.run (node:internal/modules/esm/module_job:439:25)
+    at async node:internal/modules/esm/loader:633:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.16.0
+PS C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform\artifacts\api-server> $env:DATABASE_URL = "postgresql://postgres:Postnat74?@localhost:5432/atlas_alpha"
+PS C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform\artifacts\api-server> $env:SESSION_SECRET = "your-session-secret-here"
+PS C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform\artifacts\api-server> $env:PORT = "8080"
+PS C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform\artifacts\api-server> node --enable-source-maps .\dist\index.mjs
+[08:24:24.145] ERROR (18232): Error listening on port
+    err: {
+      "type": "Error",
+      "message": "listen EADDRINUSE: address already in use :::8080",
+      "stack":
+          Error: listen EADDRINUSE: address already in use :::8080
+              at Server.setupListenHandle [as _listen2] (node:net:2008:16)
+              at listenInCluster (node:net:2065:12)
+              at Server.listen (node:net:2170:7)
+              at app2.listen (C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform\node_modules\.pnpm\express@5.2.1\node_modules\express\lib\application.js:605:24)
+              at <anonymous> (C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform\artifacts\api-server\src\index.ts:22:5)
+              at ModuleJob.run (node:internal/modules/esm/module_job:439:25)
+              at async node:internal/modules/esm/loader:633:26
+              at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+      "code": "EADDRINUSE",
+      "errno": -4091,
+      "syscall": "listen",
+      "address": "::",
+      "port": 8080
+    }
+PS C:\Users\napan\OneDrive\Documents\Replit\Quant-Signal-Platform\artifacts\api-server>
