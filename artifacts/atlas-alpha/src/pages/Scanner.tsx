@@ -1079,7 +1079,7 @@ function CustomScanTab({ onTickerClick }: { onTickerClick?: (ticker: string) => 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function Scanner() {
-  const limit = 25;
+  const limit = 100;
   const [longSignal, setLongSignal] = useState<string>("longs");
   const [shortSignal, setShortSignal] = useState<string>("shorts");
   const qOpts = (qk: readonly unknown[]) => ({

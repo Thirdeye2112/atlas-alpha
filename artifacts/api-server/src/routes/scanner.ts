@@ -175,7 +175,7 @@ function scanResponse(filter: Filter, sort: Sorter, limit: number) {
 // ── Routes ────────────────────────────────────────────────────────────────────
 
 router.get("/scanner/top-longs", (req, res): void => {
-  const limit = Math.min(Number(req.query.limit) || 25, 50);
+  const limit = Math.min(Number(req.query.limit) || 100, 250);
   try {
     res.json(scanResponse(
       a => a.atlasScore.bullishProbability > 65 && a.atlasScore.confidenceScore > 60,
@@ -189,7 +189,7 @@ router.get("/scanner/top-longs", (req, res): void => {
 });
 
 router.get("/scanner/top-shorts", (req, res): void => {
-  const limit = Math.min(Number(req.query.limit) || 25, 50);
+  const limit = Math.min(Number(req.query.limit) || 100, 250);
   try {
     res.json(scanResponse(
       a => a.atlasScore.bearishProbability > 65 && a.atlasScore.confidenceScore > 60,
@@ -203,7 +203,7 @@ router.get("/scanner/top-shorts", (req, res): void => {
 });
 
 router.get("/scanner/breakouts", (req, res): void => {
-  const limit = Math.min(Number(req.query.limit) || 25, 50);
+  const limit = Math.min(Number(req.query.limit) || 100, 250);
   try {
     res.json(scanResponse(
       a => {
@@ -221,7 +221,7 @@ router.get("/scanner/breakouts", (req, res): void => {
 });
 
 router.get("/scanner/breakdowns", (req, res): void => {
-  const limit = Math.min(Number(req.query.limit) || 25, 50);
+  const limit = Math.min(Number(req.query.limit) || 100, 250);
   try {
     res.json(scanResponse(
       a => {
@@ -239,7 +239,7 @@ router.get("/scanner/breakdowns", (req, res): void => {
 });
 
 router.get("/scanner/gamma-squeeze", (req, res): void => {
-  const limit = Math.min(Number(req.query.limit) || 25, 50);
+  const limit = Math.min(Number(req.query.limit) || 100, 250);
   try {
     res.json(scanResponse(
       a => a.volume.relativeVolume > 2 && a.atlasScore.bullishProbability > 60 && a.options.unusualActivity,
@@ -253,7 +253,7 @@ router.get("/scanner/gamma-squeeze", (req, res): void => {
 });
 
 router.get("/scanner/short-squeeze", (req, res): void => {
-  const limit = Math.min(Number(req.query.limit) || 25, 50);
+  const limit = Math.min(Number(req.query.limit) || 100, 250);
   try {
     res.json(scanResponse(
       a => a.volume.relativeVolume > 1.5 && a.atlasScore.bullishProbability > 55 &&
@@ -268,7 +268,7 @@ router.get("/scanner/short-squeeze", (req, res): void => {
 });
 
 router.get("/scanner/institutional-accumulation", (req, res): void => {
-  const limit = Math.min(Number(req.query.limit) || 25, 50);
+  const limit = Math.min(Number(req.query.limit) || 100, 250);
   try {
     res.json(scanResponse(
       a => a.volume.obvTrend === "rising" && a.volume.chaikinMoneyFlow > 0.05 &&
@@ -283,7 +283,7 @@ router.get("/scanner/institutional-accumulation", (req, res): void => {
 });
 
 router.get("/scanner/mean-reversion", (req, res): void => {
-  const limit = Math.min(Number(req.query.limit) || 25, 50);
+  const limit = Math.min(Number(req.query.limit) || 100, 250);
   try {
     res.json(scanResponse(
       // Mean-reversion candidates: stocks that are EITHER
@@ -309,7 +309,7 @@ router.get("/scanner/mean-reversion", (req, res): void => {
 // Short setup: same volatility conditions + price extended above SMA200.
 
 router.get("/scanner/gap-setup-long", (req, res): void => {
-  const limit = Math.min(Number(req.query.limit) || 25, 50);
+  const limit = Math.min(Number(req.query.limit) || 100, 250);
   try {
     res.json(gapSetupScanResponse(
       a => {
@@ -351,7 +351,7 @@ router.get("/scanner/gap-setup-long", (req, res): void => {
 });
 
 router.get("/scanner/gap-setup-short", (req, res): void => {
-  const limit = Math.min(Number(req.query.limit) || 25, 50);
+  const limit = Math.min(Number(req.query.limit) || 100, 250);
   try {
     res.json(gapSetupScanResponse(
       a => {
@@ -431,7 +431,7 @@ function toKeyLevelRow(a: AnalysisResult): object {
 }
 
 router.get("/scanner/key-levels", (req, res): void => {
-  const limit = Math.min(Number(req.query.limit) || 25, 50);
+  const limit = Math.min(Number(req.query.limit) || 100, 250);
   try {
     const job = getOrStartScanJob();
     const rows = job.analyses
@@ -458,7 +458,7 @@ router.get("/scanner/key-levels", (req, res): void => {
 });
 
 router.get("/scanner/gap-up", (req, res): void => {
-  const limit = Math.min(Number(req.query.limit) || 25, 50);
+  const limit = Math.min(Number(req.query.limit) || 100, 250);
   try {
     res.json(scanResponse(
       a => {
@@ -475,7 +475,7 @@ router.get("/scanner/gap-up", (req, res): void => {
 });
 
 router.get("/scanner/gap-down", (req, res): void => {
-  const limit = Math.min(Number(req.query.limit) || 25, 50);
+  const limit = Math.min(Number(req.query.limit) || 100, 250);
   try {
     res.json(scanResponse(
       a => {
@@ -618,7 +618,7 @@ router.post("/scanner/custom", (req, res): void => {
     }
   }
 
-  const limit = Math.min(Number(rawLimit) || 50, 100);
+  const limit = Math.min(Number(rawLimit) || 100, 250);
 
   try {
     const job = getOrStartScanJob();
@@ -660,7 +660,7 @@ router.post("/scanner/custom", (req, res): void => {
 // bearish candles and wick ratio. Min score 45 to appear; sorted desc by score.
 
 router.get("/scanner/reversal-short", (req, res): void => {
-  const limit = Math.min(Number(req.query.limit) || 25, 50);
+  const limit = Math.min(Number(req.query.limit) || 100, 250);
   try {
     const job  = getOrStartScanJob();
     const rows = job.analyses
