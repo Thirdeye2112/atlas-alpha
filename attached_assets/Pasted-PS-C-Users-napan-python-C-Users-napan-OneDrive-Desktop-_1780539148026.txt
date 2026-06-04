@@ -1,0 +1,119 @@
+PS C:\Users\napan> python C:\Users\napan\OneDrive\Desktop\scrape.py
+Fetching video list...
+WARNING: [youtube:tab] HTTP Error 404: Not Found. Retrying (1/3)...
+WARNING: [youtube:tab] HTTP Error 404: Not Found. Retrying (2/3)...
+WARNING: [youtube:tab] HTTP Error 404: Not Found. Retrying (3/3)...
+WARNING: [youtube:tab] Unable to download webpage: HTTP Error 404: Not Found (caused by <HTTPError 404: Not Found>). Giving up after 3 retries
+WARNING: [youtube:tab] YouTube said: ERROR - Requested entity was not found.
+WARNING: [youtube:tab] HTTP Error 404: Not Found. Retrying (1/3)...
+WARNING: [youtube:tab] YouTube said: ERROR - Requested entity was not found.
+WARNING: [youtube:tab] HTTP Error 404: Not Found. Retrying (2/3)...
+WARNING: [youtube:tab] YouTube said: ERROR - Requested entity was not found.
+WARNING: [youtube:tab] HTTP Error 404: Not Found. Retrying (3/3)...
+WARNING: [youtube:tab] YouTube said: ERROR - Requested entity was not found.
+ERROR: [youtube:tab] @OscarCarboni: Unable to download API page: HTTP Error 404: Not Found (caused by <HTTPError 404: Not Found>)
+Traceback (most recent call last):
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\extractor\common.py", line 912, in _request_webpage
+    return self._downloader.urlopen(self._create_request(url_or_request, data, headers, query, extensions))
+           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\YoutubeDL.py", line 4260, in urlopen
+    return self._request_director.send(req)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\networking\common.py", line 117, in send
+    response = handler.send(request)
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\networking\_helper.py", line 194, in wrapper
+    return func(self, *args, **kwargs)
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\networking\common.py", line 359, in send
+    return self._send(request)
+           ~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\networking\_requests.py", line 361, in _send
+    raise HTTPError(res, redirect_loop=max_redirects_exceeded)
+yt_dlp.networking.exceptions.HTTPError: HTTP Error 404: Not Found
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\YoutubeDL.py", line 1698, in wrapper
+    return func(self, *args, **kwargs)
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\YoutubeDL.py", line 1833, in __extract_info
+    ie_result = ie.extract(url)
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\extractor\common.py", line 765, in extract
+    ie_result = self._real_extract(url)
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\extractor\youtube\_tab.py", line 54, in wrapper
+    info_dict = func(self, url, smuggled_data)
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\extractor\youtube\_tab.py", line 2183, in _real_extract
+    data, ytcfg = self._extract_data(url, display_id)
+                  ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\extractor\youtube\_tab.py", line 948, in _extract_data
+    data = self._extract_tab_endpoint(url, item_id, ytcfg, fatal=fatal, default_client=default_client)
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\extractor\youtube\_tab.py", line 953, in _extract_tab_endpoint
+    resolve_response = self._extract_response(
+        item_id=item_id, query={'url': url}, check_get_keys='endpoint', headers=headers, ytcfg=ytcfg, fatal=fatal,
+        ep='navigation/resolve_url', note='Downloading API parameters API JSON', default_client=default_client)
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\extractor\youtube\_base.py", line 1267, in _extract_response
+    next(main_retries)
+    ~~~~^^^^^^^^^^^^^^
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\utils\_utils.py", line 5274, in __iter__
+    self.error_callback(self.error, self.attempt, self.retries)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\extractor\common.py", line 4067, in _error_or_warning
+    RetryManager.report_retry(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^
+        err, _count or int(fatal), _retries,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        info=self.to_screen, warn=self.report_warning, error=None if fatal else self.report_warning,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        sleep_func=self.get_param('retry_sleep_functions', {}).get('extractor'))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\utils\_utils.py", line 5282, in report_retry
+    raise e
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\extractor\youtube\_base.py", line 1240, in _extract_response
+    response = self._call_api(
+        ep=ep, fatal=True, headers=headers,
+        video_id=item_id, query=query, note=note,
+        context=self._extract_context(ytcfg, default_client),
+        api_hostname=api_hostname, default_client=default_client)
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\extractor\youtube\_base.py", line 805, in _call_api
+    return self._download_json(
+           ~~~~~~~~~~~~~~~~~~~^
+        f'https://{self._select_api_hostname(api_hostname, default_client)}/youtubei/v1/{ep}',
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+            'prettyPrint': 'false',
+            ^^^^^^^^^^^^^^^^^^^^^^^
+        }, cndn=lambda _, v: v))
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\extractor\common.py", line 1153, in download_content
+    res = getattr(self, download_handle.__name__)(url_or_request, video_id, **kwargs)
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\extractor\common.py", line 1111, in download_handle
+    res = self._download_webpage_handle(
+        url_or_request, video_id, note=note, errnote=errnote, fatal=fatal, encoding=encoding,
+        data=data, headers=headers, query=query, expected_status=expected_status,
+        impersonate=impersonate, require_impersonation=require_impersonation)
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\extractor\common.py", line 976, in _download_webpage_handle
+    urlh = self._request_webpage(url_or_request, video_id, note, errnote, fatal, data=data,
+                                 headers=headers, query=query, expected_status=expected_status,
+                                 impersonate=impersonate, require_impersonation=require_impersonation)
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\extractor\youtube\_base.py", line 783, in _request_webpage
+    response = super()._request_webpage(*args, **kwargs)
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\extractor\common.py", line 925, in _request_webpage
+    raise ExtractorError(errmsg, cause=err)
+yt_dlp.utils.ExtractorError: [youtube:tab] @OscarCarboni: Unable to download API page: HTTP Error 404: Not Found (caused by <HTTPError 404: Not Found>)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\napan\OneDrive\Desktop\scrape.py", line 14, in <module>
+    info = ydl.extract_info(CHANNEL_URL, download=False)
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\YoutubeDL.py", line 1687, in extract_info
+    return self.__extract_info(url, self.get_info_extractor(key), download, extra_info, process)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\YoutubeDL.py", line 1716, in wrapper
+    self.report_error(str(e), e.format_traceback())
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\YoutubeDL.py", line 1154, in report_error
+    self.trouble(f'{self._format_err("ERROR:", self.Styles.ERROR)} {message}', *args, **kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\YoutubeDL.py", line 1093, in trouble
+    raise DownloadError(message, exc_info)
+yt_dlp.utils.DownloadError: ERROR: [youtube:tab] @OscarCarboni: Unable to download API page: HTTP Error 404: Not Found (caused by <HTTPError 404: Not Found>)
