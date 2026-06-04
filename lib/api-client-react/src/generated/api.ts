@@ -50,6 +50,7 @@ import type {
   GetScannerTopShortsParams,
   HealthStatus,
   MarketOverview,
+  MarketTendenciesResult,
   NarrativeResponse,
   OHLCVBar,
   RefreshWatchlistPrices200,
@@ -2761,6 +2762,85 @@ export const useAcknowledgeAlert = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getAcknowledgeAlertMutationOptions(options));
     }
+
+export const getGetMarketTendenciesUrl = () => {
+
+
+
+
+  return `/api/research/market-tendencies`
+}
+
+/**
+ * Computes OMNI-style GREEN/YELLOW/RED directional signals for SPY, QQQ, IWM, DIA using weekly trend (50d SMA), streak, RSI, and flag-pattern context. Also returns historical consecutive-day reversal statistics and named market tendency rules (5-day rule, pre-holiday drift, new-highs-beget-new-highs, VIX reversion, Dow Theory, Three Pushes). Results cached 5 minutes.
+
+ * @summary OMNI-style directional signals + market tendency rules
+ */
+export const getMarketTendencies = async ( options?: RequestInit): Promise<MarketTendenciesResult> => {
+
+  return customFetch<MarketTendenciesResult>(getGetMarketTendenciesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMarketTendenciesQueryKey = () => {
+    return [
+    `/api/research/market-tendencies`
+    ] as const;
+    }
+
+
+export const getGetMarketTendenciesQueryOptions = <TData = Awaited<ReturnType<typeof getMarketTendencies>>, TError = ErrorType<ApiError>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMarketTendencies>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMarketTendenciesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMarketTendencies>>> = ({ signal }) => getMarketTendencies({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMarketTendencies>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMarketTendenciesQueryResult = NonNullable<Awaited<ReturnType<typeof getMarketTendencies>>>
+export type GetMarketTendenciesQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary OMNI-style directional signals + market tendency rules
+ */
+
+export function useGetMarketTendencies<TData = Awaited<ReturnType<typeof getMarketTendencies>>, TError = ErrorType<ApiError>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMarketTendencies>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMarketTendenciesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 
 export const getGetGapAnalysisUrl = (params?: GetGapAnalysisParams,) => {
   const normalizedParams = new URLSearchParams();

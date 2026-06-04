@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import {
   FlaskConical, TrendingUp, TrendingDown, RefreshCw, AlertCircle,
   ChevronUp, ChevronDown, Target, Activity, Search,
+  Compass, Zap, BookOpen, ShieldAlert,
 } from "lucide-react";
 
 // ─── Gap Analysis Types ────────────────────────────────────────────────────────
@@ -1118,16 +1119,446 @@ function GapAnalysisPanel() {
   );
 }
 
+// ─── Market Tendencies Types ──────────────────────────────────────────────────
+
+interface OmniSignal {
+  signal: "GREEN" | "YELLOW" | "RED";
+  strength: "strong" | "moderate" | "weak";
+  weeklyTrend: "bullish" | "bearish" | "neutral";
+  reason: string;
+  actionNote: string;
+}
+
+interface StreakInfo {
+  direction: "up" | "down" | "flat";
+  count: number;
+  label: string;
+  alert: string | null;
+}
+
+interface StreakStatRow {
+  consecutiveDays: number;
+  pNextReversal: number;
+  pNextContinuation: number;
+  n: number;
+  sampleSize: "small" | "moderate" | "large";
+}
+
+interface IndexTendency {
+  ticker: string;
+  name: string;
+  currentPrice: number;
+  dayChangePct: number;
+  streak: StreakInfo;
+  priceVsSma50Pct: number;
+  priceVsSma200Pct: number;
+  rsi14: number;
+  recentCloses: number[];
+  omni: OmniSignal;
+}
+
+interface MarketRule {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  status: "triggered" | "approaching" | "watch" | "inactive";
+  currentValue: string;
+  threshold: string;
+  historicalEdge: string;
+  actionNote: string;
+  source: string;
+}
+
+interface MarketTendenciesResult {
+  indices: IndexTendency[];
+  streakStats: { ticker: string; down: StreakStatRow[]; up: StreakStatRow[] };
+  marketRules: MarketRule[];
+  analyzedAt: string;
+}
+
+// ─── Market Tendencies Sub-components ────────────────────────────────────────
+
+function OmniSignalBadge({ signal, strength }: { signal: OmniSignal["signal"]; strength: OmniSignal["strength"] }) {
+  const base = "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-bold uppercase tracking-wider border";
+  if (signal === "GREEN")  return <span className={cn(base, "bg-success/15 text-success border-success/40")}>● GREEN{strength === "strong" ? " ▲▲" : strength === "moderate" ? " ▲" : ""}</span>;
+  if (signal === "RED")    return <span className={cn(base, "bg-destructive/15 text-destructive border-destructive/40")}>● RED{strength === "strong" ? " ▼▼" : strength === "moderate" ? " ▼" : ""}</span>;
+  return <span className={cn(base, "bg-warning/15 text-warning border-warning/40")}>◐ YELLOW — CAUTION</span>;
+}
+
+function OmniIndexCard({ idx }: { idx: IndexTendency }) {
+  const priceFmt = idx.currentPrice >= 1000
+    ? idx.currentPrice.toFixed(0)
+    : idx.currentPrice.toFixed(2);
+  const chgColor = idx.dayChangePct > 0 ? "text-success" : idx.dayChangePct < 0 ? "text-destructive" : "text-muted-foreground";
+  const s50Color = idx.priceVsSma50Pct > 0 ? "text-success/80" : "text-destructive/80";
+  const s200Color = idx.priceVsSma200Pct > 0 ? "text-success/80" : "text-destructive/80";
+  const rsiColor = idx.rsi14 > 70 ? "text-destructive" : idx.rsi14 < 30 ? "text-success" : "text-foreground";
+
+  // Mini sparkline
+  const closes = idx.recentCloses;
+  const min = Math.min(...closes), max = Math.max(...closes);
+  const pts = closes.map((c, i) => {
+    const x = (i / (closes.length - 1)) * 80;
+    const y = 20 - ((c - min) / (max - min || 1)) * 18;
+    return `${x},${y}`;
+  }).join(" ");
+  const sparkColor = idx.omni.signal === "GREEN" ? "#22c55e" : idx.omni.signal === "RED" ? "#ef4444" : "#f59e0b";
+
+  return (
+    <div className={cn(
+      "rounded-lg border bg-card p-4 space-y-3 relative overflow-hidden",
+      idx.omni.signal === "GREEN"  ? "border-success/30"  :
+      idx.omni.signal === "RED"    ? "border-destructive/30" : "border-warning/30"
+    )}>
+      {/* Glow */}
+      <div className={cn(
+        "absolute inset-0 opacity-5 pointer-events-none",
+        idx.omni.signal === "GREEN"  ? "bg-success"  :
+        idx.omni.signal === "RED"    ? "bg-destructive" : "bg-warning"
+      )} />
+
+      {/* Header */}
+      <div className="flex items-start justify-between gap-2 relative">
+        <div>
+          <div className="flex items-baseline gap-2">
+            <span className="font-display text-base font-bold">{idx.ticker}</span>
+            <span className="text-xs text-muted-foreground">{idx.name}</span>
+          </div>
+          <div className="flex items-baseline gap-2 mt-0.5">
+            <span className="font-mono text-xl font-bold">${priceFmt}</span>
+            <span className={cn("font-mono text-sm font-semibold", chgColor)}>
+              {idx.dayChangePct >= 0 ? "+" : ""}{idx.dayChangePct.toFixed(2)}%
+            </span>
+          </div>
+        </div>
+        {closes.length > 2 && (
+          <svg width="80" height="24" className="shrink-0 mt-1">
+            <polyline points={pts} fill="none" stroke={sparkColor} strokeWidth="1.5" strokeLinejoin="round" />
+          </svg>
+        )}
+      </div>
+
+      {/* OMNI signal */}
+      <div className="space-y-1.5 relative">
+        <OmniSignalBadge signal={idx.omni.signal} strength={idx.omni.strength} />
+        <p className="text-[11px] text-muted-foreground leading-relaxed">{idx.omni.reason}</p>
+        <p className={cn(
+          "text-[11px] font-medium leading-relaxed px-2 py-1.5 rounded border",
+          idx.omni.signal === "GREEN"  ? "bg-success/8 border-success/20 text-success/90"  :
+          idx.omni.signal === "RED"    ? "bg-destructive/8 border-destructive/20 text-destructive/90" :
+          "bg-warning/8 border-warning/20 text-warning/90"
+        )}>{idx.omni.actionNote}</p>
+      </div>
+
+      {/* Stats row */}
+      <div className="grid grid-cols-4 gap-1 text-center relative">
+        {[
+          { label: "Streak",   val: idx.streak.label,                                    col: idx.streak.direction === "up" ? "text-success" : idx.streak.direction === "down" ? "text-destructive" : "text-muted-foreground" },
+          { label: "RSI 14",   val: idx.rsi14.toFixed(0),                                col: rsiColor },
+          { label: "vs 50d",   val: `${idx.priceVsSma50Pct >= 0 ? "+" : ""}${idx.priceVsSma50Pct.toFixed(1)}%`,  col: s50Color },
+          { label: "vs 200d",  val: `${idx.priceVsSma200Pct >= 0 ? "+" : ""}${idx.priceVsSma200Pct.toFixed(1)}%`, col: s200Color },
+        ].map(({ label, val, col }) => (
+          <div key={label} className="rounded bg-muted/40 px-1 py-1.5">
+            <div className={cn("text-[11px] font-mono font-semibold truncate", col)}>{val}</div>
+            <div className="text-[9px] text-muted-foreground mt-0.5 uppercase tracking-wide">{label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Streak alert */}
+      {idx.streak.alert && (
+        <div className="flex items-start gap-1.5 px-2 py-1.5 rounded bg-warning/10 border border-warning/30 relative">
+          <ShieldAlert className="w-3 h-3 text-warning shrink-0 mt-0.5" />
+          <p className="text-[10px] text-warning leading-relaxed">{idx.streak.alert}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StreakStatsTable({ stats, direction }: { stats: StreakStatRow[]; direction: "down" | "up" }) {
+  const dirLabel = direction === "down" ? "Consecutive DOWN Days" : "Consecutive UP Days";
+  const reversalLabel = direction === "down" ? "P(Next Day UP)" : "P(Next Day DOWN)";
+  const reversalColor = (p: number) => p >= 0.75 ? "text-success font-bold" : p >= 0.60 ? "text-success/80" : p >= 0.50 ? "text-foreground" : "text-muted-foreground";
+
+  return (
+    <div className="rounded-lg border border-border bg-card">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
+        <Activity className="w-3.5 h-3.5 text-primary" />
+        <span className="text-xs font-semibold font-display">{dirLabel} — Reversal Probability (SPY, 2Y)</span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-border/50 text-muted-foreground">
+              <th className="text-left py-1.5 px-3 font-medium">Streak Length</th>
+              <th className="text-right py-1.5 px-3 font-medium">{reversalLabel}</th>
+              <th className="text-right py-1.5 px-3 font-medium">P(Continues)</th>
+              <th className="text-right py-1.5 px-3 font-medium">Sample (n)</th>
+              <th className="text-left py-1.5 px-3 font-medium">Edge Bar</th>
+            </tr>
+          </thead>
+          <tbody>
+            {stats.map(row => (
+              <tr key={row.consecutiveDays} className={cn(
+                "border-b border-border/20 hover:bg-muted/20",
+                row.consecutiveDays >= 5 && direction === "down" ? "bg-success/5" :
+                row.consecutiveDays >= 5 && direction === "up"   ? "bg-destructive/5" : ""
+              )}>
+                <td className="py-1.5 px-3 font-mono font-semibold">
+                  {row.consecutiveDays} day{row.consecutiveDays > 1 ? "s" : ""}
+                  {row.consecutiveDays >= 5 && <span className="ml-1.5 text-[9px] px-1 py-0.5 rounded bg-warning/20 text-warning">RULE</span>}
+                </td>
+                <td className={cn("py-1.5 px-3 text-right font-mono tabular-nums text-sm", reversalColor(row.pNextReversal))}>
+                  {(row.pNextReversal * 100).toFixed(0)}%
+                </td>
+                <td className="py-1.5 px-3 text-right font-mono tabular-nums text-muted-foreground">
+                  {(row.pNextContinuation * 100).toFixed(0)}%
+                </td>
+                <td className="py-1.5 px-3 text-right font-mono tabular-nums text-muted-foreground">
+                  {row.n}
+                  <span className={cn("ml-1 text-[9px]", row.sampleSize === "large" ? "text-success/60" : row.sampleSize === "moderate" ? "text-warning/60" : "text-muted-foreground/50")}>
+                    ({row.sampleSize})
+                  </span>
+                </td>
+                <td className="py-1.5 px-3">
+                  <div className="flex items-center gap-1">
+                    <div className="h-2 bg-border/50 rounded-full overflow-hidden" style={{ width: 60 }}>
+                      <div
+                        className={cn("h-full rounded-full", direction === "down" ? "bg-success/60" : "bg-destructive/60")}
+                        style={{ width: `${row.pNextReversal * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+const RULE_STATUS_CONFIG = {
+  triggered:  { color: "text-success",            bg: "bg-success/10 border-success/30",            dot: "bg-success",            label: "ACTIVE"     },
+  approaching:{ color: "text-warning",             bg: "bg-warning/10 border-warning/30",            dot: "bg-warning",            label: "APPROACHING"},
+  watch:      { color: "text-primary",             bg: "bg-primary/10 border-primary/30",            dot: "bg-primary/70",         label: "WATCH"      },
+  inactive:   { color: "text-muted-foreground",    bg: "bg-muted/20 border-border",                  dot: "bg-muted-foreground/40",label: "INACTIVE"   },
+};
+
+const CATEGORY_ICONS: Record<string, React.ReactNode> = {
+  "Mean Reversion": <RefreshCw className="w-3 h-3" />,
+  "Momentum":       <Zap className="w-3 h-3" />,
+  "Seasonal":       <Compass className="w-3 h-3" />,
+  "Volatility":     <ShieldAlert className="w-3 h-3" />,
+  "Intermarket":    <TrendingUp className="w-3 h-3" />,
+  "Pattern":        <Target className="w-3 h-3" />,
+};
+
+function MarketRuleCard({ rule }: { rule: MarketRule }) {
+  const [expanded, setExpanded] = useState(false);
+  const cfg = RULE_STATUS_CONFIG[rule.status];
+
+  return (
+    <div className={cn("rounded-lg border p-3 space-y-2", cfg.bg)}>
+      <div className="flex items-start gap-2">
+        <div className={cn("w-2 h-2 rounded-full shrink-0 mt-1", cfg.dot)} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={cn("text-[10px] font-bold uppercase tracking-widest", cfg.color)}>{cfg.label}</span>
+            <div className="flex items-center gap-1 text-muted-foreground">
+              {CATEGORY_ICONS[rule.category]}
+              <span className="text-[10px] uppercase tracking-wide">{rule.category}</span>
+            </div>
+            <span className="text-[10px] text-muted-foreground ml-auto">Source: {rule.source}</span>
+          </div>
+          <div className="font-semibold text-sm mt-0.5">{rule.name}</div>
+          <div className="text-xs font-mono text-muted-foreground mt-0.5">{rule.currentValue}</div>
+        </div>
+      </div>
+
+      {/* Action note — always visible */}
+      <div className={cn("text-xs px-2.5 py-2 rounded border leading-relaxed font-medium", cfg.bg)}>
+        {rule.actionNote}
+      </div>
+
+      {/* Expandable detail */}
+      <button
+        onClick={() => setExpanded(e => !e)}
+        className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <BookOpen className="w-3 h-3" />
+        {expanded ? "Hide detail" : "Why this matters"}
+      </button>
+
+      {expanded && (
+        <div className="space-y-2 pt-1 border-t border-border/40">
+          <p className="text-[11px] text-muted-foreground leading-relaxed">{rule.description}</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded bg-muted/40 p-2">
+              <div className="text-[9px] text-muted-foreground uppercase tracking-wide mb-0.5">Threshold</div>
+              <div className="text-[11px] font-mono">{rule.threshold}</div>
+            </div>
+            <div className="rounded bg-muted/40 p-2">
+              <div className="text-[9px] text-muted-foreground uppercase tracking-wide mb-0.5">Historical Edge</div>
+              <div className="text-[11px] font-mono">{rule.historicalEdge}</div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Market Tendencies Panel ──────────────────────────────────────────────────
+
+function MarketTendenciesPanel() {
+  const { data, isLoading, error, refetch, isFetching } = useQuery<MarketTendenciesResult>({
+    queryKey: ["market-tendencies"],
+    queryFn: async () => {
+      const res = await fetch("/api/research/market-tendencies");
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+
+  const loading = isLoading || isFetching;
+  const activeRules = data?.marketRules.filter(r => r.status !== "inactive") ?? [];
+  const inactiveRules = data?.marketRules.filter(r => r.status === "inactive") ?? [];
+
+  return (
+    <>
+      <div className="shrink-0 flex items-center gap-2 px-4 py-2 border-b border-border">
+        <span className="text-xs text-muted-foreground">
+          OMNI-style directional guidance + market tendency rules
+        </span>
+        {data && (
+          <span className="text-xs text-muted-foreground ml-2 opacity-60">
+            · updated {new Date(data.analyzedAt).toLocaleTimeString()}
+          </span>
+        )}
+        <button
+          onClick={() => refetch()}
+          disabled={loading}
+          className={cn(
+            "ml-auto flex items-center gap-1.5 text-xs px-3 py-1.5 rounded font-medium transition-colors",
+            loading ? "bg-muted text-muted-foreground cursor-not-allowed" : "bg-muted hover:bg-muted/70 text-foreground"
+          )}
+        >
+          <RefreshCw className={cn("w-3 h-3", loading && "animate-spin")} />
+          {loading ? "Loading…" : "Refresh"}
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-5">
+        {loading && !data && (
+          <div className="flex flex-col items-center justify-center h-64 gap-4">
+            <RefreshCw className="w-8 h-8 text-primary animate-spin" />
+            <div className="text-center">
+              <p className="text-sm font-semibold">Computing market tendencies…</p>
+              <p className="text-xs text-muted-foreground mt-1">Fetching 2 years of daily data for SPY, QQQ, IWM, DIA</p>
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="flex items-center gap-3 p-4 rounded-lg border border-destructive/30 bg-destructive/10">
+            <AlertCircle className="w-5 h-5 text-destructive shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-destructive">Failed to load</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{String(error)}</p>
+            </div>
+          </div>
+        )}
+
+        {data && (
+          <>
+            {/* OMNI Direction Panel */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <Compass className="w-4 h-4 text-primary" />
+                <span className="text-sm font-semibold font-display">OMNI DIRECTION GUIDANCE</span>
+                <span className="text-xs text-muted-foreground">— weekly trend + streak + momentum context</span>
+              </div>
+              <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                {data.indices.map(idx => <OmniIndexCard key={idx.ticker} idx={idx} />)}
+              </div>
+            </div>
+
+            {/* Active Market Rules */}
+            {activeRules.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <ShieldAlert className="w-4 h-4 text-warning" />
+                  <span className="text-sm font-semibold font-display">ACTIVE MARKET RULES</span>
+                  <span className="text-xs text-muted-foreground ml-1">({activeRules.length} rule{activeRules.length > 1 ? "s" : ""} triggered / approaching)</span>
+                </div>
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                  {activeRules.map(rule => <MarketRuleCard key={rule.id} rule={rule} />)}
+                </div>
+              </div>
+            )}
+
+            {/* Streak Statistics */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <Activity className="w-4 h-4 text-primary" />
+                <span className="text-sm font-semibold font-display">CONSECUTIVE DAY REVERSAL STATISTICS</span>
+                <span className="text-xs text-muted-foreground">— SPY 2-year daily data</span>
+              </div>
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                <div>
+                  <StreakStatsTable stats={data.streakStats.down} direction="down" />
+                  <p className="text-[10px] text-muted-foreground mt-1.5 px-1">
+                    After N consecutive DOWN closes: what % of the time does SPY close UP the next day?
+                    The 5-day rule (Oscar Carboni): "The S&P never goes down 5 days in a row without a fight."
+                  </p>
+                </div>
+                <div>
+                  <StreakStatsTable stats={data.streakStats.up} direction="up" />
+                  <p className="text-[10px] text-muted-foreground mt-1.5 px-1">
+                    After N consecutive UP closes: what % of the time does SPY close DOWN the next day?
+                    Extended rallies (5+ days) become increasingly at risk of distribution / profit-taking.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Inactive Rules Library */}
+            {inactiveRules.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <BookOpen className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-sm font-semibold font-display text-muted-foreground">RULE LIBRARY</span>
+                  <span className="text-xs text-muted-foreground">— currently inactive</span>
+                </div>
+                <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+                  {inactiveRules.map(rule => <MarketRuleCard key={rule.id} rule={rule} />)}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-type Tab = "gap-analysis" | "run-dynamics";
+type Tab = "market-tendencies" | "gap-analysis" | "run-dynamics";
 
 export default function Research() {
-  const [activeTab, setActiveTab] = useState<Tab>("gap-analysis");
+  const [activeTab, setActiveTab] = useState<Tab>("market-tendencies");
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: "gap-analysis",  label: "Gap Precursor Analysis", icon: <FlaskConical className="w-3.5 h-3.5" /> },
-    { id: "run-dynamics",  label: "Run Dynamics",           icon: <Activity className="w-3.5 h-3.5" /> },
+    { id: "market-tendencies", label: "Market Tendencies",      icon: <Compass className="w-3.5 h-3.5" /> },
+    { id: "gap-analysis",      label: "Gap Precursor Analysis", icon: <FlaskConical className="w-3.5 h-3.5" /> },
+    { id: "run-dynamics",      label: "Run Dynamics",           icon: <Activity className="w-3.5 h-3.5" /> },
   ];
 
   return (
@@ -1159,8 +1590,9 @@ export default function Research() {
 
       {/* Panel */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {activeTab === "gap-analysis"  && <GapAnalysisPanel />}
-        {activeTab === "run-dynamics"  && <RunDynamicsPanel />}
+        {activeTab === "market-tendencies" && <MarketTendenciesPanel />}
+        {activeTab === "gap-analysis"      && <GapAnalysisPanel />}
+        {activeTab === "run-dynamics"      && <RunDynamicsPanel />}
       </div>
     </div>
   );

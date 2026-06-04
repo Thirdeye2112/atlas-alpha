@@ -741,6 +741,31 @@ paths:
                     type: boolean
                 required: [ok]
 
+  /research/market-tendencies:
+    get:
+      operationId: getMarketTendencies
+      tags: [research]
+      summary: OMNI-style directional signals + market tendency rules
+      description: >
+        Computes OMNI-style GREEN/YELLOW/RED directional signals for SPY, QQQ, IWM, DIA
+        using weekly trend (50d SMA), streak, RSI, and flag-pattern context.
+        Also returns historical consecutive-day reversal statistics and named
+        market tendency rules (5-day rule, pre-holiday drift, new-highs-beget-new-highs,
+        VIX reversion, Dow Theory, Three Pushes). Results cached 5 minutes.
+      responses:
+        "200":
+          description: Market tendencies result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketTendenciesResult"
+        "500":
+          description: Analysis error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
   /research/gap-analysis:
     get:
       operationId: getGapAnalysis
@@ -2376,3 +2401,133 @@ components:
           items:
             $ref: "#/components/schemas/CrossSectionalICPeriod"
       required: [status, horizon, snapshotCount, meanCrossIC, icTimeSeries]
+
+    OmniSignal:
+      type: object
+      properties:
+        signal:
+          type: string
+          enum: [GREEN, YELLOW, RED]
+        strength:
+          type: string
+          enum: [strong, moderate, weak]
+        weeklyTrend:
+          type: string
+          enum: [bullish, bearish, neutral]
+        reason:
+          type: string
+        actionNote:
+          type: string
+      required: [signal, strength, weeklyTrend, reason, actionNote]
+
+    StreakInfo:
+      type: object
+      properties:
+        direction:
+          type: string
+          enum: [up, down, flat]
+        count:
+          type: integer
+        label:
+          type: string
+        alert:
+          type: ["string", "null"]
+      required: [direction, count, label, alert]
+
+    StreakStatRow:
+      type: object
+      properties:
+        consecutiveDays:
+          type: integer
+        pNextReversal:
+          type: number
+        pNextContinuation:
+          type: number
+        n:
+          type: integer
+        sampleSize:
+          type: string
+          enum: [small, moderate, large]
+      required: [consecutiveDays, pNextReversal, pNextContinuation, n, sampleSize]
+
+    IndexTendency:
+      type: object
+      properties:
+        ticker:
+          type: string
+        name:
+          type: string
+        currentPrice:
+          type: number
+        dayChangePct:
+          type: number
+        streak:
+          $ref: "#/components/schemas/StreakInfo"
+        priceVsSma50Pct:
+          type: number
+        priceVsSma200Pct:
+          type: number
+        rsi14:
+          type: number
+        recentCloses:
+          type: array
+          items:
+            type: number
+        omni:
+          $ref: "#/components/schemas/OmniSignal"
+      required: [ticker, name, currentPrice, dayChangePct, streak, priceVsSma50Pct, priceVsSma200Pct, rsi14, recentCloses, omni]
+
+    MarketRule:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: [triggered, approaching, watch, inactive]
+        currentValue:
+          type: string
+        threshold:
+          type: string
+        historicalEdge:
+          type: string
+        actionNote:
+          type: string
+        source:
+          type: string
+      required: [id, name, category, description, status, currentValue, threshold, historicalEdge, actionNote, source]
+
+    MarketTendenciesResult:
+      type: object
+      properties:
+        indices:
+          type: array
+          items:
+            $ref: "#/components/schemas/IndexTendency"
+        streakStats:
+          type: object
+          properties:
+            ticker:
+              type: string
+            down:
+              type: array
+              items:
+                $ref: "#/components/schemas/StreakStatRow"
+            up:
+              type: array
+              items:
+                $ref: "#/components/schemas/StreakStatRow"
+          required: [ticker, down, up]
+        marketRules:
+          type: array
+          items:
+            $ref: "#/components/schemas/MarketRule"
+        analyzedAt:
+          type: string
+      required: [indices, streakStats, marketRules, analyzedAt]

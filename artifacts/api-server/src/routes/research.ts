@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { runGapAnalysis } from "../lib/gapAnalysis.js";
 import { runDynamicsAnalysis } from "../lib/runDynamicsEngine.js";
+import { runMarketTendencies } from "../lib/marketTendencies.js";
 
 const router = Router();
 
@@ -73,6 +74,25 @@ router.get("/research/run-dynamics", async (req, res) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     req.log.warn({ ticker, period, interval, err: msg }, "run-dynamics error");
+    res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ * GET /research/market-tendencies
+ *
+ * OMNI-style directional signals + consecutive-day streak statistics
+ * for SPY, QQQ, IWM, DIA. Also computes market "rules" (5-day rule,
+ * pre-holiday drift, new-highs-beget-new-highs, VIX reversion, etc.)
+ * Results cached 5 minutes.
+ */
+router.get("/research/market-tendencies", async (req, res) => {
+  try {
+    const result = await runMarketTendencies();
+    res.json(result);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    req.log.warn({ err: msg }, "market-tendencies error");
     res.status(500).json({ error: msg });
   }
 });

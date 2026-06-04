@@ -1143,6 +1143,124 @@ export interface CrossSectionalICResult {
   icTimeSeries: CrossSectionalICPeriod[];
 }
 
+export type OmniSignalSignal = typeof OmniSignalSignal[keyof typeof OmniSignalSignal];
+
+
+export const OmniSignalSignal = {
+  GREEN: 'GREEN',
+  YELLOW: 'YELLOW',
+  RED: 'RED',
+} as const;
+
+export type OmniSignalStrength = typeof OmniSignalStrength[keyof typeof OmniSignalStrength];
+
+
+export const OmniSignalStrength = {
+  strong: 'strong',
+  moderate: 'moderate',
+  weak: 'weak',
+} as const;
+
+export type OmniSignalWeeklyTrend = typeof OmniSignalWeeklyTrend[keyof typeof OmniSignalWeeklyTrend];
+
+
+export const OmniSignalWeeklyTrend = {
+  bullish: 'bullish',
+  bearish: 'bearish',
+  neutral: 'neutral',
+} as const;
+
+export interface OmniSignal {
+  signal: OmniSignalSignal;
+  strength: OmniSignalStrength;
+  weeklyTrend: OmniSignalWeeklyTrend;
+  reason: string;
+  actionNote: string;
+}
+
+export type StreakInfoDirection = typeof StreakInfoDirection[keyof typeof StreakInfoDirection];
+
+
+export const StreakInfoDirection = {
+  up: 'up',
+  down: 'down',
+  flat: 'flat',
+} as const;
+
+export interface StreakInfo {
+  direction: StreakInfoDirection;
+  count: number;
+  label: string;
+  /** @nullable */
+  alert: string | null;
+}
+
+export type StreakStatRowSampleSize = typeof StreakStatRowSampleSize[keyof typeof StreakStatRowSampleSize];
+
+
+export const StreakStatRowSampleSize = {
+  small: 'small',
+  moderate: 'moderate',
+  large: 'large',
+} as const;
+
+export interface StreakStatRow {
+  consecutiveDays: number;
+  pNextReversal: number;
+  pNextContinuation: number;
+  n: number;
+  sampleSize: StreakStatRowSampleSize;
+}
+
+export interface IndexTendency {
+  ticker: string;
+  name: string;
+  currentPrice: number;
+  dayChangePct: number;
+  streak: StreakInfo;
+  priceVsSma50Pct: number;
+  priceVsSma200Pct: number;
+  rsi14: number;
+  recentCloses: number[];
+  omni: OmniSignal;
+}
+
+export type MarketRuleStatus = typeof MarketRuleStatus[keyof typeof MarketRuleStatus];
+
+
+export const MarketRuleStatus = {
+  triggered: 'triggered',
+  approaching: 'approaching',
+  watch: 'watch',
+  inactive: 'inactive',
+} as const;
+
+export interface MarketRule {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  status: MarketRuleStatus;
+  currentValue: string;
+  threshold: string;
+  historicalEdge: string;
+  actionNote: string;
+  source: string;
+}
+
+export type MarketTendenciesResultStreakStats = {
+  ticker: string;
+  down: StreakStatRow[];
+  up: StreakStatRow[];
+};
+
+export interface MarketTendenciesResult {
+  indices: IndexTendency[];
+  streakStats: MarketTendenciesResultStreakStats;
+  marketRules: MarketRule[];
+  analyzedAt: string;
+}
+
 export type GetScannerTopLongsParams = {
 limit?: number;
 };

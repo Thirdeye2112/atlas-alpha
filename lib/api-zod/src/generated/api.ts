@@ -1382,6 +1382,68 @@ export const AcknowledgeAlertResponse = zod.object({
 
 
 /**
+ * Computes OMNI-style GREEN/YELLOW/RED directional signals for SPY, QQQ, IWM, DIA using weekly trend (50d SMA), streak, RSI, and flag-pattern context. Also returns historical consecutive-day reversal statistics and named market tendency rules (5-day rule, pre-holiday drift, new-highs-beget-new-highs, VIX reversion, Dow Theory, Three Pushes). Results cached 5 minutes.
+
+ * @summary OMNI-style directional signals + market tendency rules
+ */
+export const GetMarketTendenciesResponse = zod.object({
+  "indices": zod.array(zod.object({
+  "ticker": zod.string(),
+  "name": zod.string(),
+  "currentPrice": zod.number(),
+  "dayChangePct": zod.number(),
+  "streak": zod.object({
+  "direction": zod.enum(['up', 'down', 'flat']),
+  "count": zod.number(),
+  "label": zod.string(),
+  "alert": zod.string().nullable()
+}),
+  "priceVsSma50Pct": zod.number(),
+  "priceVsSma200Pct": zod.number(),
+  "rsi14": zod.number(),
+  "recentCloses": zod.array(zod.number()),
+  "omni": zod.object({
+  "signal": zod.enum(['GREEN', 'YELLOW', 'RED']),
+  "strength": zod.enum(['strong', 'moderate', 'weak']),
+  "weeklyTrend": zod.enum(['bullish', 'bearish', 'neutral']),
+  "reason": zod.string(),
+  "actionNote": zod.string()
+})
+})),
+  "streakStats": zod.object({
+  "ticker": zod.string(),
+  "down": zod.array(zod.object({
+  "consecutiveDays": zod.number(),
+  "pNextReversal": zod.number(),
+  "pNextContinuation": zod.number(),
+  "n": zod.number(),
+  "sampleSize": zod.enum(['small', 'moderate', 'large'])
+})),
+  "up": zod.array(zod.object({
+  "consecutiveDays": zod.number(),
+  "pNextReversal": zod.number(),
+  "pNextContinuation": zod.number(),
+  "n": zod.number(),
+  "sampleSize": zod.enum(['small', 'moderate', 'large'])
+}))
+}),
+  "marketRules": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "category": zod.string(),
+  "description": zod.string(),
+  "status": zod.enum(['triggered', 'approaching', 'watch', 'inactive']),
+  "currentValue": zod.string(),
+  "threshold": zod.string(),
+  "historicalEdge": zod.string(),
+  "actionNote": zod.string(),
+  "source": zod.string()
+})),
+  "analyzedAt": zod.string()
+})
+
+
+/**
  * Scans the full scanner universe (1-year daily OHLCV), detects all significant gap events above the threshold, extracts 14 technical features at T-1 (day before each gap), and computes effect sizes to rank which factors most strongly precede gap-ups vs gap-downs. Results are cached server-side for 6 hours.
 
  * @summary Historical gap analysis — factor correlation study
