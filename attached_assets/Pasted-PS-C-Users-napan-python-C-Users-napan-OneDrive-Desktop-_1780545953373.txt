@@ -1,0 +1,516 @@
+PS C:\Users\napan> python C:\Users\napan\OneDrive\Desktop\scrape.py
+Downloading all subtitles in one batch (this may take a while)...
+[youtube:tab] Extracting URL: https://www.youtube.com/@ChartWhisperer/videos
+[youtube:tab] @ChartWhisperer/videos: Downloading webpage
+[download] Downloading playlist: Oscar Carboni's OMNI Trading Academy - Videos
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 1: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 2: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 3: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 4: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 5: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 6: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 7: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 8: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 9: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 10: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 11: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 12: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 13: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 14: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 15: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 16: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 17: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 18: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 19: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 20: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 21: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 22: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 23: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 24: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 25: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 26: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 27: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 28: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 29: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 30: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 31: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 32: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 33: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 34: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 35: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 36: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 37: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 38: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 39: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 40: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 41: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 42: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 43: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 44: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 45: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 46: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 47: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 48: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 49: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 50: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 51: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 52: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 53: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 54: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 55: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 56: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 57: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 58: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 59: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 60: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 61: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 62: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 63: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 64: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 65: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 66: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 67: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 68: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 69: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 70: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 71: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 72: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 73: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 74: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 75: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 76: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 77: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 78: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 79: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 80: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 81: Downloading API JSON
+[youtube:tab] UCez8uA1o_fDYsrSf4auWSjg page 82: Downloading API JSON
+[youtube:tab] Playlist Oscar Carboni's OMNI Trading Academy - Videos: Downloading 2468 items of 2468
+[download] Downloading item 1 of 2468
+[youtube] Extracting URL: https://www.youtube.com/watch?v=55IM_gygEVA
+[youtube] 55IM_gygEVA: Downloading webpage
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[youtube] 55IM_gygEVA: Downloading android vr player API JSON
+[info] 55IM_gygEVA: Downloading subtitles: en
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+[info] 55IM_gygEVA: Downloading 1 format(s): 18
+[info] Writing video subtitles to: C:\Users\napan\OneDrive\Desktop\subs_temp\20260603_55IM_gygEVA_Oscar Carboni Says The OMNI Turns to The Dark-Side 4 Stocks Thursday. OMNIPHX Flies! 6⧸4⧸26 Vid 3081.en.vtt
+[download] Sleeping 3.00 seconds ...
+WARNING: The extractor specified to use impersonation for this download, but no impersonate target is available. If you encounter errors, then see  https://github.com/yt-dlp/yt-dlp#impersonation  for information on installing the required dependencies
+WARNING: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+[download] Downloading item 2 of 2468
+[youtube] Extracting URL: https://www.youtube.com/watch?v=Z_P14bb15OI
+[youtube] Z_P14bb15OI: Downloading webpage
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[youtube] Z_P14bb15OI: Downloading android vr player API JSON
+[info] Z_P14bb15OI: Downloading subtitles: en
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+[info] Z_P14bb15OI: Downloading 1 format(s): 18
+[info] Writing video subtitles to: C:\Users\napan\OneDrive\Desktop\subs_temp\20260603_Z_P14bb15OI_Oscar Carboni Says Stocks & Crude Can Rise Together! ＂OMNIPHOENIX＂ Flies Again! 06⧸03⧸26 Video #3080.en.vtt
+[download] Sleeping 3.00 seconds ...
+WARNING: The extractor specified to use impersonation for this download, but no impersonate target is available. If you encounter errors, then see  https://github.com/yt-dlp/yt-dlp#impersonation  for information on installing the required dependencies
+WARNING: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+[download] Downloading item 3 of 2468
+[youtube] Extracting URL: https://www.youtube.com/watch?v=5eVbjSephrk
+[youtube] 5eVbjSephrk: Downloading webpage
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[youtube] 5eVbjSephrk: Downloading android vr player API JSON
+[info] 5eVbjSephrk: Downloading subtitles: en
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+[info] 5eVbjSephrk: Downloading 1 format(s): 18
+[info] Writing video subtitles to: C:\Users\napan\OneDrive\Desktop\subs_temp\20260531_5eVbjSephrk_Oscar Carboni Explains Market Inflation and Says. ＂I Want My Money Back!＂ OMNIPHX 6⧸1⧸26 Video #3079.en.vtt
+[download] Sleeping 3.00 seconds ...
+WARNING: The extractor specified to use impersonation for this download, but no impersonate target is available. If you encounter errors, then see  https://github.com/yt-dlp/yt-dlp#impersonation  for information on installing the required dependencies
+WARNING: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+[download] Downloading item 4 of 2468
+[youtube] Extracting URL: https://www.youtube.com/watch?v=wYDHU3qtD9g
+[youtube] wYDHU3qtD9g: Downloading webpage
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[youtube] wYDHU3qtD9g: Downloading android vr player API JSON
+[info] wYDHU3qtD9g: Downloading subtitles: en
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+[info] wYDHU3qtD9g: Downloading 1 format(s): 18
+[info] Writing video subtitles to: C:\Users\napan\OneDrive\Desktop\subs_temp\20260528_wYDHU3qtD9g_Part II Oscar Carboni Explains Why Stock Market Keeps Rallying Up. 05⧸29⧸26 #OMNIPHX Video #3078.en.vtt
+[download] Sleeping 3.00 seconds ...
+WARNING: The extractor specified to use impersonation for this download, but no impersonate target is available. If you encounter errors, then see  https://github.com/yt-dlp/yt-dlp#impersonation  for information on installing the required dependencies
+WARNING: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+[download] Downloading item 5 of 2468
+[youtube] Extracting URL: https://www.youtube.com/watch?v=51BEq8hra2o
+[youtube] 51BEq8hra2o: Downloading webpage
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[youtube] 51BEq8hra2o: Downloading android vr player API JSON
+[info] 51BEq8hra2o: Downloading subtitles: en
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+[info] 51BEq8hra2o: Downloading 1 format(s): 18
+[info] Writing video subtitles to: C:\Users\napan\OneDrive\Desktop\subs_temp\20260528_51BEq8hra2o_Part I Oscar Carboni Explains Why Stock Market Keeps Rallying Up. GC no 5⧸28⧸26 #OMNIPHX Video #3077.en.vtt
+[download] Sleeping 3.00 seconds ...
+WARNING: The extractor specified to use impersonation for this download, but no impersonate target is available. If you encounter errors, then see  https://github.com/yt-dlp/yt-dlp#impersonation  for information on installing the required dependencies
+WARNING: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+[download] Downloading item 6 of 2468
+[youtube] Extracting URL: https://www.youtube.com/watch?v=paIBf5gumsE
+[youtube] paIBf5gumsE: Downloading webpage
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[youtube] paIBf5gumsE: Downloading android vr player API JSON
+[info] paIBf5gumsE: Downloading subtitles: en
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+[info] paIBf5gumsE: Downloading 1 format(s): 18
+[info] Writing video subtitles to: C:\Users\napan\OneDrive\Desktop\subs_temp\20260526_paIBf5gumsE_Oscar Carboni Says： Stock Market Remains Bullish Via Crude & T-Bonds  OMNIPHOENIX 05⧸27⧸26 Video3076.en.vtt
+[download] Sleeping 3.00 seconds ...
+WARNING: The extractor specified to use impersonation for this download, but no impersonate target is available. If you encounter errors, then see  https://github.com/yt-dlp/yt-dlp#impersonation  for information on installing the required dependencies
+WARNING: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+[download] Downloading item 7 of 2468
+[youtube] Extracting URL: https://www.youtube.com/watch?v=bwhF2q6xVrw
+[youtube] bwhF2q6xVrw: Downloading webpage
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[youtube] bwhF2q6xVrw: Downloading android vr player API JSON
+[info] bwhF2q6xVrw: Downloading subtitles: en
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+[info] bwhF2q6xVrw: Downloading 1 format(s): 18
+[info] Writing video subtitles to: C:\Users\napan\OneDrive\Desktop\subs_temp\20260521_bwhF2q6xVrw_Oscar Carboni Says： Markets Are Bullish & Explains OMNIPHOENIX Token 05⧸22⧸2026 Video #3075.en.vtt
+[download] Sleeping 3.00 seconds ...
+WARNING: The extractor specified to use impersonation for this download, but no impersonate target is available. If you encounter errors, then see  https://github.com/yt-dlp/yt-dlp#impersonation  for information on installing the required dependencies
+WARNING: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+[download] Downloading item 8 of 2468
+[youtube] Extracting URL: https://www.youtube.com/watch?v=96cPSzazFRA
+[youtube] 96cPSzazFRA: Downloading webpage
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[youtube] 96cPSzazFRA: Downloading android vr player API JSON
+[info] 96cPSzazFRA: Downloading subtitles: en
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+[info] 96cPSzazFRA: Downloading 1 format(s): 18
+[info] Writing video subtitles to: C:\Users\napan\OneDrive\Desktop\subs_temp\20260521_96cPSzazFRA_Oscar Carboni The OMNI says Buy the Dips 4 ES NQ RTY Today. Viva La OMNIPHOENIX Token 05⧸21⧸26 #3075.en.vtt
+[download] Sleeping 3.00 seconds ...
+WARNING: The extractor specified to use impersonation for this download, but no impersonate target is available. If you encounter errors, then see  https://github.com/yt-dlp/yt-dlp#impersonation  for information on installing the required dependencies
+WARNING: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+[download] Downloading item 9 of 2468
+[youtube] Extracting URL: https://www.youtube.com/watch?v=_JNwt6uw2NY
+[youtube] _JNwt6uw2NY: Downloading webpage
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[youtube] _JNwt6uw2NY: Downloading android vr player API JSON
+[info] _JNwt6uw2NY: Downloading subtitles: en
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+[info] _JNwt6uw2NY: Downloading 1 format(s): 18
+[info] Writing video subtitles to: C:\Users\napan\OneDrive\Desktop\subs_temp\20260518__JNwt6uw2NY_Oscar Carboni Says OMNI Waved Us Off from Selling ES NQ RTY Today. Viva La OMNI Token 05⧸19⧸26 #3074.en.vtt
+[download] Sleeping 3.00 seconds ...
+WARNING: The extractor specified to use impersonation for this download, but no impersonate target is available. If you encounter errors, then see  https://github.com/yt-dlp/yt-dlp#impersonation  for information on installing the required dependencies
+WARNING: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+[download] Downloading item 10 of 2468
+[youtube] Extracting URL: https://www.youtube.com/watch?v=wi7MCZvYVy0
+[youtube] wi7MCZvYVy0: Downloading webpage
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[youtube] wi7MCZvYVy0: Downloading android vr player API JSON
+[info] wi7MCZvYVy0: Downloading subtitles: en
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+[info] wi7MCZvYVy0: Downloading 1 format(s): 18
+[info] Writing video subtitles to: C:\Users\napan\OneDrive\Desktop\subs_temp\20260516_wi7MCZvYVy0_Oscar Carboni Says Bad Ju-Ju For Stock Market Via T-Bonds! Good News for OMNI Token 05⧸16⧸26 #3073.en.vtt
+[download] Sleeping 3.00 seconds ...
+WARNING: The extractor specified to use impersonation for this download, but no impersonate target is available. If you encounter errors, then see  https://github.com/yt-dlp/yt-dlp#impersonation  for information on installing the required dependencies
+WARNING: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+[download] Downloading item 11 of 2468
+[youtube] Extracting URL: https://www.youtube.com/watch?v=Zz0FpFpX81Y
+[youtube] Zz0FpFpX81Y: Downloading webpage
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[youtube] Zz0FpFpX81Y: Downloading android vr player API JSON
+[info] Zz0FpFpX81Y: Downloading subtitles: en
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+[info] Zz0FpFpX81Y: Downloading 1 format(s): 18
+[info] Writing video subtitles to: C:\Users\napan\OneDrive\Desktop\subs_temp\20260514_Zz0FpFpX81Y_#tradingexpert Oscar Carboni Says Green OMNI Signals in BTC NQ ES OMNITRADING Token 05⧸15⧸26 #3072.en.vtt
+[download] Sleeping 3.00 seconds ...
+WARNING: The extractor specified to use impersonation for this download, but no impersonate target is available. If you encounter errors, then see  https://github.com/yt-dlp/yt-dlp#impersonation  for information on installing the required dependencies
+WARNING: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+[download] Downloading item 12 of 2468
+[youtube] Extracting URL: https://www.youtube.com/watch?v=gjcD1OKLBlI
+[youtube] gjcD1OKLBlI: Downloading webpage
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[youtube] gjcD1OKLBlI: Downloading android vr player API JSON
+[info] gjcD1OKLBlI: Downloading subtitles: en
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+[info] gjcD1OKLBlI: Downloading 1 format(s): 18
+[info] Writing video subtitles to: C:\Users\napan\OneDrive\Desktop\subs_temp\20260513_gjcD1OKLBlI_#tradingexpert Oscar Carboni Says ES NQ RTY OMNI Mixed Signals TESLA Bullish Thursday 05⧸14⧸26 #3071.en.vtt
+[download] Sleeping 3.00 seconds ...
+WARNING: The extractor specified to use impersonation for this download, but no impersonate target is available. If you encounter errors, then see  https://github.com/yt-dlp/yt-dlp#impersonation  for information on installing the required dependencies
+WARNING: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+[download] Downloading item 13 of 2468
+[youtube] Extracting URL: https://www.youtube.com/watch?v=CexB223D8j4
+[youtube] CexB223D8j4: Downloading webpage
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[youtube] CexB223D8j4: Downloading android vr player API JSON
+[info] CexB223D8j4: Downloading subtitles: en
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+[info] CexB223D8j4: Downloading 1 format(s): 18
+[info] Writing video subtitles to: C:\Users\napan\OneDrive\Desktop\subs_temp\20260512_CexB223D8j4_#tradingexpert Oscar Carboni Says OMNI Flips to RED for ES NQ RTY on Wednesday 05⧸13⧸2026 #3070.en.vtt
+[download] Sleeping 3.00 seconds ...
+WARNING: The extractor specified to use impersonation for this download, but no impersonate target is available. If you encounter errors, then see  https://github.com/yt-dlp/yt-dlp#impersonation  for information on installing the required dependencies
+WARNING: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+[download] Downloading item 14 of 2468
+[youtube] Extracting URL: https://www.youtube.com/watch?v=RytGqNHIhF4
+[youtube] RytGqNHIhF4: Downloading webpage
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[youtube] RytGqNHIhF4: Downloading android vr player API JSON
+[info] RytGqNHIhF4: Downloading subtitles: en
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+[info] RytGqNHIhF4: Downloading 1 format(s): 18
+[info] Writing video subtitles to: C:\Users\napan\OneDrive\Desktop\subs_temp\20260512_RytGqNHIhF4_#tradingexpert Oscar Carboni： Gold is Glittering & OMNITRADING Token is Back! 5⧸12⧸2026 Video#3069.en.vtt
+[download] Sleeping 3.00 seconds ...
+WARNING: The extractor specified to use impersonation for this download, but no impersonate target is available. If you encounter errors, then see  https://github.com/yt-dlp/yt-dlp#impersonation  for information on installing the required dependencies
+WARNING: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+[download] Downloading item 15 of 2468
+[youtube] Extracting URL: https://www.youtube.com/watch?v=Rlx8hKQ2S4w
+[youtube] Rlx8hKQ2S4w: Downloading webpage
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[youtube] Rlx8hKQ2S4w: Downloading android vr player API JSON
+[info] Rlx8hKQ2S4w: Downloading subtitles: en
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+[info] Rlx8hKQ2S4w: Downloading 1 format(s): 18
+[info] Writing video subtitles to: C:\Users\napan\OneDrive\Desktop\subs_temp\20260511_Rlx8hKQ2S4w_Buy OMNITRADING Tokens NOW!!! I just did! Coin address link below video! 5⧸11⧸2026.en.vtt
+[download] Sleeping 3.00 seconds ...
+WARNING: The extractor specified to use impersonation for this download, but no impersonate target is available. If you encounter errors, then see  https://github.com/yt-dlp/yt-dlp#impersonation  for information on installing the required dependencies
+WARNING: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+[download] Downloading item 16 of 2468
+[youtube] Extracting URL: https://www.youtube.com/watch?v=sjU6q1QpdgE
+[youtube] sjU6q1QpdgE: Downloading webpage
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[youtube] sjU6q1QpdgE: Downloading android vr player API JSON
+[info] sjU6q1QpdgE: Downloading subtitles: en
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+[info] sjU6q1QpdgE: Downloading 1 format(s): 18
+[info] Writing video subtitles to: C:\Users\napan\OneDrive\Desktop\subs_temp\20260510_sjU6q1QpdgE_#tradingexpert Oscar Carboni Says OMNI Green in ES NQ RTY & Stocks for 5⧸11⧸26 Video #3068.en.vtt
+[download] Sleeping 3.00 seconds ...
+WARNING: The extractor specified to use impersonation for this download, but no impersonate target is available. If you encounter errors, then see  https://github.com/yt-dlp/yt-dlp#impersonation  for information on installing the required dependencies
+WARNING: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+[download] Downloading item 17 of 2468
+[youtube] Extracting URL: https://www.youtube.com/watch?v=nAxCqL05HLE
+[youtube] nAxCqL05HLE: Downloading webpage
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[youtube] nAxCqL05HLE: Downloading android vr player API JSON
+[info] nAxCqL05HLE: Downloading subtitles: en
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+[info] nAxCqL05HLE: Downloading 1 format(s): 18
+[info] Writing video subtitles to: C:\Users\napan\OneDrive\Desktop\subs_temp\20260507_nAxCqL05HLE_#tradingexpert Oscar Carboni Says OMNI Turns RED ES NQ RTY Stocks & Crypto for 5⧸08⧸26 Video #3067.en.vtt
+[download] Sleeping 3.00 seconds ...
+WARNING: The extractor specified to use impersonation for this download, but no impersonate target is available. If you encounter errors, then see  https://github.com/yt-dlp/yt-dlp#impersonation  for information on installing the required dependencies
+WARNING: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+[download] Downloading item 18 of 2468
+[youtube] Extracting URL: https://www.youtube.com/watch?v=fT821l4mGd8
+[youtube] fT821l4mGd8: Downloading webpage
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[youtube] fT821l4mGd8: Downloading android vr player API JSON
+[info] fT821l4mGd8: Downloading subtitles: en
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+[info] fT821l4mGd8: Downloading 1 format(s): 18
+[info] Writing video subtitles to: C:\Users\napan\OneDrive\Desktop\subs_temp\20260505_fT821l4mGd8_#tradingexpert Oscar Carboni Says Green OMNI Today ES NQ RTY Stocks & Crypto 5⧸6⧸26 Video #3066.en.vtt
+[download] Sleeping 3.00 seconds ...
+WARNING: The extractor specified to use impersonation for this download, but no impersonate target is available. If you encounter errors, then see  https://github.com/yt-dlp/yt-dlp#impersonation  for information on installing the required dependencies
+WARNING: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+[download] Downloading item 19 of 2468
+[youtube] Extracting URL: https://www.youtube.com/watch?v=N3UrkOnJsTk
+[youtube] N3UrkOnJsTk: Downloading webpage
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[youtube] N3UrkOnJsTk: Downloading android vr player API JSON
+[info] N3UrkOnJsTk: Downloading subtitles: en
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+[info] N3UrkOnJsTk: Downloading 1 format(s): 18
+[info] Writing video subtitles to: C:\Users\napan\OneDrive\Desktop\subs_temp\20260504_N3UrkOnJsTk_#tradingexpert Oscar Carboni Says ES NQ RTY = RED OMNI. BTC Still Looks Strong! 5⧸5⧸26 Video #3065.en.vtt
+[download] Sleeping 3.00 seconds ...
+WARNING: The extractor specified to use impersonation for this download, but no impersonate target is available. If you encounter errors, then see  https://github.com/yt-dlp/yt-dlp#impersonation  for information on installing the required dependencies
+WARNING: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+[download] Downloading item 20 of 2468
+[youtube] Extracting URL: https://www.youtube.com/watch?v=_--tgE_Wq-E
+[youtube] _--tgE_Wq-E: Downloading webpage
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[youtube] _--tgE_Wq-E: Downloading android vr player API JSON
+[info] _--tgE_Wq-E: Downloading subtitles: en
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+[info] _--tgE_Wq-E: Downloading 1 format(s): 18
+[info] Writing video subtitles to: C:\Users\napan\OneDrive\Desktop\subs_temp\20260503__--tgE_Wq-E_#tradingexpert Oscar Carboni Says OMNI One Day Wave-Off in ES NQ RTY： BTC Strong 5⧸4⧸26 Video #3064.en.vtt
+[download] Sleeping 3.00 seconds ...
+WARNING: The extractor specified to use impersonation for this download, but no impersonate target is available. If you encounter errors, then see  https://github.com/yt-dlp/yt-dlp#impersonation  for information on installing the required dependencies
+WARNING: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+[download] Downloading item 21 of 2468
+[youtube] Extracting URL: https://www.youtube.com/watch?v=Jc7cRLXZvdA
+[youtube] Jc7cRLXZvdA: Downloading webpage
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[youtube] Jc7cRLXZvdA: Downloading android vr player API JSON
+[info] Jc7cRLXZvdA: Downloading subtitles: en
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+[info] Jc7cRLXZvdA: Downloading 1 format(s): 18
+[info] Writing video subtitles to: C:\Users\napan\OneDrive\Desktop\subs_temp\20260429_Jc7cRLXZvdA_Oscar Carboni Says Flat Tops Produce Market Drops Russ 2000. My Sincere Appreciation OMNIACS 4⧸29⧸26.en.vtt
+[download] Sleeping 3.00 seconds ...
+WARNING: The extractor specified to use impersonation for this download, but no impersonate target is available. If you encounter errors, then see  https://github.com/yt-dlp/yt-dlp#impersonation  for information on installing the required dependencies
+WARNING: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+[download] Downloading item 22 of 2468
+[youtube] Extracting URL: https://www.youtube.com/watch?v=4mmV9RzgKBk
+[youtube] 4mmV9RzgKBk: Downloading webpage
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[youtube] 4mmV9RzgKBk: Downloading android vr player API JSON
+[info] 4mmV9RzgKBk: Downloading subtitles: en
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+[info] 4mmV9RzgKBk: Downloading 1 format(s): 18
+[info] Writing video subtitles to: C:\Users\napan\OneDrive\Desktop\subs_temp\20260428_4mmV9RzgKBk_OMNIACS UNITE!  I need your help! I can use some friends right now!.en.vtt
+[download] Sleeping 3.00 seconds ...
+WARNING: The extractor specified to use impersonation for this download, but no impersonate target is available. If you encounter errors, then see  https://github.com/yt-dlp/yt-dlp#impersonation  for information on installing the required dependencies
+WARNING: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+[download] Downloading item 23 of 2468
+[youtube] Extracting URL: https://www.youtube.com/watch?v=kDKzACuN8EA
+[youtube] kDKzACuN8EA: Downloading webpage
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[youtube] kDKzACuN8EA: Downloading android vr player API JSON
+[info] kDKzACuN8EA: Downloading subtitles: en
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+[info] kDKzACuN8EA: Downloading 1 format(s): 18
+[info] Writing video subtitles to: C:\Users\napan\OneDrive\Desktop\subs_temp\20260426_kDKzACuN8EA_Oscar Carboni Says： OMNI Neutral Monday! #silver  Fans： Remember April 27 1987？？ 4⧸27⧸26 Video #3061.en.vtt
+[download] Sleeping 3.00 seconds ...
+WARNING: The extractor specified to use impersonation for this download, but no impersonate target is available. If you encounter errors, then see  https://github.com/yt-dlp/yt-dlp#impersonation  for information on installing the required dependencies
+WARNING: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+[download] Downloading item 24 of 2468
+[youtube] Extracting URL: https://www.youtube.com/watch?v=75DCVVDv1Cs
+[youtube] 75DCVVDv1Cs: Downloading webpage
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[youtube] 75DCVVDv1Cs: Downloading android vr player API JSON
+[info] 75DCVVDv1Cs: Downloading subtitles: en
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+[info] 75DCVVDv1Cs: Downloading 1 format(s): 18
+[info] Writing video subtitles to: C:\Users\napan\OneDrive\Desktop\subs_temp\20260423_75DCVVDv1Cs_#tradingexpert Oscar Carboni asks, Is It Double-Top Respect Time？ Vote A or B 04⧸24⧸26 Video #3060.en.vtt
+[download] Sleeping 3.00 seconds ...
+WARNING: The extractor specified to use impersonation for this download, but no impersonate target is available. If you encounter errors, then see  https://github.com/yt-dlp/yt-dlp#impersonation  for information on installing the required dependencies
+WARNING: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+[download] Downloading item 25 of 2468
+[youtube] Extracting URL: https://www.youtube.com/watch?v=csncDrLo-aE
+[youtube] csncDrLo-aE: Downloading webpage
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[youtube] csncDrLo-aE: Downloading android vr player API JSON
+[info] csncDrLo-aE: Downloading subtitles: en
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+[info] csncDrLo-aE: Downloading 1 format(s): 18
+[info] Writing video subtitles to: C:\Users\napan\OneDrive\Desktop\subs_temp\20260422_csncDrLo-aE_Oscar Carboni Says Time For Market Decision! Vote A for Down Market, B for Up. 04⧸22⧸26 Video #3059.en.vtt
+[download] Sleeping 3.00 seconds ...
+WARNING: The extractor specified to use impersonation for this download, but no impersonate target is available. If you encounter errors, then see  https://github.com/yt-dlp/yt-dlp#impersonation  for information on installing the required dependencies
+WARNING: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+[download] Downloading item 26 of 2468
+[youtube] Extracting URL: https://www.youtube.com/watch?v=dcHjULVJ_Gw
+[youtube] dcHjULVJ_Gw: Downloading webpage
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[youtube] dcHjULVJ_Gw: Downloading android vr player API JSON
+[info] dcHjULVJ_Gw: Downloading subtitles: en
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+[info] dcHjULVJ_Gw: Downloading 1 format(s): 18
+[info] Writing video subtitles to: C:\Users\napan\OneDrive\Desktop\subs_temp\20260420_dcHjULVJ_Gw_#tradingexpert  O Carboni No Confirmation Day in Stock Market! Needed Confirm Day! 04⧸21⧸26 Vid 3058.en.vtt
+[download] Sleeping 3.00 seconds ...
+WARNING: The extractor specified to use impersonation for this download, but no impersonate target is available. If you encounter errors, then see  https://github.com/yt-dlp/yt-dlp#impersonation  for information on installing the required dependencies
+WARNING: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+[download] Downloading item 27 of 2468
+[youtube] Extracting URL: https://www.youtube.com/watch?v=fD0FbUSxMZA
+[youtube] fD0FbUSxMZA: Downloading webpage
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[youtube] fD0FbUSxMZA: Downloading android vr player API JSON
+[info] fD0FbUSxMZA: Downloading subtitles: en
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+[info] fD0FbUSxMZA: Downloading 1 format(s): 18
+[info] Writing video subtitles to: C:\Users\napan\OneDrive\Desktop\subs_temp\20260419_fD0FbUSxMZA_#tradingexpert  Oscar Carboni： Stock Market Above Double Tops. Need Confirm Day! 04⧸20⧸26 Vid 3057.en.vtt
+[download] Sleeping 3.00 seconds ...
+WARNING: The extractor specified to use impersonation for this download, but no impersonate target is available. If you encounter errors, then see  https://github.com/yt-dlp/yt-dlp#impersonation  for information on installing the required dependencies
+WARNING: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+[download] Downloading item 28 of 2468
+[youtube] Extracting URL: https://www.youtube.com/watch?v=AUuZ-jVoQek
+[youtube] AUuZ-jVoQek: Downloading webpage
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[youtube] AUuZ-jVoQek: Downloading android vr player API JSON
+[info] AUuZ-jVoQek: Downloading subtitles: en
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+[info] AUuZ-jVoQek: Downloading 1 format(s): 18
+[info] Writing video subtitles to: C:\Users\napan\OneDrive\Desktop\subs_temp\20260417_AUuZ-jVoQek_#tradingexpert Oscar Carboni Shows Crypto Currency Break-Out! Viva La OMNI! 4⧸17⧸26 Video #3056.en.vtt
+[download] Sleeping 3.00 seconds ...
+WARNING: The extractor specified to use impersonation for this download, but no impersonate target is available. If you encounter errors, then see  https://github.com/yt-dlp/yt-dlp#impersonation  for information on installing the required dependencies
+WARNING: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+[download] Downloading item 29 of 2468
+[youtube] Extracting URL: https://www.youtube.com/watch?v=YchgiTPu6YM
+[youtube] YchgiTPu6YM: Downloading webpage
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[youtube] YchgiTPu6YM: Downloading android vr player API JSON
+[info] YchgiTPu6YM: Downloading subtitles: en
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+[info] YchgiTPu6YM: Downloading 1 format(s): 18
+[info] Writing video subtitles to: C:\Users\napan\OneDrive\Desktop\subs_temp\20260416_YchgiTPu6YM_Part II Oscar Carboni Shows NQ Possible Double ⧸ Triple Top Approaching 4⧸16⧸26 Video #3055.en.vtt
+[download] Sleeping 3.00 seconds ...
+WARNING: The extractor specified to use impersonation for this download, but no impersonate target is available. If you encounter errors, then see  https://github.com/yt-dlp/yt-dlp#impersonation  for information on installing the required dependencies
+WARNING: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+[download] Downloading item 30 of 2468
+[youtube] Extracting URL: https://www.youtube.com/watch?v=tBSLcofT6rw
+[youtube] tBSLcofT6rw: Downloading webpage
+WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+[youtube] tBSLcofT6rw: Downloading android vr player API JSON
+[info] tBSLcofT6rw: Downloading subtitles: en
+WARNING: ffmpeg not found. The downloaded format may not be the best available. Installing ffmpeg is strongly recommended: https://github.com/yt-dlp/yt-dlp#dependencies
+[info] tBSLcofT6rw: Downloading 1 format(s): 18
+[info] Writing video subtitles to: C:\Users\napan\OneDrive\Desktop\subs_temp\20260415_tBSLcofT6rw_#tradingexpert  Oscar Carboni Shows NQ Possible Double ⧸ Triple Top Approaching 4⧸16⧸26 Video #3054.en.vtt
+[download] Sleeping 3.00 seconds ...
+Traceback (most recent call last):
+  File "C:\Users\napan\OneDrive\Desktop\scrape.py", line 31, in <module>
+    ydl.download([CHANNEL_URL])
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\YoutubeDL.py", line 3670, in download
+    self.__download_wrapper(self.extract_info)(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        url, force_generic_extractor=self.params.get('force_generic_extractor', False))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\YoutubeDL.py", line 3643, in wrapper
+    res = func(*args, **kwargs)
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\YoutubeDL.py", line 1687, in extract_info
+    return self.__extract_info(url, self.get_info_extractor(key), download, extra_info, process)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\YoutubeDL.py", line 1698, in wrapper
+    return func(self, *args, **kwargs)
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\YoutubeDL.py", line 1854, in __extract_info
+    return self.process_ie_result(ie_result, download, extra_info)
+           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\YoutubeDL.py", line 1983, in process_ie_result
+    return self.__process_playlist(ie_result, download)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\YoutubeDL.py", line 2131, in __process_playlist
+    entry_result = self.__process_iterable_entry(entry, download, collections.ChainMap({
+        'playlist_index': playlist_index,
+        'playlist_autonumber': i + 1,
+    }, extra))
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\YoutubeDL.py", line 1698, in wrapper
+    return func(self, *args, **kwargs)
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\YoutubeDL.py", line 2163, in __process_iterable_entry
+    return self.process_ie_result(
+           ~~~~~~~~~~~~~~~~~~~~~~^
+        entry, download=download, extra_info=extra_info)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\YoutubeDL.py", line 1933, in process_ie_result
+    return self.extract_info(
+           ~~~~~~~~~~~~~~~~~^
+        ie_result['url'], download,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        ie_key=ie_result.get('ie_key'),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        extra_info=extra_info)
+        ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\YoutubeDL.py", line 1687, in extract_info
+    return self.__extract_info(url, self.get_info_extractor(key), download, extra_info, process)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\YoutubeDL.py", line 1698, in wrapper
+    return func(self, *args, **kwargs)
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\YoutubeDL.py", line 1854, in __extract_info
+    return self.process_ie_result(ie_result, download, extra_info)
+           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\YoutubeDL.py", line 1913, in process_ie_result
+    ie_result = self.process_video_result(ie_result, download=download)
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\YoutubeDL.py", line 3096, in process_video_result
+    self.process_info(new_info)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\YoutubeDL.py", line 189, in wrapper
+    return func(self, *args, **kwargs)
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\YoutubeDL.py", line 3353, in process_info
+    sub_files = self._write_subtitles(info_dict, temp_filename)
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\YoutubeDL.py", line 4449, in _write_subtitles
+    self.dl(sub_filename, sub_copy, subtitle=True)
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\YoutubeDL.py", line 3285, in dl
+    return fd.download(name, new_info, subtitle)
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\napan\AppData\Roaming\Python\Python314\site-packages\yt_dlp\downloader\common.py", line 478, in download
+    time.sleep(sleep_interval)
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^
+KeyboardInterrupt
