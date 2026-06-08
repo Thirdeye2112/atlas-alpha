@@ -7,6 +7,7 @@ import marketRouter from "./market";
 import backtestRouter from "./backtest";
 import cacheRouter from "./cache";
 import researchRouter from "./research";
+import { mlResearchRouter } from "./research-ml";
 import alertsRouter from "./alerts";
 import botRouter from "./bot";
 
@@ -20,6 +21,7 @@ router.use(marketRouter);
 router.use(backtestRouter);
 router.use(cacheRouter);
 router.use(researchRouter);
+router.use('/research', mlResearchRouter);
 router.use(alertsRouter);
 router.use(botRouter);
 
