@@ -10,6 +10,7 @@ export interface MLSignal {
   ml_expected_drawdown: number | null; ml_signal_strength: MLSignalStrength
   ml_direction: MLDirection; wf_mean_ic: number | null
   regime_note: string | null; available: boolean
+  omni_green: boolean | null; omni_distance_pct: number | null; omni_slope: number | null
 }
 
 const NEUTRAL = (t: string): MLSignal => ({
@@ -17,6 +18,7 @@ const NEUTRAL = (t: string): MLSignal => ({
   ml_probability_positive: null, ml_confidence: null, ml_expected_drawdown: null,
   ml_signal_strength: 'NEUTRAL', ml_direction: 'NEUTRAL', wf_mean_ic: null,
   regime_note: null, available: false,
+  omni_green: null, omni_distance_pct: null, omni_slope: null,
 })
 
 async function fetchSignal(ticker: string): Promise<MLSignal> {

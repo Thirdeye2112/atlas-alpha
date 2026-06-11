@@ -183,6 +183,14 @@ const SIGNAL_HISTORY_SQL = `
   ORDER BY date ASC
 `
 
+const OMNI_FEATURES_SQL = `
+  SELECT feature_name, feature_value
+  FROM feature_snapshots
+  WHERE ticker = $1
+    AND date = (SELECT MAX(date) FROM feature_snapshots WHERE ticker = $1)
+    AND feature_name IN ('omni_82_above', 'omni_82_distance', 'omni_82_slope', 'omni_82_value')
+`
+
 // ── Router ────────────────────────────────────────────────────────────────────
 
 export const mlSignalRouter = Router()
@@ -194,13 +202,20 @@ export const mlSignalRouter = Router()
 mlSignalRouter.get('/signal/:ticker', async (req, res) => {
   try {
     const ticker = req.params.ticker.toUpperCase().trim()
-    const rows = await query<{
-      ticker: string; date: string
-      expected_return: number | null; probability_positive: number | null
-      expected_drawdown: number | null; confidence: number | null
-      rank_percentile: number | null; wf_mean_ic: number | null
-      wf_std_ic: number | null; trained_through: string | null
-    }>(SIGNAL_FOR_TICKER_SQL, [ticker])
+    const [rows, omniRows] = await Promise.all([
+      query<{
+        ticker: string; date: string
+        expected_return: number | null; probability_positive: number | null
+        expected_drawdown: number | null; confidence: number | null
+        rank_percentile: number | null; wf_mean_ic: number | null
+        wf_std_ic: number | null; trained_through: string | null
+      }>(SIGNAL_FOR_TICKER_SQL, [ticker]),
+      query<{ feature_name: string; feature_value: number | null }>(OMNI_FEATURES_SQL, [ticker]),
+    ])
+
+    // Build OMNI feature map
+    const omni: Record<string, number | null> = {}
+    for (const row of omniRows) omni[row.feature_name] = row.feature_value
 
     if (!rows.length) {
       // Return a structured empty response — not a 404
@@ -217,6 +232,9 @@ mlSignalRouter.get('/signal/:ticker', async (req, res) => {
         wf_mean_ic:              null,
         regime_note:             null,
         available:               false,
+        omni_green:              null,
+        omni_distance_pct:       null,
+        omni_slope:              null,
       })
       return
     }
@@ -224,6 +242,10 @@ mlSignalRouter.get('/signal/:ticker', async (req, res) => {
     const r = rows[0]
     const strength = classifyStrength(r.rank_percentile, r.confidence, r.wf_mean_ic)
     const direction = classifyDirection(r.rank_percentile, r.probability_positive)
+
+    const omniAbove = omni['omni_82_above']
+    const omniDist  = omni['omni_82_distance']
+    const omniSlope = omni['omni_82_slope']
 
     res.json({
       ticker:                  r.ticker,
@@ -240,6 +262,9 @@ mlSignalRouter.get('/signal/:ticker', async (req, res) => {
       trained_through:         r.trained_through,
       regime_note:             null,    // Phase 4: populated by regime classifier
       available:               true,
+      omni_green:              omniAbove != null ? omniAbove > 0.5 : null,
+      omni_distance_pct:       omniDist ?? null,
+      omni_slope:              omniSlope ?? null,
     })
   } catch (err: unknown) {
     req.log?.error({ err }, 'research.signal.ticker failed')
