@@ -51,7 +51,7 @@ Start-Process powershell -ArgumentList "-NoExit","-Command", `
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /healthz` | Health check (not `/api/health`) |
+| `GET /api/healthz` | Health check (not `/api/health` or `/healthz`) |
 | `GET /api/stock/:ticker` | Full analysis with AtlasScore |
 | `GET /api/research/signal/:ticker` | ML signal (available, strength, direction, rank) |
 | `GET /api/research/signals?tickers=A,B,C` | Batch ML signals |
