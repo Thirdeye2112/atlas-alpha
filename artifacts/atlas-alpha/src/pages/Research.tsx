@@ -152,7 +152,7 @@ const MODEL_OPTIONS: { value: ModelMode; label: string; desc: string }[] = [
 // ---------------------------------------------------------------------------
 
 const api = {
-  get: async <T>(path: string, params?: Record<string, string | number>) => {
+  get: async <T,>(path: string, params?: Record<string, string | number>) => {
     const url = new URL(`/api/research${path}`, window.location.origin)
     if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, String(v)))
     const res = await fetch(url.toString())
@@ -890,7 +890,7 @@ function TopFeaturesPanel({ data, isLoading }: { data: MetricsResponse | undefin
               <div key={f.feature_name} style={{ marginBottom: 6 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
                   <span style={{ fontSize: 11, color: '#9ca3af', fontFamily: 'monospace' }}>{i+1}. {f.feature_name}</span>
-                  <span style={{ fontSize: 11, color: col, fontFamily: 'monospace' }}>{f.mean_ic > 0 ? '+' : ''}{f.mean_ic.toFixed(4)}</span>
+                  <span style={{ fontSize: 11, color: col, fontFamily: 'monospace' }}>{parseFloat(String(f.mean_ic)) > 0 ? '+' : ''} + {parseFloat(String(f.mean_ic)).toFixed(4)}</span>
                 </div>
                 <div style={{ height: 3, background: '#1f2937', borderRadius: 2 }}>
                   <div style={{ width: `${pct}%`, height: '100%', background: col, borderRadius: 2, transition: 'width 0.4s ease' }} />

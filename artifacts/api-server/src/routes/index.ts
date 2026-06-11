@@ -8,6 +8,8 @@ import backtestRouter from "./backtest";
 import cacheRouter from "./cache";
 import researchRouter from "./research";
 import { mlResearchRouter } from "./research-ml";
+import { mlSignalRouter } from './research-signal';
+import { patternStatsRouter } from './research-patterns';
 import alertsRouter from "./alerts";
 import botRouter from "./bot";
 
@@ -22,6 +24,8 @@ router.use(backtestRouter);
 router.use(cacheRouter);
 router.use(researchRouter);
 router.use('/research', mlResearchRouter);
+router.use('/research', mlSignalRouter);
+router.use('/research', patternStatsRouter);
 router.use(alertsRouter);
 router.use(botRouter);
 
