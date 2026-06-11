@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import MLSignalBadge from "@/components/MLSignalBadge";
 import ConditionalNarrative from "@/components/ConditionalNarrative";
+import SectorRotationBadge from "@/components/SectorRotationBadge";
 
 interface BacktestPoint  { x: number; y: number; date: string; }
 interface BacktestBucket { count: number; hitRate: number | null; avgReturn: number | null; }
@@ -1514,6 +1515,7 @@ export default function Dashboard() {
               <ScoreGauge score={displayAnalysis.atlasScore.overall} size={220} strokeWidth={18} />
               <MLSignalBadge ticker={urlTicker} className="mt-4 w-full" />
               <ConditionalNarrative ticker={urlTicker} className="mt-3 w-full" />
+              <SectorRotationBadge className="mt-2 w-full" />
 
               <div className="mt-6 flex items-center justify-center gap-2">
                 {displayAnalysis.atlasScore.direction === "bullish" ? <TrendingUp className="text-success w-6 h-6" /> :

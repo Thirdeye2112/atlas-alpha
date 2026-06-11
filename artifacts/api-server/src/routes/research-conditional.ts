@@ -183,6 +183,14 @@ const SPY_BARS_SQL = `
   LIMIT 15
 `
 
+const CALENDAR_CONTEXT_SQL = `
+  SELECT date::text AS event_date, event_type, description
+  FROM market_calendar
+  WHERE date BETWEEN CURRENT_DATE - INTERVAL '7 days'
+                 AND CURRENT_DATE + INTERVAL '35 days'
+  ORDER BY date ASC
+`
+
 const SPY_PATTERN_RESULTS_SQL = `
   SELECT
     cp.name            AS pattern_name,
@@ -285,9 +293,55 @@ export const conditionalRouter = Router()
 // GET /api/research/conditional/spy
 // Current SPY streak + historical reversal odds from backtest data.
 // ---------------------------------------------------------------------------
+function buildCalendarContext(events: { event_date: string; event_type: string; description: string }[]) {
+  const today = new Date(); today.setHours(0,0,0,0)
+
+  // days_to_fomc: signed (negative = past)
+  const fomcEvents = events.filter(e => e.event_type === 'fomc_meeting')
+  let daysToFomc: number | null = null
+  for (const e of fomcEvents) {
+    const d = new Date(e.event_date); d.setHours(0,0,0,0)
+    const diff = Math.round((d.getTime() - today.getTime()) / 86_400_000)
+    if (daysToFomc === null || Math.abs(diff) < Math.abs(daysToFomc)) daysToFomc = diff
+  }
+
+  // is_opex_week: today's ISO week contains an options_expiry date
+  const getMonday = (d: Date) => {
+    const copy = new Date(d); copy.setHours(0,0,0,0)
+    const day = copy.getDay(); const diff = (day === 0 ? -6 : 1 - day)
+    copy.setDate(copy.getDate() + diff)
+    return copy.toISOString().split('T')[0]
+  }
+  const todayMonday = getMonday(today)
+  const isOpexWeek = events.some(e => e.event_type === 'options_expiry' && getMonday(new Date(e.event_date)) === todayMonday)
+  const isTripleWitchingWeek = events.some(e => e.event_type === 'triple_witching' && getMonday(new Date(e.event_date)) === todayMonday)
+
+  // is_month_end: today is in last 5 calendar days of month
+  const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate()
+  const isMonthEnd = today.getDate() >= lastDay - 4
+
+  // is_quarter_end
+  const qEndMonths = [2, 5, 8, 11] // 0-indexed March/June/Sep/Dec
+  const isQuarterEnd = qEndMonths.includes(today.getMonth()) && today.getDate() >= lastDay - 4
+
+  // next upcoming event
+  const future = events.filter(e => new Date(e.event_date) > today)
+  const nextEvent = future.length ? {
+    type: future[0].event_type,
+    date: future[0].event_date,
+    days_away: Math.round((new Date(future[0].event_date).getTime() - today.getTime()) / 86_400_000),
+    description: future[0].description,
+  } : null
+
+  return { days_to_fomc: daysToFomc, is_opex_week: isOpexWeek, is_month_end: isMonthEnd, is_quarter_end: isQuarterEnd, is_triple_witching_week: isTripleWitchingWeek, next_event: nextEvent }
+}
+
 conditionalRouter.get('/conditional/spy', async (req, res) => {
   try {
-    const bars = await query<BarRow>(SPY_BARS_SQL)
+    const [bars, calEvents] = await Promise.all([
+      query<BarRow>(SPY_BARS_SQL),
+      query<{ event_date: string; event_type: string; description: string }>(CALENDAR_CONTEXT_SQL).catch(() => []),
+    ])
     if (!bars.length) {
       res.json({ available: false, reason: 'No SPY price data' })
       return
@@ -338,6 +392,8 @@ conditionalRouter.get('/conditional/spy', async (req, res) => {
       }
     }
 
+    const calendarContext = buildCalendarContext(calEvents)
+
     res.json({
       available: true,
       as_of: latest.date,
@@ -351,6 +407,7 @@ conditionalRouter.get('/conditional/spy', async (req, res) => {
       },
       best_5d: best5d,
       outcomes,
+      calendar_context: calendarContext,
     })
   } catch (err: unknown) {
     console.error('[research-conditional] spy failed:', err)

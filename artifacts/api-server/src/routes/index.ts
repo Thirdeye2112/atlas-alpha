@@ -11,6 +11,7 @@ import { mlResearchRouter } from "./research-ml";
 import { mlSignalRouter } from './research-signal';
 import { patternStatsRouter } from './research-patterns';
 import { conditionalRouter } from './research-conditional';
+import { sectorsRouter } from './research-sectors';
 import alertsRouter from "./alerts";
 import botRouter from "./bot";
 
@@ -28,6 +29,7 @@ router.use('/research', mlResearchRouter);
 router.use('/research', mlSignalRouter);
 router.use('/research', patternStatsRouter);
 router.use('/research', conditionalRouter);
+router.use('/research', sectorsRouter);
 router.use(alertsRouter);
 router.use(botRouter);
 
