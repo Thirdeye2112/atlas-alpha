@@ -16,6 +16,7 @@ import { Search, Info, TrendingUp, TrendingDown, Minus, Clock, X, ChevronDown, C
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import MLSignalBadge from "@/components/MLSignalBadge";
+import ConditionalNarrative from "@/components/ConditionalNarrative";
 
 interface BacktestPoint  { x: number; y: number; date: string; }
 interface BacktestBucket { count: number; hitRate: number | null; avgReturn: number | null; }
@@ -1512,6 +1513,7 @@ export default function Dashboard() {
             <div className="p-6 flex flex-col items-center border-b border-border">
               <ScoreGauge score={displayAnalysis.atlasScore.overall} size={220} strokeWidth={18} />
               <MLSignalBadge ticker={urlTicker} className="mt-4 w-full" />
+              <ConditionalNarrative ticker={urlTicker} className="mt-3 w-full" />
 
               <div className="mt-6 flex items-center justify-center gap-2">
                 {displayAnalysis.atlasScore.direction === "bullish" ? <TrendingUp className="text-success w-6 h-6" /> :
