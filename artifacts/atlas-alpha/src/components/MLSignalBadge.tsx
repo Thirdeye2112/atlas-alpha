@@ -37,16 +37,18 @@ export function MLSignalBadge({ ticker, className = "" }: { ticker?: string; cla
   const conf = signal.ml_confidence!=null?`${Math.round(signal.ml_confidence*100)}%`:"—"
   const ic = signal.wf_mean_ic
   const edgeLabel = ic==null?null:ic<0.02?"Early stage":ic<0.04?"Developing":ic<0.06?"Moderate edge":"Strong edge"
-  const omniColor = signal.omni_green==null?C.dim:signal.omni_green?C.BULLISH:C.BEARISH
-  const omniLabel = signal.omni_green==null?"—":signal.omni_green?"Green":"Red"
-  const omniDist = signal.omni_distance_pct!=null?`${signal.omni_distance_pct>=0?"+":""}${signal.omni_distance_pct.toFixed(1)}%`:"—"
+  const jarvisGreen = signal.jarvis_green ?? signal.omni_green
+  const jarvisDist  = signal.jarvis_distance_pct ?? signal.omni_distance_pct
+  const jarvisColor = jarvisGreen==null?C.dim:jarvisGreen?C.BULLISH:C.BEARISH
+  const jarvisLabel = jarvisGreen==null?"—":jarvisGreen?"Green":"Red"
+  const jarvisDistFmt = jarvisDist!=null?`${jarvisDist>=0?"+":""}${jarvisDist.toFixed(1)}%`:"—"
   return (
     <div className={className} style={{padding:"10px 12px",borderRadius:6,border:`1px solid ${C.border}`,backgroundColor:C.bg,display:"flex",flexDirection:"column",gap:8}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:9,color:C.dim,letterSpacing:"0.08em",fontWeight:600,textTransform:"uppercase"}}>ML Signal</span><span style={{fontSize:9,color:C.dim}}>{signal.date}</span></div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><Pill s={signal.ml_signal_strength}/><Arrow d={signal.ml_direction}/></div>
       <PBar p={signal.ml_probability_positive}/>
       <div style={{display:"flex",flexDirection:"column",gap:4}}><Row label="Rank" value={rank}/><Row label="Exp 5d" value={ret}/><Row label="Confidence" value={conf}/></div>
-      {signal.omni_green!=null&&<div style={{paddingTop:6,borderTop:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}><div style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:7,height:7,borderRadius:"50%",backgroundColor:omniColor,flexShrink:0}}/><span style={{fontSize:9,color:C.dim}}>OMNI (82)</span></div><span style={{fontSize:10,color:omniColor,fontWeight:600}}>{omniLabel} {omniDist}</span></div>}
+      {jarvisGreen!=null&&<div style={{paddingTop:6,borderTop:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}><div style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:7,height:7,borderRadius:"50%",backgroundColor:jarvisColor,flexShrink:0}}/><span style={{fontSize:9,color:C.dim}}>Jarvis</span></div><span style={{fontSize:10,color:jarvisColor,fontWeight:600}}>{jarvisLabel} {jarvisDistFmt}</span></div>}
       {ic!=null&&edgeLabel&&<div style={{paddingTop:6,borderTop:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between"}}><span style={{fontSize:9,color:C.dim}}>Model edge (WF IC {ic.toFixed(3)})</span><span style={{fontSize:9,color:C.dim}}>{edgeLabel}</span></div>}
     </div>
   )

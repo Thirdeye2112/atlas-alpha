@@ -27,6 +27,9 @@ import { formatCurrency, formatPercent, getBgColorForScore } from "@/lib/formatt
 import { cn } from "@/lib/utils";
 import { Link } from "wouter";
 import { ChevronUp, ChevronDown, ChevronsUpDown, FlaskConical, RotateCcw, X } from "lucide-react";
+import { useMLSignals, type MLSignal } from "@/hooks/useMLSignal";
+
+type JarvisFilter = "ALL" | "LONG" | "SHORT" | "JARVIS";
 
 type SortCol =
   | "ticker" | "name" | "price" | "changePercent" | "gapPercent"
@@ -214,6 +217,7 @@ function ScannerTable({
   const [sortCol, setSortCol] = useState<SortCol | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [previewRow, setPreviewRow] = useState<ScannerResult | null>(null);
+  const [jarvisFilter, setJarvisFilter] = useState<JarvisFilter>("ALL");
 
   // ── Backtest state ──────────────────────────────────────────────────────────
   const [icMap, setIcMap]     = useState<Map<string, IcEntry>>(new Map());
@@ -239,6 +243,27 @@ function ScannerTable({
   const hasDistorted = (data as Array<ScannerResult & { isDistorted?: boolean }>).some(r => r.isDistorted);
 
   const tickers = useMemo(() => data.map(r => r.ticker), [data]);
+
+  // ML signals for Jarvis filter
+  const { signalMap, getSignal } = useMLSignals(tickers);
+
+  function passesJarvisFilter(ticker: string): boolean {
+    if (jarvisFilter === "ALL") return true;
+    const s = getSignal(ticker);
+    if (!s.available) return false;
+    const rank = s.ml_rank_percentile ?? 50;
+    const dir  = s.ml_direction;
+    const jg   = s.jarvis_green ?? s.omni_green;
+    if (jarvisFilter === "LONG")   return jg === true  && rank > 65 && dir === "BULLISH";
+    if (jarvisFilter === "SHORT")  return jg === false && rank < 35 && dir === "BEARISH";
+    if (jarvisFilter === "JARVIS") return jg === true  && rank > 75;
+    return true;
+  }
+
+  // Count badges
+  const longCount   = tickers.filter(t => { const s = getSignal(t); return s.available && (s.jarvis_green ?? s.omni_green) === true  && (s.ml_rank_percentile ?? 50) > 65 && s.ml_direction === "BULLISH"; }).length;
+  const shortCount  = tickers.filter(t => { const s = getSignal(t); return s.available && (s.jarvis_green ?? s.omni_green) === false && (s.ml_rank_percentile ?? 50) < 35 && s.ml_direction === "BEARISH"; }).length;
+  const jarvisCount = tickers.filter(t => { const s = getSignal(t); return s.available && (s.jarvis_green ?? s.omni_green) === true  && (s.ml_rank_percentile ?? 50) > 75; }).length;
 
   const runBacktest = useCallback(async () => {
     if (abortRef.current) abortRef.current.abort();
@@ -296,8 +321,9 @@ function ScannerTable({
   // ── Sort ────────────────────────────────────────────────────────────────────
 
   const sorted = useMemo(() => {
-    if (!sortCol) return data;
-    return [...data].sort((a, b) => {
+    const filtered = jarvisFilter === "ALL" ? data : data.filter(r => passesJarvisFilter(r.ticker));
+    if (!sortCol) return filtered;
+    return [...filtered].sort((a, b) => {
       let av: string | number;
       let bv: string | number;
       if (sortCol === "rankIC") {
@@ -312,7 +338,8 @@ function ScannerTable({
         : String(av).localeCompare(String(bv));
       return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [data, sortCol, sortDir, icMap]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, sortCol, sortDir, icMap, jarvisFilter, signalMap]);
 
   const thProps = { sortCol, sortDir, onSort: handleSort };
 
@@ -393,6 +420,33 @@ function ScannerTable({
         </div>
       )}
 
+      {/* Jarvis filter preset buttons */}
+      {data.length > 0 && (
+        <div className="px-3 py-1.5 border-b border-border bg-zinc-950/40 flex items-center gap-1.5 flex-wrap shrink-0 text-[11px] font-mono">
+          {([
+            { key: "ALL",    label: "All",           count: data.length,  accent: "text-muted-foreground" },
+            { key: "LONG",   label: "Long Ideas",   count: longCount,    accent: "text-emerald-400" },
+            { key: "SHORT",  label: "Short Ideas",  count: shortCount,   accent: "text-rose-400" },
+            { key: "JARVIS", label: "Jarvis + ML",  count: jarvisCount,  accent: "text-primary" },
+          ] as { key: JarvisFilter; label: string; count: number; accent: string }[]).map(f => (
+            <button
+              key={f.key}
+              onClick={() => setJarvisFilter(f.key)}
+              className={cn(
+                "px-2 py-0.5 rounded border transition-colors",
+                jarvisFilter === f.key
+                  ? "border-primary/50 bg-primary/10 text-primary"
+                  : "border-border/40 text-muted-foreground hover:border-border hover:text-foreground"
+              )}
+            >
+              {f.key === "LONG" ? "🟢 " : f.key === "SHORT" ? "🔴 " : f.key === "JARVIS" ? "⭐ " : ""}
+              {f.label}
+              <span className={cn("ml-1 opacity-70", f.accent)}>({f.count})</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Distorted ETF disclaimer — shown when leveraged/volatility ETFs appear in results */}
       {hasDistorted && (
         <div className="px-4 py-2 border-b border-warning/20 bg-warning/5 text-[10px] font-mono text-warning/80 flex items-center gap-2">
@@ -401,9 +455,9 @@ function ScannerTable({
         </div>
       )}
 
-      {data.length === 0 && complete ? (
+      {sorted.length === 0 && (data.length === 0 ? complete : true) ? (
         <div className="p-8 text-center text-muted-foreground font-mono text-sm">
-          NO RESULTS FOUND FOR CURRENT CRITERIA
+          {data.length === 0 ? "NO RESULTS FOUND FOR CURRENT CRITERIA" : "NO RESULTS MATCH CURRENT FILTER"}
         </div>
       ) : (
         <table className="w-full text-sm font-mono text-left">

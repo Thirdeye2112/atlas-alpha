@@ -191,6 +191,14 @@ const OMNI_FEATURES_SQL = `
     AND feature_name IN ('omni_82_above', 'omni_82_distance', 'omni_82_slope', 'omni_82_value')
 `
 
+const OMNI_BATCH_SQL = `
+  SELECT DISTINCT ON (ticker) ticker, feature_value
+  FROM feature_snapshots
+  WHERE ticker = ANY($1)
+    AND feature_name = 'omni_82_above'
+  ORDER BY ticker, date DESC
+`
+
 // ── Router ────────────────────────────────────────────────────────────────────
 
 export const mlSignalRouter = Router()
@@ -235,6 +243,9 @@ mlSignalRouter.get('/signal/:ticker', async (req, res) => {
         omni_green:              null,
         omni_distance_pct:       null,
         omni_slope:              null,
+        jarvis_green:            null,
+        jarvis_distance_pct:     null,
+        jarvis_slope:            null,
       })
       return
     }
@@ -265,6 +276,9 @@ mlSignalRouter.get('/signal/:ticker', async (req, res) => {
       omni_green:              omniAbove != null ? omniAbove > 0.5 : null,
       omni_distance_pct:       omniDist ?? null,
       omni_slope:              omniSlope ?? null,
+      jarvis_green:            omniAbove != null ? omniAbove > 0.5 : null,
+      jarvis_distance_pct:     omniDist ?? null,
+      jarvis_slope:            omniSlope ?? null,
     })
   } catch (err: unknown) {
     req.log?.error({ err }, 'research.signal.ticker failed')
@@ -290,25 +304,37 @@ mlSignalRouter.get('/signals', async (req, res) => {
       .filter(t => t.length > 0)
       .slice(0, 200)  // cap at 200
 
-    const rows = await query<{
-      ticker: string; date: string
-      expected_return: number | null; probability_positive: number | null
-      expected_drawdown: number | null; confidence: number | null
-      rank_percentile: number | null; wf_mean_ic: number | null
-    }>(SIGNAL_BATCH_SQL, [tickers])
+    const [rows, omniRows] = await Promise.all([
+      query<{
+        ticker: string; date: string
+        expected_return: number | null; probability_positive: number | null
+        expected_drawdown: number | null; confidence: number | null
+        rank_percentile: number | null; wf_mean_ic: number | null
+      }>(SIGNAL_BATCH_SQL, [tickers]),
+      query<{ ticker: string; feature_value: number | null }>(OMNI_BATCH_SQL, [tickers]),
+    ])
 
-    const signals = rows.map(r => ({
-      ticker:                  r.ticker,
-      date:                    r.date,
-      ml_rank_percentile: r.rank_percentile != null ? r.rank_percentile * 100 : null,
-      ml_expected_return_5d:   r.expected_return,
-      ml_probability_positive: r.probability_positive,
-      ml_confidence:           r.confidence,
-      ml_expected_drawdown:    r.expected_drawdown,
-      ml_signal_strength:      classifyStrength(r.rank_percentile, r.confidence, r.wf_mean_ic),
-      ml_direction:            classifyDirection(r.rank_percentile, r.probability_positive),
-      available:               true,
-    }))
+    const omniMap = new Map<string, number | null>()
+    for (const row of omniRows) omniMap.set(row.ticker, row.feature_value)
+
+    const signals = rows.map(r => {
+      const omniAbove = omniMap.get(r.ticker) ?? null
+      const jarvisGreen = omniAbove != null ? omniAbove > 0.5 : null
+      return {
+        ticker:                  r.ticker,
+        date:                    r.date,
+        ml_rank_percentile: r.rank_percentile != null ? r.rank_percentile * 100 : null,
+        ml_expected_return_5d:   r.expected_return,
+        ml_probability_positive: r.probability_positive,
+        ml_confidence:           r.confidence,
+        ml_expected_drawdown:    r.expected_drawdown,
+        ml_signal_strength:      classifyStrength(r.rank_percentile, r.confidence, r.wf_mean_ic),
+        ml_direction:            classifyDirection(r.rank_percentile, r.probability_positive),
+        jarvis_green:            jarvisGreen,
+        omni_green:              jarvisGreen,
+        available:               true,
+      }
+    })
 
     // Add empty entries for tickers with no prediction
     const found = new Set(signals.map(s => s.ticker))
@@ -320,6 +346,7 @@ mlSignalRouter.get('/signals', async (req, res) => {
           ml_probability_positive: null, ml_confidence: null,
           ml_expected_drawdown: null,
           ml_signal_strength: 'NEUTRAL', ml_direction: 'NEUTRAL',
+          jarvis_green: null, omni_green: null,
           available: false,
         })
       }
