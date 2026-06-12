@@ -36,7 +36,7 @@ export function MLSignalBadge({ ticker, className = "" }: { ticker?: string; cla
   const ret = signal.ml_expected_return_5d!=null?`${((Math.exp(signal.ml_expected_return_5d)-1)*100)>=0?"+":""}${((Math.exp(signal.ml_expected_return_5d)-1)*100).toFixed(1)}%`:"—"
   const conf = signal.ml_confidence!=null?`${Math.round(signal.ml_confidence*100)}%`:"—"
   const ic = signal.wf_mean_ic
-  const edgeLabel = ic==null?null:ic<0.02?"Developing":ic<0.04?"Moderate":"Improving"
+  const edgeLabel = ic==null?null:ic<0.02?"Early stage":ic<0.04?"Developing":ic<0.06?"Moderate edge":"Strong edge"
   const omniColor = signal.omni_green==null?C.dim:signal.omni_green?C.BULLISH:C.BEARISH
   const omniLabel = signal.omni_green==null?"—":signal.omni_green?"Green":"Red"
   const omniDist = signal.omni_distance_pct!=null?`${signal.omni_distance_pct>=0?"+":""}${signal.omni_distance_pct.toFixed(1)}%`:"—"
