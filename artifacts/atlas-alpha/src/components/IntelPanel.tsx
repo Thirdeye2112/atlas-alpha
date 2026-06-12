@@ -4,6 +4,7 @@ import { useMLSignal } from "@/hooks/useMLSignal"
 import { useSPYContext } from "@/hooks/useConditionalContext"
 import { useQuery } from "@tanstack/react-query"
 import SignalTargets from "./SignalTargets"
+import IPOAnalysis from "./IPOAnalysis"
 
 interface Analysis {
   atlasScore: {
@@ -184,6 +185,9 @@ export function IntelPanel({ ticker, analysis }: Props) {
                 </span>
               </div>
             )}
+
+            {/* IPO analysis — renders null for non-IPO tickers */}
+            <IPOAnalysis ticker={ticker} />
           </div>
         )}
 
