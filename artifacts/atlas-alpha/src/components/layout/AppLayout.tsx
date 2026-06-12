@@ -68,7 +68,7 @@ function MarketBar() {
         </>
       )}
       <div className="w-px h-4 bg-border" />
-      <div className="text-muted-foreground">ATLAS ALPHA V0.1.0</div>
+      <div className="text-muted-foreground/40 text-[10px] tracking-widest">V0.1.0</div>
     </div>
   );
 }
@@ -108,8 +108,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const navItems = [
     { href: "/",        label: "Dashboard", icon: LayoutDashboard },
     { href: "/scanner", label: "Scanner",   icon: Radar },
-    { href: "/backtest",label: "Lab",       icon: TestTube2 },
-    { href: "/bot",     label: "Bot Lab",   icon: BotIcon },
+    { href: "/backtest",label: "Research",  icon: TestTube2 },
+    { href: "/bot",     label: "Bot",       icon: BotIcon },
   ];
 
   return (
@@ -120,19 +120,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <Activity className="w-6 h-6 text-primary" />
           <span className="font-display text-xl tracking-wider text-primary">ATLAS ALPHA</span>
         </div>
-        <nav className="flex items-center gap-1">
-          {navItems.map((item) => {
+        <nav className="flex items-center gap-0.5">
+          {navItems.map((item, idx) => {
             const active = location === item.href || (item.href !== "/" && location.startsWith(item.href));
             return (
-              <Link key={item.href} href={item.href} className={cn(
-                "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
-                active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"
-              )}>
-                <item.icon className="w-4 h-4" />
-                {item.label}
-              </Link>
+              <React.Fragment key={item.href}>
+                {idx === 2 && <div className="w-px h-5 bg-border/60 mx-1.5" />}
+                <Link href={item.href} className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-mono font-medium tracking-wide transition-colors",
+                  active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                )}>
+                  <item.icon className="w-3.5 h-3.5" />
+                  {item.label}
+                </Link>
+              </React.Fragment>
             );
           })}
+          <div className="w-px h-5 bg-border/60 mx-1" />
           <AlertBell />
         </nav>
       </header>

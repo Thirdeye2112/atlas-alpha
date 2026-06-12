@@ -18,6 +18,68 @@ import { cn } from "@/lib/utils";
 import MLSignalBadge from "@/components/MLSignalBadge";
 import ConditionalNarrative from "@/components/ConditionalNarrative";
 import SectorRotationBadge from "@/components/SectorRotationBadge";
+import { useSPYContext } from "@/hooks/useConditionalContext";
+
+type SignalTab = "ml" | "context" | "sector";
+const SIGNAL_TABS: { key: SignalTab; label: string }[] = [
+  { key: "ml",      label: "ML" },
+  { key: "context", label: "CONTEXT" },
+  { key: "sector",  label: "SECTOR" },
+];
+
+function SignalContextTabs({ ticker }: { ticker: string }) {
+  const [tabOverride, setTabOverride] = useState<SignalTab | null>(null);
+
+  // Data for intelligent default selection
+  const { spyContext, streakActive } = useSPYContext();
+  const { data: sectorSnap } = useQuery({
+    queryKey: ['sector-snapshot'],
+    queryFn: () => fetch('/api/research/sectors/snapshot').then(r => r.json() as Promise<{ available: boolean; regime: string }>),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Reset override when ticker changes so auto-default recalculates
+  useEffect(() => { setTabOverride(null); }, [ticker]);
+
+  // Auto-default: bear streak ≥4d → CONTEXT; non-neutral regime → SECTOR; else ML
+  const autoTab = useMemo((): SignalTab => {
+    const streak = spyContext.streak;
+    if (streakActive && streak?.direction === "down" && (streak?.days ?? 0) >= 4) return "context";
+    if (sectorSnap?.available && sectorSnap?.regime !== "neutral") return "sector";
+    return "ml";
+  }, [spyContext, streakActive, sectorSnap]);
+
+  const tab = tabOverride ?? autoTab;
+
+  return (
+    <div className="w-full">
+      {/* Tab bar — sharp Bloomberg-style, border-bottom accent only, no border-radius */}
+      <div className="flex" style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+        {SIGNAL_TABS.map(t => (
+          <button
+            key={t.key}
+            onClick={() => setTabOverride(t.key)}
+            style={{ borderRadius: 0 }}
+            className={cn(
+              "flex-1 py-1.5 text-[10px] font-mono font-bold tracking-widest uppercase transition-colors",
+              "border-b-2 -mb-px",
+              tab === t.key
+                ? "text-primary border-primary"
+                : "text-muted-foreground/40 border-transparent hover:text-muted-foreground/70 hover:border-border"
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <div className="mt-2 min-h-[48px]">
+        {tab === "ml"      && <MLSignalBadge ticker={ticker} className="w-full" />}
+        {tab === "context" && <ConditionalNarrative ticker={ticker} className="w-full" />}
+        {tab === "sector"  && <SectorRotationBadge className="w-full" />}
+      </div>
+    </div>
+  );
+}
 
 interface BacktestPoint  { x: number; y: number; date: string; }
 interface BacktestBucket { count: number; hitRate: number | null; avgReturn: number | null; }
@@ -1513,9 +1575,9 @@ export default function Dashboard() {
           <>
             <div className="p-6 flex flex-col items-center border-b border-border">
               <ScoreGauge score={displayAnalysis.atlasScore.overall} size={220} strokeWidth={18} />
-              <MLSignalBadge ticker={urlTicker} className="mt-4 w-full" />
-              <ConditionalNarrative ticker={urlTicker} className="mt-3 w-full" />
-              <SectorRotationBadge className="mt-2 w-full" />
+              <div className="mt-4 w-full">
+                <SignalContextTabs ticker={urlTicker} />
+              </div>
 
               <div className="mt-6 flex items-center justify-center gap-2">
                 {displayAnalysis.atlasScore.direction === "bullish" ? <TrendingUp className="text-success w-6 h-6" /> :

@@ -1167,7 +1167,7 @@ export default function Scanner() {
                   <div className="border-b border-warning/30 bg-warning/5 px-4 py-2.5 text-xs font-mono text-muted-foreground leading-relaxed shrink-0">
                     <span className="text-warning font-bold mr-2">GAP SETUP — LONG</span>
                     Stocks primed to gap UP · ATR ≥ 3.2% · BB Width ≥ 15% · RVOL ≥ 1.2× · RSI &lt; 70 · sorted by ATR% × RVOL.{" "}
-                    <Link href="/backtest" className="text-warning/80 hover:text-warning underline decoration-dotted underline-offset-2">→ Gap Factor Research in Lab</Link>
+                    <Link href="/backtest" className="text-warning/80 hover:text-warning underline decoration-dotted underline-offset-2">→ Gap Factor Research</Link>
                   </div>
                   <ScannerTable response={gapSetupLong} isLoading={gslLoading} showGapScore />
                 </div>
@@ -1197,7 +1197,7 @@ export default function Scanner() {
                   <div className="border-b border-warning/30 bg-warning/5 px-4 py-2.5 text-xs font-mono text-muted-foreground leading-relaxed shrink-0">
                     <span className="text-warning font-bold mr-2">GAP SETUP — SHORT</span>
                     Stocks primed to gap DOWN · extended above SMA200 is the strongest predictor (+0.64σ) · ATR ≥ 3.2% · BB ≥ 15% · RVOL ≥ 1.2×.{" "}
-                    <Link href="/backtest" className="text-warning/80 hover:text-warning underline decoration-dotted underline-offset-2">→ Gap Factor Research in Lab</Link>
+                    <Link href="/backtest" className="text-warning/80 hover:text-warning underline decoration-dotted underline-offset-2">→ Gap Factor Research</Link>
                   </div>
                   <ScannerTable response={gapSetupShort} isLoading={gssLoading} showGapScore />
                 </div>

@@ -2320,7 +2320,7 @@ export default function BotLab() {
 
       {/* Tabs */}
       <Tabs defaultValue="config" className="flex-1 flex flex-col min-h-0">
-        <TabsList className="bg-card border border-border w-full justify-start h-auto flex-wrap p-1 gap-1">
+        <TabsList className="bg-card border border-border w-full justify-start h-auto p-1 gap-0.5">
           <TabsTrigger value="config"    className="font-mono text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">CONFIG</TabsTrigger>
           <TabsTrigger value="positions" className="font-mono text-xs data-[state=active]:bg-success data-[state=active]:text-success-foreground">
             POSITIONS {openCount > 0 && <span className="ml-1 bg-success/20 text-success rounded-full px-1.5 text-[10px]">{openCount}</span>}
@@ -2328,6 +2328,7 @@ export default function BotLab() {
           <TabsTrigger value="history"   className="font-mono text-xs data-[state=active]:bg-muted-foreground data-[state=active]:text-background">
             HISTORY {closedCount > 0 && <span className="ml-1 opacity-70">({closedCount})</span>}
           </TabsTrigger>
+          <div className="w-px h-5 bg-border/60 mx-1 self-center" />
           <TabsTrigger value="ai-brain"  className="font-mono text-xs data-[state=active]:bg-violet-700 data-[state=active]:text-white">
             ✦ AI BRAIN
           </TabsTrigger>

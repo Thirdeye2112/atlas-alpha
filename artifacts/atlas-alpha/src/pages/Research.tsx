@@ -982,7 +982,7 @@ export default function ResearchLab() {
   const hasError = metricsQuery.isError || predictionsQuery.isError
 
   return (
-    <div style={{ minHeight: '100vh', background: '#030712', color: '#e5e7eb', fontFamily: '"JetBrains Mono", "Fira Code", "Cascadia Code", monospace' }}>
+    <div className="flex-1 overflow-y-auto" style={{ color: '#e5e7eb', fontFamily: '"JetBrains Mono", "Fira Code", "Cascadia Code", monospace' }}>
       <style>{`
         @keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
         @keyframes slideIn { from{transform:translateX(100%)} to{transform:translateX(0)} }
@@ -993,16 +993,16 @@ export default function ResearchLab() {
         ::-webkit-scrollbar-thumb:hover{background:#4b5563}
       `}</style>
 
-      {/* Page header */}
-      <div style={{ borderBottom: '1px solid #1f2937', padding: '14px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#080e1a', position: 'sticky', top: 0, zIndex: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#f9fafb', letterSpacing: '0.05em' }}>◈ RESEARCH LAB</div>
-            <div style={{ fontSize: 10, color: '#374151', marginTop: 1 }}>Read-only · atlas-research engine</div>
+      {/* Page header — matches AppLayout's card/border style */}
+      <div style={{ borderBottom: '1px solid #1e2533', padding: '12px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'hsl(222 20% 10%)', position: 'sticky', top: 0, zIndex: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+            <span style={{ fontSize: 16, fontWeight: 700, color: '#60a5fa', letterSpacing: '0.12em', fontFamily: '"Bebas Neue", sans-serif' }}>RESEARCH</span>
+            <span style={{ fontSize: 10, color: '#374151' }}>atlas-research · read-only</span>
           </div>
-          <div style={{ display: 'flex', gap: 2, marginLeft: 24 }}>
+          <div style={{ display: 'flex', gap: 2 }}>
             {(['predictions', 'models', 'runs'] as const).map(tab => (
-              <button key={tab} onClick={() => setActiveTab(tab)} style={{ background: activeTab === tab ? '#1f2937' : 'transparent', border: activeTab === tab ? '1px solid #374151' : '1px solid transparent', color: activeTab === tab ? '#e5e7eb' : '#4b5563', padding: '5px 12px', borderRadius: 4, cursor: 'pointer', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: 'inherit', transition: 'all 0.15s' }}>
+              <button key={tab} onClick={() => setActiveTab(tab)} style={{ background: activeTab === tab ? 'rgba(96,165,250,0.12)' : 'transparent', border: activeTab === tab ? '1px solid rgba(96,165,250,0.3)' : '1px solid transparent', color: activeTab === tab ? '#93c5fd' : '#4b5563', padding: '4px 12px', borderRadius: 4, cursor: 'pointer', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: 'inherit', transition: 'all 0.15s' }}>
                 {tab}
               </button>
             ))}
@@ -1012,7 +1012,7 @@ export default function ResearchLab() {
           {metricsQuery.data?.generatedAt && (
             <span style={{ fontSize: 10, color: '#374151' }}>Updated {fmt.dt(metricsQuery.data.generatedAt)}</span>
           )}
-          <button onClick={refetchAll} style={{ background: '#111827', border: '1px solid #374151', color: '#9ca3af', padding: '5px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontFamily: 'inherit' }}>
+          <button onClick={refetchAll} style={{ background: 'transparent', border: '1px solid #1e2533', color: '#6b7280', padding: '4px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 10, fontFamily: 'inherit', transition: 'all 0.15s' }}>
             ↺ Refresh
           </button>
         </div>
