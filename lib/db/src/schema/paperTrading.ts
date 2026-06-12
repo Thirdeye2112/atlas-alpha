@@ -114,3 +114,28 @@ export const patternPerformanceTable = pgTable("pattern_performance", {
 
 export type PatternPerformance = typeof patternPerformanceTable.$inferSelect;
 export type InsertPatternPerformance = typeof patternPerformanceTable.$inferInsert;
+
+// ── Position flip log — tracks reversal detection events ──────────────────────
+
+export const positionFlipsTable = pgTable("position_flips", {
+  id:             serial("id").primaryKey(),
+  ticker:         text("ticker").notNull(),
+  flipAt:         timestamp("flip_at", { withTimezone: true }).notNull().defaultNow(),
+  fromDirection:  text("from_direction").notNull(),  // 'bullish' | 'bearish'
+  toDirection:    text("to_direction").notNull(),
+  closePrice:     doublePrecision("close_price").notNull(),
+  closePnlPct:    doublePrecision("close_pnl_pct"),
+  openPrice:      doublePrecision("open_price").notNull(),
+  confidence:     integer("confidence").notNull(),
+  signalsFired:   jsonb("signals_fired").notNull().default([]),
+  reason:         text("reason"),
+  fromTradeId:    integer("from_trade_id"),
+  toTradeId:      integer("to_trade_id"),
+  createdAt:      timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("idx_position_flips_ticker").on(t.ticker),
+  index("idx_position_flips_flip_at").on(t.flipAt),
+]);
+
+export type PositionFlip = typeof positionFlipsTable.$inferSelect;
+export type InsertPositionFlip = typeof positionFlipsTable.$inferInsert;

@@ -1,4 +1,4 @@
-import { db, paperTradesTable, botConfigTable, patternPerformanceTable, type PaperTrade, type BotConfig } from "@workspace/db";
+import { db, paperTradesTable, botConfigTable, patternPerformanceTable, positionFlipsTable, type PaperTrade, type BotConfig } from "@workspace/db";
 import { eq, desc, and, sql } from "drizzle-orm";
 import Anthropic from "@anthropic-ai/sdk";
 import { getOrStartScanJob } from "./scanJob.js";
@@ -8,6 +8,7 @@ import { analysisCache } from "./cache.js";
 import { logger } from "./logger.js";
 import { getMarketContext, getIntelligenceVerdict, runSelfLearning, type MarketContext } from "./botIntelligence.js";
 import { calcReversalScore, computeReversalShortLevels } from "./reversalShort.js";
+import { detectReversal, computeFlipTargets } from "./reversal-detector.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -370,19 +371,21 @@ async function openPosition(
   scannerCategories?: string[],
   positionMultiplier = 1.0,
   decisionLog?: Record<string, unknown> | null,
-): Promise<void> {
+  directionOverride?: string,  // used for reversal flips when Atlas score hasn't caught up yet
+): Promise<number> {
   const price    = a.quote.price as number;
   const basePosValue = (config.virtualPortfolio * config.positionSizePct) / 100;
   const posValue = basePosValue * positionMultiplier;
   const shares   = posValue / price;
   const ticker   = a.quote.ticker as string;
+  const direction = directionOverride ?? a.atlasScore.direction;
 
-  await db.insert(paperTradesTable).values({
+  const [inserted] = await db.insert(paperTradesTable).values({
     ticker,
     name:               (a.quote.name as string) || ticker,
     entryPrice:         price,
     entryScore:         a.atlasScore.overall,
-    entryDirection:     a.atlasScore.direction,
+    entryDirection:     direction,
     entryBullishProb:   a.atlasScore.bullishProbability,
     entryRsi:           a.momentum.rsi,
     entryRvol:          a.volume.relativeVolume,
@@ -408,15 +411,18 @@ async function openPosition(
     status:             "open",
     aiNotes:            aiNotes ?? null,
     decisionLog:        decisionLog ?? null,
-  });
+  }).returning({ id: paperTradesTable.id });
 
   logger.info(
     { ticker, price, score: a.atlasScore.overall, trigger: levels.trigger,
       stop: levels.stopPrice.toFixed(2), target: levels.targetPrice.toFixed(2),
+      direction,
       categories: (scannerCategories ?? []).join(",") || "none",
       sizeMult: positionMultiplier.toFixed(2) },
     "Bot opened position",
   );
+
+  return inserted?.id ?? 0;
 }
 
 async function closePosition(
@@ -562,6 +568,64 @@ export async function checkOpenPositions(): Promise<void> {
         }
       }
 
+      // ── Reversal flip check (5-min) ─────────────────────────────────────────
+      let flipped5m = false;
+      try {
+        const rev = await detectReversal(trade, analysis);
+        if (rev.shouldFlip && rev.confidence >= 60) {
+          const newDir      = rev.newDirection;
+          const flipTargets = await computeFlipTargets(trade.ticker, price, newDir);
+          if (flipTargets) {
+            const score      = analysis.atlasScore.overall;
+            const closePnlPct = isShort
+              ? ((trade.entryPrice - price) / trade.entryPrice) * 100
+              : ((price - trade.entryPrice) / trade.entryPrice) * 100;
+
+            await closePosition(trade, price, score, "reversal_flip");
+
+            const flipDecisionLog = {
+              reversalSignals: rev.signals,
+              confidence:      rev.confidence,
+              totalPoints:     rev.totalPoints,
+              fromDirection:   trade.entryDirection,
+              toDirection:     newDir,
+            };
+            const newTradeId = await openPosition(
+              analysis, config, flipTargets,
+              `5-min flip (${rev.confidence}pts): ${rev.reason}`,
+              ["reversal_flip"],
+              1.0,
+              flipDecisionLog,
+              newDir,
+            );
+
+            await db.insert(positionFlipsTable).values({
+              ticker:        trade.ticker,
+              fromDirection: trade.entryDirection,
+              toDirection:   newDir,
+              closePrice:    price,
+              closePnlPct,
+              openPrice:     price,
+              confidence:    rev.confidence,
+              signalsFired:  rev.signals as unknown as Record<string, unknown>[],
+              reason:        rev.reason,
+              fromTradeId:   trade.id,
+              toTradeId:     newTradeId,
+            });
+
+            logger.info(
+              { ticker: trade.ticker, from: trade.entryDirection, to: newDir,
+                confidence: rev.confidence, source: "5min_checker" },
+              "5-min checker: position flip executed",
+            );
+            flipped5m = true;
+          }
+        }
+      } catch (err) {
+        logger.error({ err, ticker: trade.ticker }, "5-min reversal detection failed");
+      }
+      if (flipped5m) continue;
+
       // Stop hit → close position immediately
       const stopHit = isShort ? price >= newTrailingStop : price <= newTrailingStop;
       if (stopHit) {
@@ -703,6 +767,72 @@ export async function runBotCycle(): Promise<BotCycleResult> {
           })
           .where(eq(paperTradesTable.id, trade.id));
       }
+
+      // ── Reversal flip detection (runs before standard exits) ─────────────────
+      // If a high-confidence reversal is detected, close + reopen in opposite direction.
+      // This short-circuits the standard exit logic for this position.
+      let flipped = false;
+      try {
+        const rev = await detectReversal(trade, analysis);
+        if (rev.shouldFlip && rev.confidence >= 60) {
+          const newDir = rev.newDirection;
+          const flipTargets = await computeFlipTargets(trade.ticker, price, newDir);
+          if (flipTargets) {
+            // Record P&L of the closing leg
+            const closePnlPct = isShort
+              ? ((trade.entryPrice - price) / trade.entryPrice) * 100
+              : ((price - trade.entryPrice) / trade.entryPrice) * 100;
+
+            // Close existing position
+            await closePosition(trade, price, score, "reversal_flip");
+            exited.push(trade.ticker);
+
+            // Open flipped position immediately
+            const flipDecisionLog = {
+              reversalSignals: rev.signals,
+              confidence:      rev.confidence,
+              totalPoints:     rev.totalPoints,
+              fromDirection:   trade.entryDirection,
+              toDirection:     newDir,
+            };
+            const newTradeId = await openPosition(
+              analysis, config, flipTargets,
+              `Reversal flip (${rev.confidence}pts): ${rev.reason}`,
+              ["reversal_flip"],
+              1.0,
+              flipDecisionLog,
+              newDir,
+            );
+            newEntries.push(trade.ticker);
+
+            // Log to position_flips table
+            await db.insert(positionFlipsTable).values({
+              ticker:        trade.ticker,
+              fromDirection: trade.entryDirection,
+              toDirection:   newDir,
+              closePrice:    price,
+              closePnlPct,
+              openPrice:     price,
+              confidence:    rev.confidence,
+              signalsFired:  rev.signals as unknown as Record<string, unknown>[],
+              reason:        rev.reason,
+              fromTradeId:   trade.id,
+              toTradeId:     newTradeId,
+            });
+
+            logger.info(
+              { ticker: trade.ticker, from: trade.entryDirection, to: newDir,
+                confidence: rev.confidence, closePnl: closePnlPct.toFixed(2) },
+              "Bot: position flip executed",
+            );
+            flipped = true;
+          }
+        }
+      } catch (err) {
+        logger.error({ err, ticker: trade.ticker }, "Reversal detection failed — skipping flip");
+      }
+
+      if (flipped) continue;
 
       // ── Exit decision ────────────────────────────────────────────────────────
       let exitReason: string | null = null;

@@ -419,6 +419,7 @@ function ExitReasonBadge({ reason }: { reason: string | null }) {
     distribution_signal:  "bg-warning/25 text-warning border-warning/40",
     max_hold:             "bg-muted/40 text-muted-foreground border-border",
     manual:               "bg-primary/20 text-primary border-primary/30",
+    reversal_flip:        "bg-purple-500/20 text-purple-400 border-purple-500/40",
   };
   const labels: Record<string, string> = {
     take_profit:          "✓ TARGET HIT",
@@ -429,6 +430,7 @@ function ExitReasonBadge({ reason }: { reason: string | null }) {
     distribution_signal:  "⚠ DIST TOP",
     max_hold:             "MAX HOLD",
     manual:               "MANUAL",
+    reversal_flip:        "↔ FLIP",
   };
   return (
     <span className={cn("px-1.5 py-0.5 rounded border text-[10px] font-mono font-bold", styles[reason] ?? "bg-muted text-muted-foreground border-border")}>
@@ -1184,6 +1186,11 @@ function PositionsTab({ trades, onClose }: { trades: PaperTrade[]; onClose: (id:
                     )}>
                       {isShort ? "SHORT" : "LONG"}
                     </span>
+                    {t.entryTrigger === "reversal_flip" && (
+                      <span className="text-[9px] font-bold font-mono px-1 py-0.5 rounded border text-purple-400 border-purple-500/40 bg-purple-500/10">
+                        ↔ FLIP
+                      </span>
+                    )}
                     {!isShort && t.reversalRisk && t.reversalRisk.score >= 45 && (
                       <span
                         title={`Reversal signals: ${t.reversalRisk.triggers.join(", ")}`}
@@ -1387,13 +1394,27 @@ function HistoryTab({ trades }: { trades: PaperTrade[] }) {
                   title={t.decisionLog ? "Click to see why this trade was entered" : undefined}
                 >
                   <td className="py-2 px-2">
-                    <div className="font-bold text-foreground">{t.ticker}</div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-foreground">{t.ticker}</span>
+                      {t.entryTrigger === "reversal_flip" && (
+                        <span className="text-[9px] font-bold font-mono px-1 py-0.5 rounded border text-purple-400 border-purple-500/40 bg-purple-500/10">
+                          ↔ FLIP
+                        </span>
+                      )}
+                    </div>
                     <div className="text-muted-foreground/50 text-[10px] truncate max-w-[100px]">{t.name}</div>
                   </td>
                   <td className="text-right py-2 px-2 text-muted-foreground">{formatCurrency(t.entryPrice)}</td>
                   <td className="text-right py-2 px-2 text-muted-foreground">{t.exitPrice ? formatCurrency(t.exitPrice) : "—"}</td>
                   <td className="text-right py-2 px-2"><PnlBadge pct={t.pnlPercent} dollar={t.pnlDollar} /></td>
-                  <td className="py-2 px-2"><ExitReasonBadge reason={t.exitReason} /></td>
+                  <td className="py-2 px-2">
+                    <ExitReasonBadge reason={t.exitReason} />
+                    {t.exitReason === "reversal_flip" && (t.decisionLog as {confidence?: number} | null)?.confidence != null && (
+                      <span className="ml-1 text-[9px] font-mono text-purple-400/70">
+                        {(t.decisionLog as {confidence: number}).confidence}pts
+                      </span>
+                    )}
+                  </td>
                   <td className="py-2 px-2"><EntryTriggerBadge trigger={t.entryTrigger} /></td>
                   <td className="text-right py-2 px-2 text-muted-foreground">{(t.holdDays ?? 0)}d</td>
                   <td className="text-right py-2 px-2">
