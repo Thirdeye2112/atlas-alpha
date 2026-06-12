@@ -13,6 +13,7 @@ import {
   generateAiAnalysis,
   getBotRunState,
   computeSignalPerformance,
+  manualFlipPosition,
 } from "../lib/paperTradingEngine.js";
 import { getSchedulerState } from "../lib/botScheduler.js";
 import {
@@ -148,6 +149,20 @@ router.get("/bot/stats", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "GET /bot/stats failed");
     res.status(500).json({ error: "Failed to compute stats" });
+  }
+});
+
+router.post("/bot/trades/:id/flip", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid trade ID" }); return; }
+
+  try {
+    const result = await manualFlipPosition(id);
+    res.json(result);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    req.log.error({ err }, "POST /bot/trades/:id/flip failed");
+    res.status(400).json({ error: msg });
   }
 });
 

@@ -33,23 +33,28 @@ interface BotConfig {
 }
 
 interface DecisionLog {
-  regime:          string;
-  botRegime:       string;
-  regimeReason:    string;
-  adx:             number | null;
-  vix:             number | null;
-  breadth:         number | null;
-  subScores:       { trend: number; momentum: number; volume: number; rs: number; regime: number; options: number };
-  alignmentScore:  number;
-  confidenceScore: number;
-  calibProb:       number | null;
-  calibSignalMode: string;
-  calibRankIC:     number | null;
-  simHitRate:      number | null;
-  simN:            number;
-  gateResults:     { marketRegime: string; simGate: string; calibGate: string };
-  categories:      string[];
-  topFactors:      string[];
+  regime:             string;
+  botRegime:          string;
+  regimeReason:       string;
+  adx:                number | null;
+  vix:                number | null;
+  breadth:            number | null;
+  subScores:          { trend: number; momentum: number; volume: number; rs: number; regime: number; options: number };
+  alignmentScore:     number;
+  confidenceScore:    number;
+  calibProb:          number | null;
+  calibSignalMode:    string;
+  calibRankIC:        number | null;
+  simHitRate:         number | null;
+  simN:               number;
+  gateResults:        { marketRegime: string; simGate: string; calibGate: string };
+  categories:         string[];
+  topFactors:         string[];
+  // Reversal warning fields (added by bot when high-confidence reversal detected)
+  reversalWarning?:    boolean;
+  reversalConfidence?: number;
+  reversalSignals?:    string[];
+  reversalAt?:         string;
 }
 
 interface PaperTrade {
@@ -1101,7 +1106,7 @@ function WhyPanel({ log }: { log: DecisionLog }) {
 
 // ── Positions tab ─────────────────────────────────────────────────────────────
 
-function PositionsTab({ trades, onClose }: { trades: PaperTrade[]; onClose: (id: number) => void }) {
+function PositionsTab({ trades, onClose, onFlip }: { trades: PaperTrade[]; onClose: (id: number) => void; onFlip: (id: number) => void }) {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [sortKey, setSortKey] = useState<"ticker" | "entryPrice" | "currentPrice" | "unrealizedPnlPct" | "currentScore" | "holdDays">("unrealizedPnlPct");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -1206,7 +1211,15 @@ function PositionsTab({ trades, onClose }: { trades: PaperTrade[]; onClose: (id:
                         ↔ FLIP
                       </span>
                     )}
-                    {!isShort && t.reversalRisk && t.reversalRisk.score >= 45 && (
+                    {(t.decisionLog as DecisionLog | null)?.reversalWarning && (
+                      <span
+                        title={`Reversal detected (${(t.decisionLog as DecisionLog).reversalConfidence}% confidence): ${(t.decisionLog as DecisionLog).reversalSignals?.join(", ")}`}
+                        className="text-[9px] font-bold font-mono px-1 py-0.5 rounded border text-yellow-400 border-yellow-500/40 bg-yellow-500/10 cursor-help"
+                      >
+                        ⚠ Reversal risk
+                      </span>
+                    )}
+                    {!isShort && t.reversalRisk && t.reversalRisk.score >= 45 && !(t.decisionLog as DecisionLog | null)?.reversalWarning && (
                       <span
                         title={`Reversal signals: ${t.reversalRisk.triggers.join(", ")}`}
                         className={cn(
@@ -1318,11 +1331,20 @@ function PositionsTab({ trades, onClose }: { trades: PaperTrade[]; onClose: (id:
                 </td>
                 <td className="text-right py-2 px-2 text-muted-foreground">{t.holdDays ?? 0}d</td>
                 <td className="text-center py-2 px-2">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onClose(t.id); }}
-                    className="px-2 py-0.5 rounded border border-destructive/40 text-destructive text-[10px] font-bold hover:bg-destructive/10 transition-colors">
-                    CLOSE
-                  </button>
+                  <div className="flex flex-col items-center gap-1">
+                    {(t.decisionLog as DecisionLog | null)?.reversalWarning && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); if (confirm(`Flip ${t.ticker} to ${t.entryDirection === "bearish" ? "LONG" : "SHORT"}?`)) onFlip(t.id); }}
+                        className="px-2 py-0.5 rounded border border-yellow-500/40 text-yellow-400 text-[10px] font-bold hover:bg-yellow-500/10 transition-colors w-full">
+                        🔄 Flip
+                      </button>
+                    )}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onClose(t.id); }}
+                      className="px-2 py-0.5 rounded border border-destructive/40 text-destructive text-[10px] font-bold hover:bg-destructive/10 transition-colors w-full">
+                      CLOSE
+                    </button>
+                  </div>
                 </td>
               </tr>
               {isExpanded && t.decisionLog && (
@@ -1856,6 +1878,13 @@ function LearningTab() {
                 {univ} tickers · {rows[0]?.date_from} → {rows[0]?.date_to} · run {runAt}
               </span>
             </div>
+            <div className="px-4 pt-2 pb-1 flex items-start gap-2">
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-success/15 text-success border border-success/30 font-mono whitespace-nowrap">KEY FINDING</span>
+              <span className="text-[10px] font-mono text-muted-foreground">
+                Hold Jarvis: Sharpe 1.33 vs Flip: 0.17 — holding outperforms flipping 10:1.
+                Reversal signals now used as <span className="text-yellow-400">protective warnings</span>, not flip triggers.
+              </span>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs font-mono">
                 <thead>
@@ -1898,7 +1927,7 @@ function LearningTab() {
               </table>
             </div>
             <div className="px-4 py-2 text-[10px] font-mono text-muted-foreground/50">
-              Strategy A: hold long when price above OMNI (EMA-low-82) · B: always in, flip on every cross · C: flip only with 2+ signal confirmation ≥60 pts
+              A: hold long above OMNI (EMA-low-82) · B: always in, flip every cross · C: flip with ≥60pt confirmation · Short legs destroy returns in structural bull markets
             </div>
           </div>
         );
@@ -2369,6 +2398,11 @@ export default function BotLab() {
     onSuccess:  () => { refetchTrades(); qc.invalidateQueries({ queryKey: ["bot-stats"] }); },
   });
 
+  const flipTradeMutation = useMutation({
+    mutationFn: (id: number) => apiFetch(`bot/trades/${id}/flip`, { method: "POST", body: "{}" }),
+    onSuccess:  () => { refetchTrades(); qc.invalidateQueries({ queryKey: ["bot-stats"] }); },
+  });
+
   const openCount   = trades.filter(t => t.status === "open").length;
   const closedCount = trades.filter(t => t.status === "closed").length;
 
@@ -2489,7 +2523,7 @@ export default function BotLab() {
             {config && <ConfigTab config={config} onSaved={() => { refetchStatus(); }} />}
           </TabsContent>
           <TabsContent value="positions" className="m-0">
-            <PositionsTab trades={trades} onClose={(id) => closeTradeMutation.mutate(id)} />
+            <PositionsTab trades={trades} onClose={(id) => closeTradeMutation.mutate(id)} onFlip={(id) => flipTradeMutation.mutate(id)} />
           </TabsContent>
           <TabsContent value="history"   className="m-0">
             <HistoryTab trades={trades} />

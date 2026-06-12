@@ -480,6 +480,69 @@ async function closePosition(
   runSelfLearning().catch(err => logger.warn({ err, ticker: trade.ticker }, "Self-learning post-close failed"));
 }
 
+// ── Manual flip ──────────────────────────────────────────────────────────────
+// Trader-initiated flip: close existing position and open the opposite direction.
+// The bot warns but never auto-flips; this gives the human the final say.
+
+export async function manualFlipPosition(tradeId: number): Promise<{ closedId: number; newTradeId: number }> {
+  const [trade] = await db.select().from(paperTradesTable).where(eq(paperTradesTable.id, tradeId));
+  if (!trade)               throw new Error(`Trade ${tradeId} not found`);
+  if (trade.status !== "open") throw new Error(`Trade ${tradeId} is not open`);
+
+  const analysis = await runFullAnalysis(trade.ticker);
+  const price    = analysis.quote.price as number;
+  const score    = analysis.atlasScore.overall;
+  const isShort  = trade.entryDirection === "bearish";
+  const newDir   = isShort ? "bullish" : "bearish";
+
+  const closePnlPct = isShort
+    ? ((trade.entryPrice - price) / trade.entryPrice) * 100
+    : ((price - trade.entryPrice) / trade.entryPrice) * 100;
+
+  await closePosition(trade, price, score, "manual_flip");
+
+  const flipTargets = await computeFlipTargets(trade.ticker, price, newDir);
+  if (!flipTargets) throw new Error(`Could not compute flip targets for ${trade.ticker}`);
+
+  const config = await getOrCreateConfig();
+  const flipLog = {
+    manualFlip:      true,
+    fromDirection:   trade.entryDirection,
+    toDirection:     newDir,
+    closePnlPct,
+    reversalWarning: true,
+  };
+  const newTradeId = await openPosition(
+    analysis, config, flipTargets,
+    `Manual flip from ${trade.entryDirection} to ${newDir}`,
+    ["manual_flip"],
+    1.0,
+    flipLog,
+    newDir,
+  );
+
+  await db.insert(positionFlipsTable).values({
+    ticker:        trade.ticker,
+    fromDirection: trade.entryDirection,
+    toDirection:   newDir,
+    closePrice:    price,
+    closePnlPct,
+    openPrice:     price,
+    confidence:    (trade.decisionLog as { reversalConfidence?: number } | null)?.reversalConfidence ?? 0,
+    signalsFired:  ((trade.decisionLog as { reversalSignals?: string[] } | null)?.reversalSignals ?? []).map(s => ({ name: s })) as unknown as Record<string, unknown>[],
+    reason:        "manual_flip",
+    fromTradeId:   trade.id,
+    toTradeId:     newTradeId,
+  });
+
+  logger.info(
+    { ticker: trade.ticker, from: trade.entryDirection, to: newDir, closePnlPct: closePnlPct.toFixed(2) },
+    "Manual flip executed by trader",
+  );
+
+  return { closedId: trade.id, newTradeId };
+}
+
 // ── Main cycle ────────────────────────────────────────────────────────────────
 
 let lastRunAt: Date | null = null;
@@ -568,63 +631,36 @@ export async function checkOpenPositions(): Promise<void> {
         }
       }
 
-      // ── Reversal flip check (5-min) ─────────────────────────────────────────
-      let flipped5m = false;
+      // ── Reversal warning check (5-min) — detect but do NOT auto-flip ──────────
+      // Backtest shows Hold Jarvis outperforms flipping 10:1 on Sharpe (1.33 vs 0.17).
+      // High-confidence reversals tighten stop to breakeven and flag for manual review.
       try {
         const rev = await detectReversal(trade, analysis);
         if (rev.shouldFlip && rev.confidence >= 60) {
-          const newDir      = rev.newDirection;
-          const flipTargets = await computeFlipTargets(trade.ticker, price, newDir);
-          if (flipTargets) {
-            const score      = analysis.atlasScore.overall;
-            const closePnlPct = isShort
-              ? ((trade.entryPrice - price) / trade.entryPrice) * 100
-              : ((price - trade.entryPrice) / trade.entryPrice) * 100;
+          const protectiveStop = isShort
+            ? Math.min(newTrailingStop, trade.entryPrice)
+            : Math.max(newTrailingStop, trade.entryPrice);
+          newTrailingStop = protectiveStop;
 
-            await closePosition(trade, price, score, "reversal_flip");
+          const warningLog = {
+            ...(typeof trade.decisionLog === "object" && trade.decisionLog !== null ? trade.decisionLog as object : {}),
+            reversalWarning:    true,
+            reversalConfidence: rev.confidence,
+            reversalSignals:    rev.signals.map(s => s.name),
+            reversalAt:         new Date().toISOString(),
+          };
+          await db.update(paperTradesTable)
+            .set({ decisionLog: warningLog })
+            .where(eq(paperTradesTable.id, trade.id));
 
-            const flipDecisionLog = {
-              reversalSignals: rev.signals,
-              confidence:      rev.confidence,
-              totalPoints:     rev.totalPoints,
-              fromDirection:   trade.entryDirection,
-              toDirection:     newDir,
-            };
-            const newTradeId = await openPosition(
-              analysis, config, flipTargets,
-              `5-min flip (${rev.confidence}pts): ${rev.reason}`,
-              ["reversal_flip"],
-              1.0,
-              flipDecisionLog,
-              newDir,
-            );
-
-            await db.insert(positionFlipsTable).values({
-              ticker:        trade.ticker,
-              fromDirection: trade.entryDirection,
-              toDirection:   newDir,
-              closePrice:    price,
-              closePnlPct,
-              openPrice:     price,
-              confidence:    rev.confidence,
-              signalsFired:  rev.signals as unknown as Record<string, unknown>[],
-              reason:        rev.reason,
-              fromTradeId:   trade.id,
-              toTradeId:     newTradeId,
-            });
-
-            logger.info(
-              { ticker: trade.ticker, from: trade.entryDirection, to: newDir,
-                confidence: rev.confidence, source: "5min_checker" },
-              "5-min checker: position flip executed",
-            );
-            flipped5m = true;
-          }
+          logger.warn(
+            { ticker: trade.ticker, confidence: rev.confidence, signals: rev.signals.map(s => s.name), protectiveStop },
+            `REVERSAL WARNING: ${trade.ticker} confidence=${rev.confidence}% — stop tightened to breakeven, manual flip available`,
+          );
         }
       } catch (err) {
         logger.error({ err, ticker: trade.ticker }, "5-min reversal detection failed");
       }
-      if (flipped5m) continue;
 
       // Stop hit → close position immediately
       const stopHit = isShort ? price >= newTrailingStop : price <= newTrailingStop;
@@ -768,71 +804,36 @@ export async function runBotCycle(): Promise<BotCycleResult> {
           .where(eq(paperTradesTable.id, trade.id));
       }
 
-      // ── Reversal flip detection (runs before standard exits) ─────────────────
-      // If a high-confidence reversal is detected, close + reopen in opposite direction.
-      // This short-circuits the standard exit logic for this position.
-      let flipped = false;
+      // ── Reversal warning (main cycle) — detect but do NOT auto-flip ────────────
+      // Backtest shows Hold Jarvis outperforms flipping 10:1 on Sharpe (1.33 vs 0.17).
+      // High-confidence reversals tighten stop to breakeven and flag for manual review.
       try {
         const rev = await detectReversal(trade, analysis);
         if (rev.shouldFlip && rev.confidence >= 60) {
-          const newDir = rev.newDirection;
-          const flipTargets = await computeFlipTargets(trade.ticker, price, newDir);
-          if (flipTargets) {
-            // Record P&L of the closing leg
-            const closePnlPct = isShort
-              ? ((trade.entryPrice - price) / trade.entryPrice) * 100
-              : ((price - trade.entryPrice) / trade.entryPrice) * 100;
+          const protectiveStop = isShort
+            ? Math.min(newTrailingStop, trade.entryPrice)
+            : Math.max(newTrailingStop, trade.entryPrice);
+          newTrailingStop = protectiveStop;
 
-            // Close existing position
-            await closePosition(trade, price, score, "reversal_flip");
-            exited.push(trade.ticker);
+          const warningLog = {
+            ...(typeof trade.decisionLog === "object" && trade.decisionLog !== null ? trade.decisionLog as object : {}),
+            reversalWarning:    true,
+            reversalConfidence: rev.confidence,
+            reversalSignals:    rev.signals.map(s => s.name),
+            reversalAt:         new Date().toISOString(),
+          };
+          await db.update(paperTradesTable)
+            .set({ trailingStopPrice: protectiveStop, decisionLog: warningLog })
+            .where(eq(paperTradesTable.id, trade.id));
 
-            // Open flipped position immediately
-            const flipDecisionLog = {
-              reversalSignals: rev.signals,
-              confidence:      rev.confidence,
-              totalPoints:     rev.totalPoints,
-              fromDirection:   trade.entryDirection,
-              toDirection:     newDir,
-            };
-            const newTradeId = await openPosition(
-              analysis, config, flipTargets,
-              `Reversal flip (${rev.confidence}pts): ${rev.reason}`,
-              ["reversal_flip"],
-              1.0,
-              flipDecisionLog,
-              newDir,
-            );
-            newEntries.push(trade.ticker);
-
-            // Log to position_flips table
-            await db.insert(positionFlipsTable).values({
-              ticker:        trade.ticker,
-              fromDirection: trade.entryDirection,
-              toDirection:   newDir,
-              closePrice:    price,
-              closePnlPct,
-              openPrice:     price,
-              confidence:    rev.confidence,
-              signalsFired:  rev.signals as unknown as Record<string, unknown>[],
-              reason:        rev.reason,
-              fromTradeId:   trade.id,
-              toTradeId:     newTradeId,
-            });
-
-            logger.info(
-              { ticker: trade.ticker, from: trade.entryDirection, to: newDir,
-                confidence: rev.confidence, closePnl: closePnlPct.toFixed(2) },
-              "Bot: position flip executed",
-            );
-            flipped = true;
-          }
+          logger.warn(
+            { ticker: trade.ticker, confidence: rev.confidence, signals: rev.signals.map(s => s.name) },
+            `REVERSAL WARNING: ${trade.ticker} confidence=${rev.confidence}% — stop at breakeven, manual flip available`,
+          );
         }
       } catch (err) {
-        logger.error({ err, ticker: trade.ticker }, "Reversal detection failed — skipping flip");
+        logger.error({ err, ticker: trade.ticker }, "Reversal detection failed");
       }
-
-      if (flipped) continue;
 
       // ── Exit decision ────────────────────────────────────────────────────────
       let exitReason: string | null = null;
