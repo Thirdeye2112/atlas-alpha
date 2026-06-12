@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { Pool } from "pg";
 import { db, paperTradesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { getLearningStats, getLearnedPatterns } from "../lib/snapshotEngine.js";
@@ -289,6 +290,37 @@ router.post("/bot/self-learn", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "POST /bot/self-learn failed");
     res.status(500).json({ error: "Self-learning failed" });
+  }
+});
+
+// ── Flip strategy backtest results ───────────────────────────────────────────
+
+let _resPool: Pool | null = null;
+function getResPool(): Pool {
+  if (!_resPool) {
+    const url = process.env["DATABASE_URL_RESEARCH"];
+    if (!url) throw new Error("DATABASE_URL_RESEARCH not set");
+    _resPool = new Pool({ connectionString: url, max: 2 });
+  }
+  return _resPool;
+}
+
+router.get("/bot/flip-backtest", async (req, res): Promise<void> => {
+  try {
+    const pool = getResPool();
+    const result = await pool.query(`
+      SELECT strategy, universe_size, date_from::text, date_to::text,
+             total_trades, win_rate, avg_return_pct, total_return_pct,
+             max_drawdown_pct, sharpe_ratio, vs_buy_hold_pct,
+             run_at::text, metadata
+      FROM backtest_flip_results
+      WHERE run_at = (SELECT MAX(run_at) FROM backtest_flip_results)
+      ORDER BY strategy
+    `);
+    res.json({ results: result.rows });
+  } catch (err) {
+    req.log.error({ err }, "GET /bot/flip-backtest failed");
+    res.status(500).json({ error: "Failed to get flip backtest results" });
   }
 });
 

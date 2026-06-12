@@ -28,13 +28,14 @@ import { cn } from "@/lib/utils";
 import { Link } from "wouter";
 import { ChevronUp, ChevronDown, ChevronsUpDown, FlaskConical, RotateCcw, X } from "lucide-react";
 import { useMLSignals, type MLSignal } from "@/hooks/useMLSignal";
+import { ScannerMLCell, ScannerMLHeader } from "@/components/ScannerMLCell";
 
 type JarvisFilter = "ALL" | "LONG" | "SHORT" | "JARVIS";
 
 type SortCol =
   | "ticker" | "name" | "price" | "changePercent" | "gapPercent"
   | "atlasScore" | "rsi" | "relativeVolume" | "gapSetupScore" | "keyLevelDist"
-  | "rankIC";
+  | "rankIC" | "mlRank";
 type SortDir = "asc" | "desc";
 
 /** Polling interval while scan is in progress */
@@ -329,6 +330,9 @@ function ScannerTable({
       if (sortCol === "rankIC") {
         av = icMap.get(a.ticker)?.rankIC ?? -Infinity;
         bv = icMap.get(b.ticker)?.rankIC ?? -Infinity;
+      } else if (sortCol === "mlRank") {
+        av = getSignal(a.ticker).ml_rank_percentile ?? -Infinity;
+        bv = getSignal(b.ticker).ml_rank_percentile ?? -Infinity;
       } else {
         av = a[sortCol] ?? "";
         bv = b[sortCol] ?? "";
@@ -473,6 +477,7 @@ function ScannerTable({
               {showKeyLevel && <SortableTh col="keyLevelDist" label="DIST%" className="text-right w-20" {...thProps} />}
               <SortableTh col="rsi"            label="RSI"    className="text-right w-16"  {...thProps} />
               <SortableTh col="relativeVolume" label="RVOL"   className="text-right w-16"  {...thProps} />
+              <SortableTh col="mlRank"         label="ML"     className="text-right w-20"  {...thProps} />
               <SortableTh col="rankIC"         label="IC 5D"  className="text-right w-20"  {...thProps} />
               <th className="px-3 py-2 w-36">LEVELS</th>
             </tr>
@@ -561,6 +566,11 @@ function ScannerTable({
                   </td>
                   <td className={cn("px-3 py-2 text-right", row.relativeVolume > 2 ? "text-warning" : "text-foreground")}>
                     {row.relativeVolume.toFixed(1)}x
+                  </td>
+
+                  {/* ── ML rank column ─────────────────────────────────────── */}
+                  <td className="px-3 py-2 text-right">
+                    <ScannerMLCell signal={getSignal(row.ticker)} showProbability={false} />
                   </td>
 
                   {/* ── IC 5D column ───────────────────────────────────────── */}

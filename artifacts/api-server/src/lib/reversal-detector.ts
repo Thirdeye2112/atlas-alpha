@@ -78,7 +78,7 @@ async function fetchMLSnapshot(ticker: string): Promise<MLSnapshot> {
         c.query(
           `SELECT feature_value FROM feature_snapshots
            WHERE ticker = $1 AND feature_name = 'omni_82_above'
-           ORDER BY snapshot_date DESC LIMIT 1`,
+           ORDER BY date DESC LIMIT 1`,
           [ticker],
         ),
         c.query(

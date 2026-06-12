@@ -217,6 +217,21 @@ interface LearnedPattern {
   hitRate20d:      number | null;
 }
 
+interface FlipBacktestRow {
+  strategy:         string;
+  universe_size:    number;
+  date_from:        string;
+  date_to:          string;
+  total_trades:     number;
+  win_rate:         number;
+  avg_return_pct:   number;
+  total_return_pct: number;
+  max_drawdown_pct: number;
+  sharpe_ratio:     number;
+  vs_buy_hold_pct:  number;
+  run_at:           string;
+}
+
 // ── Filter-builder constants (mirrors Scanner.tsx) ────────────────────────────
 
 type CsFieldType = "number" | "enum" | "string" | "array" | "pattern";
@@ -1778,6 +1793,12 @@ function LearningTab() {
     staleTime: 60_000,
   });
 
+  const { data: flipBacktest } = useQuery<{ results: FlipBacktestRow[] }>({
+    queryKey:  ["bot-flip-backtest"],
+    queryFn:   () => apiFetch("bot/flip-backtest"),
+    staleTime: 300_000,
+  });
+
   const patterns  = patternsData?.patterns ?? [];
   const hasData   = (stats?.resolvedSnapshots ?? 0) >= 3;
 
@@ -1813,6 +1834,75 @@ function LearningTab() {
           </div>
         ))}
       </div>
+
+      {/* Flip Strategy Backtest card */}
+      {(flipBacktest?.results?.length ?? 0) > 0 && (() => {
+        const rows = flipBacktest!.results;
+        const byStrategy = Object.fromEntries(rows.map(r => [r.strategy, r]));
+        const runAt = rows[0]?.run_at?.slice(0, 10) ?? "";
+        const univ  = rows[0]?.universe_size ?? 0;
+        const STRATEGY_LABELS: Record<string, string> = {
+          hold_jarvis:    "A: Hold Jarvis",
+          flip_any:       "B: Flip Any",
+          flip_confirmed: "C: Flip Confirmed",
+        };
+        const STRATEGIES = ["hold_jarvis", "flip_any", "flip_confirmed"];
+
+        return (
+          <div className="bg-card border border-border rounded">
+            <div className="px-4 py-2.5 border-b border-border flex items-baseline gap-2">
+              <span className="text-xs font-mono font-bold text-foreground">↔ Flip Strategy Backtest</span>
+              <span className="text-[10px] font-mono text-muted-foreground">
+                {univ} tickers · {rows[0]?.date_from} → {rows[0]?.date_to} · run {runAt}
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs font-mono">
+                <thead>
+                  <tr className="border-b border-border/60 text-muted-foreground text-[10px] uppercase tracking-wider">
+                    <th className="px-3 py-2 text-left">Metric</th>
+                    {STRATEGIES.map(s => (
+                      <th key={s} className="px-3 py-2 text-right">{STRATEGY_LABELS[s]}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    { label: "Total Trades",       key: "total_trades",      fmt: (v: number) => v.toLocaleString() },
+                    { label: "Win Rate",            key: "win_rate",          fmt: (v: number) => `${(v * 100).toFixed(1)}%` },
+                    { label: "Avg Return / Trade",  key: "avg_return_pct",    fmt: (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(2)}%` },
+                    { label: "Total Return Sum",    key: "total_return_pct",  fmt: (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(0)}%` },
+                    { label: "Max Drawdown",        key: "max_drawdown_pct",  fmt: (v: number) => `${v.toFixed(2)}%` },
+                    { label: "Sharpe Ratio",        key: "sharpe_ratio",      fmt: (v: number) => v.toFixed(3) },
+                    { label: "vs Buy & Hold",       key: "vs_buy_hold_pct",   fmt: (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(0)}%` },
+                  ].map(({ label, key, fmt }) => (
+                    <tr key={key} className="border-b border-border/30 hover:bg-muted/10 transition-colors">
+                      <td className="px-3 py-1.5 text-muted-foreground">{label}</td>
+                      {STRATEGIES.map(s => {
+                        const val = byStrategy[s]?.[key as keyof FlipBacktestRow] as number | undefined;
+                        const isPos = val != null && val > 0;
+                        const isNeg = val != null && val < 0;
+                        const colorCls =
+                          key === "max_drawdown_pct" ? "text-destructive" :
+                          key === "total_trades"     ? "text-foreground" :
+                          isPos ? "text-success" : isNeg ? "text-destructive" : "text-foreground";
+                        return (
+                          <td key={s} className={cn("px-3 py-1.5 text-right font-bold", colorCls)}>
+                            {val != null ? fmt(val) : "—"}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="px-4 py-2 text-[10px] font-mono text-muted-foreground/50">
+              Strategy A: hold long when price above OMNI (EMA-low-82) · B: always in, flip on every cross · C: flip only with 2+ signal confirmation ≥60 pts
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Building state */}
       {!hasData && (
