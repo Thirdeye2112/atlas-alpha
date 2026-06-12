@@ -69,6 +69,11 @@ interface PaperTrade {
   targetPrice: number | null;
   trailingStopPrice: number | null;
   peakPrice: number | null;
+  t1Price: number | null;
+  t2Price: number | null;
+  t3Price: number | null;
+  t1Hit: boolean;
+  t2Hit: boolean;
   entryAt: string;
   exitPrice: number | null;
   exitScore: number | null;
@@ -1126,7 +1131,10 @@ function PositionsTab({ trades, onClose }: { trades: PaperTrade[]; onClose: (id:
             <SortTh label="ENTRY" k="entryPrice" />
             <SortTh label="CURRENT" k="currentPrice" />
             <SortTh label="P&L" k="unrealizedPnlPct" />
-            <th className="text-left py-2 px-2">RISK LEVELS</th>
+            <th className="text-left py-2 px-2">STOP</th>
+            <th className="text-right py-2 px-2">T1</th>
+            <th className="text-right py-2 px-2">T2</th>
+            <th className="text-center py-2 px-2">STATUS</th>
             <th className="text-left py-2 px-2">TRIGGER</th>
             <SortTh label="SCORE" k="currentScore" />
             <th className="text-center py-2 px-2">CYCLE</th>
@@ -1206,40 +1214,65 @@ function PositionsTab({ trades, onClose }: { trades: PaperTrade[]; onClose: (id:
                 <td className="text-right py-2 px-2">
                   <PnlBadge pct={t.unrealizedPnlPct} dollar={t.unrealizedPnlDollar} />
                 </td>
-                <td className="py-2 px-2 min-w-[160px]">
-                  {stop != null && target != null ? (
+                {/* STOP column */}
+                <td className="py-2 px-2">
+                  {stop != null ? (
                     <div className="flex flex-col gap-0.5">
-                      <div className="flex items-center justify-between text-[9px] text-muted-foreground/60">
-                        {isShort ? (
-                          <>
-                            <span className="text-success/70">▼{formatCurrency(target)}</span>
-                            <span className="text-destructive/70">▲{formatCurrency(stop)}</span>
-                          </>
-                        ) : (
-                          <>
-                            <span className="text-destructive/70">▼{formatCurrency(stop)}</span>
-                            <span className="text-success/70">▲{formatCurrency(target)}</span>
-                          </>
-                        )}
-                      </div>
+                      <span className={cn("font-mono text-xs", isShort ? "text-destructive" : "text-destructive")}>
+                        {formatCurrency(stop)}
+                      </span>
+                      {trailingActive && (
+                        <span className="text-[9px] font-bold text-success/80">TRAIL</span>
+                      )}
                       {pct != null && (
-                        <div className="relative h-1.5 w-full rounded-full bg-muted/30 overflow-hidden">
+                        <div className="relative h-1 w-16 rounded-full bg-muted/30 overflow-hidden">
                           <div
-                            className={cn("absolute left-0 h-full rounded-full transition-all", pct >= 33 ? "bg-success/60" : "bg-warning/60")}
+                            className={cn("absolute left-0 h-full rounded-full", pct >= 33 ? "bg-success/60" : "bg-warning/60")}
                             style={{ width: `${pct}%` }}
                           />
-                          <div className="absolute left-[33%] top-0 h-full w-px bg-muted-foreground/20" />
                         </div>
-                      )}
-                      {trailingActive && (
-                        <div className="text-[9px] font-bold text-success/80">TRAIL ACTIVE</div>
-                      )}
-                      {t.atrPctAtEntry != null && (
-                        <div className="text-[9px] text-muted-foreground/40">ATR {t.atrPctAtEntry.toFixed(1)}%</div>
                       )}
                     </div>
                   ) : (
-                    <span className="text-muted-foreground/30 text-[9px]">legacy (% stop)</span>
+                    <span className="text-muted-foreground/30 text-[9px]">—</span>
+                  )}
+                </td>
+                {/* T1 column */}
+                <td className="text-right py-2 px-2">
+                  {t.t1Price != null ? (
+                    <div className="flex flex-col items-end gap-0.5">
+                      <span className={cn("font-mono text-xs", t.t1Hit ? "text-success font-bold" : "text-muted-foreground/70")}>
+                        {formatCurrency(t.t1Price)}
+                      </span>
+                      {t.t1Hit && <span className="text-[9px] font-bold text-success/80">HIT ✓</span>}
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground/30 text-[9px]">—</span>
+                  )}
+                </td>
+                {/* T2 column */}
+                <td className="text-right py-2 px-2">
+                  {t.t2Price != null ? (
+                    <div className="flex flex-col items-end gap-0.5">
+                      <span className={cn("font-mono text-xs", t.t2Hit ? "text-success font-bold" : "text-muted-foreground/70")}>
+                        {formatCurrency(t.t2Price)}
+                      </span>
+                      {t.t2Hit && <span className="text-[9px] font-bold text-success/80">HIT ✓</span>}
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground/30 text-[9px]">—</span>
+                  )}
+                </td>
+                {/* STATUS column */}
+                <td className="text-center py-2 px-2">
+                  {t.t2Hit ? (
+                    <span className="text-[9px] font-bold font-mono px-1.5 py-0.5 rounded border text-success border-success/40 bg-success/10">T2 LOCKED</span>
+                  ) : t.t1Hit ? (
+                    <span className="text-[9px] font-bold font-mono px-1.5 py-0.5 rounded border text-blue-400 border-blue-400/40 bg-blue-400/10">BREAKEVEN</span>
+                  ) : trailingActive ? (
+                    <span className="text-[9px] font-bold font-mono px-1.5 py-0.5 rounded border text-warning border-warning/40 bg-warning/10">TRAILING</span>
+                  ) : (
+                    <span className="text-[9px] font-mono text-muted-foreground/40">OPEN</span>
                   )}
                 </td>
                 <td className="py-2 px-2">
@@ -1272,14 +1305,14 @@ function PositionsTab({ trades, onClose }: { trades: PaperTrade[]; onClose: (id:
               </tr>
               {isExpanded && t.decisionLog && (
                 <tr className="border-b border-border/20">
-                  <td colSpan={10} className="px-3 pb-3 pt-0">
+                  <td colSpan={13} className="px-3 pb-3 pt-0">
                     <WhyPanel log={t.decisionLog} />
                   </td>
                 </tr>
               )}
               {isExpanded && !t.decisionLog && (
                 <tr className="border-b border-border/20">
-                  <td colSpan={10} className="px-4 py-2 text-[10px] font-mono text-muted-foreground/40 italic">
+                  <td colSpan={13} className="px-4 py-2 text-[10px] font-mono text-muted-foreground/40 italic">
                     No decision log — this trade was opened before explainability logging was enabled.
                   </td>
                 </tr>

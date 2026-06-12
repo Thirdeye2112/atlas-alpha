@@ -8,7 +8,7 @@
  * sim cache refresh, self-learning) via startBackgroundEnhancement().
  */
 
-import { runBotCycle, getOrCreateConfig } from "./paperTradingEngine.js";
+import { runBotCycle, checkOpenPositions, getOrCreateConfig } from "./paperTradingEngine.js";
 import { startBackgroundEnhancement }     from "./botIntelligence.js";
 import { logger }                          from "./logger.js";
 
@@ -74,8 +74,9 @@ function isMarketHours(): boolean {
 
 // ── Cycle runner ──────────────────────────────────────────────────────────────
 
-const CYCLE_INTERVAL_MS  = 30 * 60 * 1000; // 30 minutes
-const FIRST_CYCLE_DELAY  =  2 * 60 * 1000; // 2 min after startup
+const CYCLE_INTERVAL_MS        = 30 * 60 * 1000; // 30 minutes
+const FIRST_CYCLE_DELAY        =  2 * 60 * 1000; // 2 min after startup
+const POSITION_CHECK_INTERVAL  =  5 * 60 * 1000; // 5 minutes — T1/T2 milestone + stop checker
 
 async function scheduledCycle(): Promise<void> {
   if (state.isRunning) {
@@ -138,13 +139,22 @@ export function startBotScheduler(): void {
   state.started    = true;
   state.nextRunAt  = new Date(Date.now() + FIRST_CYCLE_DELAY).toISOString();
 
-  // First cycle: 2 min after startup (lets warmup + scan job settle)
+  // First full cycle: 2 min after startup
   setTimeout(() => { void scheduledCycle(); }, FIRST_CYCLE_DELAY);
+
+  // 5-min lightweight position checker (T1/T2 milestones + stop enforcement)
+  setInterval(() => {
+    if (isMarketHours()) {
+      void checkOpenPositions().catch(err =>
+        logger.error({ err }, "5-min position checker failed"),
+      );
+    }
+  }, POSITION_CHECK_INTERVAL);
 
   // Background enhancement: calibration building, sim refresh, self-learning
   startBackgroundEnhancement();
 
   logger.info(
-    "Bot scheduler started — autonomous cycles every 30 min (market hours, Mon–Fri 09:30–16:00 ET)",
+    "Bot scheduler started — full cycles every 30 min + position check every 5 min (market hours, Mon–Fri 09:30–16:00 ET)",
   );
 }

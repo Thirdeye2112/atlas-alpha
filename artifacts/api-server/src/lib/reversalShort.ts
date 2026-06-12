@@ -25,6 +25,9 @@ export interface ReversalEntryLevels {
   targetPrice: number;
   atrPct:      number;
   trigger:     string;
+  t1Price:     number;
+  t2Price:     number;
+  t3Price:     number;
 }
 
 // ── Scoring ───────────────────────────────────────────────────────────────────
@@ -188,5 +191,14 @@ export function computeReversalShortLevels(
                 : signal.urgency === "confirmed" ? "reversal_top_confirmed"
                 : "reversal_top_forming";
 
-  return { stopPrice, targetPrice, atrPct, trigger };
+  return {
+    stopPrice,
+    targetPrice,
+    atrPct,
+    trigger,
+    // T milestones for a short: price moves down; sign = -1
+    t1Price: price - 1.5 * atr,
+    t2Price: price - 3.0 * atr,
+    t3Price: price - 5.0 * atr,
+  };
 }

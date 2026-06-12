@@ -127,6 +127,9 @@ interface EntryLevels {
   targetPrice: number;
   atrPct:      number;
   trigger:     string;
+  t1Price:     number;
+  t2Price:     number;
+  t3Price:     number;
 }
 
 /**
@@ -160,33 +163,44 @@ function computeEntryLevels(a: AnalysisResult): EntryLevels | null {
   const nearSupport    = nearSma20 || nearLowerBB;
   const nearResistance = nearSma20 || nearUpperBB;
 
+  // Shared helper: attach T1/T2/T3 milestones (1.5×/3×/5× ATR from entry)
+  const withMilestones = (base: { stopPrice: number; targetPrice: number; atrPct: number; trigger: string }): EntryLevels => {
+    const sign = isShort ? -1 : 1;
+    return {
+      ...base,
+      t1Price: price + sign * 1.5 * atr,
+      t2Price: price + sign * 3.0 * atr,
+      t3Price: price + sign * 5.0 * atr,
+    };
+  };
+
   if (isShort) {
     // ── Short entry tiers (stop ABOVE entry, target BELOW) ────────────────────
 
     // Short Tier 1 — Ideal: bearish candle at a resistance level → tight 1× ATR stop
     if (hasBearishCandle && nearResistance) {
       const d = 1.0 * atr;
-      return { stopPrice: price + d, targetPrice: price - d * 3, atrPct, trigger: "bearish_candle_at_resistance" };
+      return withMilestones({ stopPrice: price + d, targetPrice: price - d * 3, atrPct, trigger: "bearish_candle_at_resistance" });
     }
     // Short Tier 2 — Good: bearish candle with RSI elevated (overbought momentum)
     if (hasBearishCandle && rsi > 60) {
       const d = 1.5 * atr;
-      return { stopPrice: price + d, targetPrice: price - d * 3, atrPct, trigger: "bearish_candle_reversal" };
+      return withMilestones({ stopPrice: price + d, targetPrice: price - d * 3, atrPct, trigger: "bearish_candle_reversal" });
     }
     // Short Tier 3 — Good: price extended above SMA20 in confirmed downtrend
     if (pctFromSma20 > 3 && score >= 65 && a.atlasScore.trendScore >= 60) {
       const d = 1.5 * atr;
-      return { stopPrice: price + d, targetPrice: price - d * 3, atrPct, trigger: "short_at_extension" };
+      return withMilestones({ stopPrice: price + d, targetPrice: price - d * 3, atrPct, trigger: "short_at_extension" });
     }
     // Short Tier 4 — Acceptable: any bearish candle with good score
     if (hasBearishCandle && score >= 65) {
       const d = 1.5 * atr;
-      return { stopPrice: price + d, targetPrice: price - d * 3, atrPct, trigger: "bearish_candle_downtrend" };
+      return withMilestones({ stopPrice: price + d, targetPrice: price - d * 3, atrPct, trigger: "bearish_candle_downtrend" });
     }
     // Short Tier 5 — Strong bearish momentum entry
     if (score >= 78 && a.atlasScore.trendScore >= 65 && a.atlasScore.momentumScore >= 60) {
       const d = 2.0 * atr;
-      return { stopPrice: price + d, targetPrice: price - d * 3, atrPct, trigger: "strong_bearish_momentum" };
+      return withMilestones({ stopPrice: price + d, targetPrice: price - d * 3, atrPct, trigger: "strong_bearish_momentum" });
     }
     return null;
   }
@@ -196,27 +210,27 @@ function computeEntryLevels(a: AnalysisResult): EntryLevels | null {
   // Tier 1 — Ideal: bullish candle AT a support level → tight 1× ATR stop
   if (hasBullishCandle && nearSupport) {
     const d = 1.0 * atr;
-    return { stopPrice: price - d, targetPrice: price + d * 3, atrPct, trigger: "candle_at_support" };
+    return withMilestones({ stopPrice: price - d, targetPrice: price + d * 3, atrPct, trigger: "candle_at_support" });
   }
   // Tier 2 — Good: bullish candle on an RSI pullback (not yet overbought)
   if (hasBullishCandle && rsi < 52) {
     const d = 1.5 * atr;
-    return { stopPrice: price - d, targetPrice: price + d * 3, atrPct, trigger: "candle_pullback" };
+    return withMilestones({ stopPrice: price - d, targetPrice: price + d * 3, atrPct, trigger: "candle_pullback" });
   }
   // Tier 3 — Good: price has pulled back to SMA20 region in an uptrend
   if (nearSma20 && score >= 65 && a.atlasScore.trendScore >= 60) {
     const d = 1.5 * atr;
-    return { stopPrice: price - d, targetPrice: price + d * 3, atrPct, trigger: "pullback_to_sma20" };
+    return withMilestones({ stopPrice: price - d, targetPrice: price + d * 3, atrPct, trigger: "pullback_to_sma20" });
   }
   // Tier 4 — Acceptable: any bullish candle in an uptrend (not extended >8%)
   if (hasBullishCandle && score >= 65 && pctFromSma20 < 8) {
     const d = 1.5 * atr;
-    return { stopPrice: price - d, targetPrice: price + d * 3, atrPct, trigger: "bullish_candle_uptrend" };
+    return withMilestones({ stopPrice: price - d, targetPrice: price + d * 3, atrPct, trigger: "bullish_candle_uptrend" });
   }
   // Tier 5 — Acceptable: very strong score + strong trend, momentum entry
   if (score >= 78 && a.atlasScore.trendScore >= 65 && a.atlasScore.momentumScore >= 60) {
     const d = 2.0 * atr;
-    return { stopPrice: price - d, targetPrice: price + d * 3, atrPct, trigger: "strong_momentum_immediate" };
+    return withMilestones({ stopPrice: price - d, targetPrice: price + d * 3, atrPct, trigger: "strong_momentum_immediate" });
   }
 
   return null;
@@ -382,6 +396,12 @@ async function openPosition(
     targetPrice:        levels.targetPrice,
     trailingStopPrice:  levels.stopPrice,
     peakPrice:          price,
+    // T1/T2/T3 milestones — stored at entry, used for stop ratcheting
+    t1Price:            levels.t1Price,
+    t2Price:            levels.t2Price,
+    t3Price:            levels.t3Price,
+    t1Hit:              false,
+    t2Hit:              false,
     scannerCategories:  (scannerCategories ?? []) as unknown as Record<string, unknown>[],
     positionValue:      posValue,
     shares,
@@ -463,6 +483,108 @@ export function getBotRunState() {
   return { lastRunAt, cycleRunning };
 }
 
+// ── 5-minute lightweight position checker ────────────────────────────────────
+// Only updates T1/T2 milestone stops and trailing stop for open positions.
+// Runs on a 5-min interval separate from the full 30-min cycle.
+
+let positionCheckRunning = false;
+
+export async function checkOpenPositions(): Promise<void> {
+  if (positionCheckRunning) return;
+  const config = await getOrCreateConfig();
+  if (!config.enabled) return;
+
+  positionCheckRunning = true;
+  try {
+    const openTrades = await db.select().from(paperTradesTable).where(eq(paperTradesTable.status, "open"));
+    if (openTrades.length === 0) return;
+
+    for (const trade of openTrades) {
+      let analysis: AnalysisResult | undefined;
+      try { analysis = await runFullAnalysis(trade.ticker); } catch { continue; }
+
+      const price   = analysis.quote.price as number;
+      const isShort = trade.entryDirection === "bearish";
+
+      const newPeak = isShort
+        ? Math.min(trade.peakPrice ?? trade.entryPrice, price)
+        : Math.max(trade.peakPrice ?? trade.entryPrice, price);
+
+      const entryAtrPct = trade.atrPctAtEntry ?? analysis.volatility.atrPercent;
+      const entryAtr    = trade.entryPrice * entryAtrPct / 100;
+
+      let newTrailingStop = trade.trailingStopPrice ?? trade.stopPrice ??
+        (isShort
+          ? trade.entryPrice * (1 + (config.stopLossPct || 4) / 100)
+          : trade.entryPrice * (1 - (config.stopLossPct || 4) / 100));
+
+      // Standard trailing stop (33% toward target)
+      if (trade.targetPrice && trade.stopPrice) {
+        const targetDist = isShort
+          ? trade.entryPrice - trade.targetPrice
+          : trade.targetPrice - trade.entryPrice;
+        const threshold = isShort
+          ? trade.entryPrice - targetDist * 0.33
+          : trade.entryPrice + targetDist * 0.33;
+        const activated = isShort ? price <= threshold : price >= threshold;
+        if (activated) {
+          const trailLevel = isShort ? newPeak + 1.5 * entryAtr : newPeak - 1.5 * entryAtr;
+          newTrailingStop  = isShort
+            ? Math.min(newTrailingStop, trailLevel, trade.entryPrice * 1.002)
+            : Math.max(newTrailingStop, trailLevel, trade.entryPrice * 0.998);
+        }
+      }
+
+      // T1/T2 milestone ratcheting
+      let newT1Hit = trade.t1Hit ?? false;
+      let newT2Hit = trade.t2Hit ?? false;
+      const t1 = trade.t1Price;
+      const t2 = trade.t2Price;
+
+      if (t1 != null && !newT1Hit) {
+        const t1Hit = isShort ? price <= t1 : price >= t1;
+        if (t1Hit) {
+          newT1Hit = true;
+          newTrailingStop = isShort
+            ? Math.min(newTrailingStop, trade.entryPrice)
+            : Math.max(newTrailingStop, trade.entryPrice);
+          logger.info({ ticker: trade.ticker, price, t1, entryPrice: trade.entryPrice }, "T1 hit — stop ratcheted to breakeven");
+        }
+      }
+      if (t2 != null && !newT2Hit) {
+        const t2Hit = isShort ? price <= t2 : price >= t2;
+        if (t2Hit) {
+          newT2Hit = true;
+          if (t1 != null) {
+            newTrailingStop = isShort ? Math.min(newTrailingStop, t1) : Math.max(newTrailingStop, t1);
+          }
+          logger.info({ ticker: trade.ticker, price, t2, t1 }, "T2 hit — stop ratcheted to T1");
+        }
+      }
+
+      // Stop hit → close position immediately
+      const stopHit = isShort ? price >= newTrailingStop : price <= newTrailingStop;
+      if (stopHit) {
+        const score = analysis.atlasScore.overall;
+        await closePosition(trade, price, score, "trailing_stop");
+        logger.info({ ticker: trade.ticker, price, stop: newTrailingStop }, "5-min checker: stop hit, closed position");
+        continue;
+      }
+
+      const peakChanged      = newPeak !== (trade.peakPrice ?? 0);
+      const trailChanged     = Math.abs(newTrailingStop - (trade.trailingStopPrice ?? 0)) > 0.001;
+      const milestoneChanged = newT1Hit !== (trade.t1Hit ?? false) || newT2Hit !== (trade.t2Hit ?? false);
+      if (peakChanged || trailChanged || milestoneChanged) {
+        await db.update(paperTradesTable)
+          .set({ peakPrice: newPeak, trailingStopPrice: newTrailingStop, t1Hit: newT1Hit, t2Hit: newT2Hit })
+          .where(eq(paperTradesTable.id, trade.id));
+      }
+    }
+  } finally {
+    positionCheckRunning = false;
+  }
+}
+
 export async function runBotCycle(): Promise<BotCycleResult> {
   if (cycleRunning) {
     return { skipped: true, reason: "cycle already running", exited: [], newEntries: [], openCount: 0, runAt: new Date().toISOString() };
@@ -536,9 +658,49 @@ export async function runBotCycle(): Promise<BotCycleResult> {
         }
       }
 
-      if (newPeak !== (trade.peakPrice ?? 0) || Math.abs(newTrailingStop - (trade.trailingStopPrice ?? 0)) > 0.001) {
+      // ── T1/T2 milestone ratcheting ───────────────────────────────────────────
+      // T1 hit → ratchet stop to breakeven (entry price)
+      // T2 hit → ratchet stop to T1 (lock in T1 profit)
+      let newT1Hit = trade.t1Hit ?? false;
+      let newT2Hit = trade.t2Hit ?? false;
+      const t1 = trade.t1Price;
+      const t2 = trade.t2Price;
+
+      if (t1 != null && !newT1Hit) {
+        const t1Hit = isShort ? price <= t1 : price >= t1;
+        if (t1Hit) {
+          newT1Hit = true;
+          newTrailingStop = isShort
+            ? Math.min(newTrailingStop, trade.entryPrice)
+            : Math.max(newTrailingStop, trade.entryPrice);
+          logger.info({ ticker: trade.ticker, price, t1, entryPrice: trade.entryPrice }, "T1 hit — stop ratcheted to breakeven");
+        }
+      }
+      if (t2 != null && !newT2Hit) {
+        const t2Hit = isShort ? price <= t2 : price >= t2;
+        if (t2Hit) {
+          newT2Hit = true;
+          if (t1 != null) {
+            newTrailingStop = isShort
+              ? Math.min(newTrailingStop, t1)
+              : Math.max(newTrailingStop, t1);
+          }
+          logger.info({ ticker: trade.ticker, price, t2, t1, }, "T2 hit — stop ratcheted to T1");
+        }
+      }
+
+      const peakChanged     = newPeak !== (trade.peakPrice ?? 0);
+      const trailChanged    = Math.abs(newTrailingStop - (trade.trailingStopPrice ?? 0)) > 0.001;
+      const milestoneChanged = newT1Hit !== (trade.t1Hit ?? false) || newT2Hit !== (trade.t2Hit ?? false);
+
+      if (peakChanged || trailChanged || milestoneChanged) {
         await db.update(paperTradesTable)
-          .set({ peakPrice: newPeak, trailingStopPrice: newTrailingStop })
+          .set({
+            peakPrice:         newPeak,
+            trailingStopPrice: newTrailingStop,
+            t1Hit:             newT1Hit,
+            t2Hit:             newT2Hit,
+          })
           .where(eq(paperTradesTable.id, trade.id));
       }
 

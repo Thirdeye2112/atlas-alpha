@@ -54,6 +54,12 @@ export const paperTradesTable = pgTable("paper_trades", {
   targetPrice:        doublePrecision("target_price"),
   trailingStopPrice:  doublePrecision("trailing_stop_price"),
   peakPrice:          doublePrecision("peak_price"),
+  // T1/T2/T3 milestones (set at entry, used for stop ratcheting)
+  t1Price:            doublePrecision("t1_price"),
+  t2Price:            doublePrecision("t2_price"),
+  t3Price:            doublePrecision("t3_price"),
+  t1Hit:              boolean("t1_hit").notNull().default(false),
+  t2Hit:              boolean("t2_hit").notNull().default(false),
   // Intelligence / scanner context
   scannerCategories:  jsonb("scanner_categories").default([]),
   status:             text("status").notNull().default("open"),
