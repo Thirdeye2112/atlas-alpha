@@ -17,6 +17,7 @@ import alertsRouter from "./alerts";
 import botRouter from "./bot";
 import { ipoRouter } from './research-ipo';
 import { probabilityRouter } from './research-probability';
+import { hypothesisRouter } from './research-hypothesis';
 
 const router: IRouter = Router();
 
@@ -36,6 +37,7 @@ router.use('/research', conditionalRouter);
 router.use('/research', sectorsRouter);
 router.use('/research', ipoRouter);
 router.use('/research', probabilityRouter);
+router.use('/research', hypothesisRouter);
 router.use(alertsRouter);
 router.use(botRouter);
 

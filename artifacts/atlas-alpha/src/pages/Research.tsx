@@ -18,6 +18,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { ConceptLab } from '../components/ConceptLab'
 
 // ─── lightweight-charts v5 imports ───────────────────────────────────────────
 // Atlas Alpha already has this as a dependency (used in Dashboard.tsx).
@@ -942,7 +943,7 @@ function RunsPanel({ data, isLoading }: { data: { runs: ResearchRun[] } | undefi
 
 export default function ResearchLab() {
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null)
-  const [activeTab, setActiveTab]           = useState<'predictions' | 'models' | 'runs'>('predictions')
+  const [activeTab, setActiveTab]           = useState<'predictions' | 'models' | 'runs' | 'concept-lab'>('predictions')
   // Q1: model mode state lives here so the query key updates with it
   const [modelMode, setModelMode]           = useState<ModelMode>('champion')
 
@@ -1001,9 +1002,9 @@ export default function ResearchLab() {
             <span style={{ fontSize: 10, color: '#374151' }}>atlas-research · read-only</span>
           </div>
           <div style={{ display: 'flex', gap: 2 }}>
-            {(['predictions', 'models', 'runs'] as const).map(tab => (
+            {(['predictions', 'models', 'runs', 'concept-lab'] as const).map(tab => (
               <button key={tab} onClick={() => setActiveTab(tab)} style={{ background: activeTab === tab ? 'rgba(96,165,250,0.12)' : 'transparent', border: activeTab === tab ? '1px solid rgba(96,165,250,0.3)' : '1px solid transparent', color: activeTab === tab ? '#93c5fd' : '#4b5563', padding: '4px 12px', borderRadius: 4, cursor: 'pointer', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: 'inherit', transition: 'all 0.15s' }}>
-                {tab}
+                {tab === 'concept-lab' ? 'CONCEPT LAB' : tab}
               </button>
             ))}
           </div>
@@ -1049,6 +1050,10 @@ export default function ResearchLab() {
 
         {activeTab === 'runs' && (
           <RunsPanel data={runsQuery.data} isLoading={runsQuery.isLoading} />
+        )}
+
+        {activeTab === 'concept-lab' && (
+          <ConceptLab />
         )}
       </div>
 
