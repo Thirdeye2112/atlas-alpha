@@ -16,10 +16,10 @@
 import React from 'react'
 import { useQuery } from '@tanstack/react-query'
 
-// ── Benchmark averages from our 8-IPO analysis (Table 1) ──────────────────────
+// ── Benchmark averages from 1,126-IPO analysis (Table 1, 2019-2026) ──────────
 const AVG_AT_HORIZON: Record<number, number> = {
-  1: 0.6, 5: 2.1, 10: -0.6, 20: 4.5, 30: 4.8,
-  60: 17.8, 90: 27.3, 120: 31.8, 150: 33.7, 180: 41.6, 252: 44.2,
+  1: 2.9, 5: 1.7, 10: 1.5, 20: -2.1, 30: -0.9,
+  60: -2.4, 90: -4.5, 120: -8.6, 150: -10.6, 180: -14.3, 252: -22.5,
 }
 const HORIZONS = [1, 5, 10, 20, 30, 60, 90, 120, 150, 180, 252]
 
