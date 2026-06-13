@@ -2,28 +2,35 @@ import { useState, useEffect, useCallback } from 'react'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+interface Condition {
+  type: string
+  params: Record<string, number>
+}
+
 interface HypothesisSpec {
-  market_object: string
-  condition: string
-  condition_params: Record<string, number>
+  ticker: string
+  conditions: Condition[]
   direction: 'long' | 'short'
   horizons: number[]
   extracted_claim: string
 }
 
 interface HorizonResult {
+  days: number
   n: number
   hit_rate: number
-  avg_return: number
+  avg_return: number  // percent
   p_value: number | null
 }
 
 interface BacktestResults {
-  market_object: string
-  condition: string
-  n_signals: number
-  horizons: Record<string, HorizonResult>
+  ticker: string
+  conditions_desc: string
+  sample_size: number
+  horizons: HorizonResult[]
   yearly: Record<string, { hit_rate: number; n: number }>
+  passed_permutation: boolean
+  p_value: number | null
   narrative: string
 }
 
@@ -43,58 +50,78 @@ interface HistoryRow {
   created_at: string
 }
 
-// ── Condition definitions (for fallback form) ─────────────────────────────────
+// ── Condition catalogue (for fallback form) ───────────────────────────────────
 
-const CONDITIONS = [
-  { value: 'down_streak',    label: 'Down streak (N consecutive down days)',   params: [{ key: 'days',       label: 'Days',       default: 3  }] },
-  { value: 'up_streak',      label: 'Up streak (N consecutive up days)',        params: [{ key: 'days',       label: 'Days',       default: 3  }] },
-  { value: 'rsi_below',      label: 'RSI below threshold',                      params: [{ key: 'threshold',  label: 'Threshold',  default: 30 }, { key: 'period', label: 'Period', default: 14 }] },
-  { value: 'rsi_above',      label: 'RSI above threshold',                      params: [{ key: 'threshold',  label: 'Threshold',  default: 70 }, { key: 'period', label: 'Period', default: 14 }] },
-  { value: 'gap_down',       label: 'Gap down >X% from prior close',            params: [{ key: 'pct',        label: 'Pct (%)',    default: 2  }] },
-  { value: 'gap_up',         label: 'Gap up >X% from prior close',              params: [{ key: 'pct',        label: 'Pct (%)',    default: 2  }] },
-  { value: 'price_below_ma', label: 'Price below N-day SMA',                    params: [{ key: 'period',     label: 'Period',     default: 50 }] },
-  { value: 'price_above_ma', label: 'Price above N-day SMA',                    params: [{ key: 'period',     label: 'Period',     default: 50 }] },
-  { value: 'volume_spike',   label: 'Volume spike (>N× 20-day avg)',             params: [{ key: 'multiplier', label: 'Multiplier', default: 2  }] },
+interface ParamDef { key: string; label: string; default: number }
+interface CondDef  { value: string; label: string; params: ParamDef[] }
+
+const CONDITIONS: CondDef[] = [
+  { value: 'consecutive_down', label: 'Down streak (N consecutive down days)',      params: [{ key: 'n',          label: 'Days',       default: 3    }] },
+  { value: 'consecutive_up',   label: 'Up streak (N consecutive up days)',           params: [{ key: 'n',          label: 'Days',       default: 3    }] },
+  { value: 'rsi_below',        label: 'RSI below threshold',                         params: [{ key: 'threshold',  label: 'Threshold',  default: 30   }, { key: 'period', label: 'Period', default: 14 }] },
+  { value: 'rsi_above',        label: 'RSI above threshold',                         params: [{ key: 'threshold',  label: 'Threshold',  default: 70   }, { key: 'period', label: 'Period', default: 14 }] },
+  { value: 'price_above_sma',  label: 'Price above N-day SMA',                       params: [{ key: 'period',     label: 'Period',     default: 50   }] },
+  { value: 'price_below_sma',  label: 'Price below N-day SMA',                       params: [{ key: 'period',     label: 'Period',     default: 50   }] },
+  { value: 'jarvis_green',     label: 'Jarvis green (ML bullish signal)',             params: [] },
+  { value: 'jarvis_red',       label: 'Jarvis red (ML bearish signal)',               params: [] },
+  { value: 'gap_up',           label: 'Gap up >X% from prior close',                  params: [{ key: 'pct',        label: 'Pct (%)',    default: 2    }] },
+  { value: 'gap_down',         label: 'Gap down >X% from prior close',                params: [{ key: 'pct',        label: 'Pct (%)',    default: 2    }] },
+  { value: 'volume_spike',     label: 'Volume spike (>N× 20-day avg)',                params: [{ key: 'multiplier', label: 'Multiplier', default: 2    }] },
+  { value: 'near_52w_high',    label: 'Near 52-week high (within X%)',                params: [{ key: 'pct',        label: 'Pct (%)',    default: 3    }] },
+  { value: 'near_52w_low',     label: 'Near 52-week low (within X%)',                 params: [{ key: 'pct',        label: 'Pct (%)',    default: 3    }] },
+  { value: 'nr7',              label: 'NR7 — narrowest range in 7 bars',              params: [] },
+  { value: 'inside_bar',       label: 'Inside bar (range within prior bar)',           params: [] },
 ]
 
-// ── Styles (shared tokens) ────────────────────────────────────────────────────
+function defaultParams(condValue: string): Record<string, number> {
+  const def = CONDITIONS.find(c => c.value === condValue)
+  if (!def) return {}
+  const p: Record<string, number> = {}
+  def.params.forEach(pp => { p[pp.key] = pp.default })
+  return p
+}
 
-const s = {
-  card: { background: '#0d111a', border: '1px solid #1e2533', borderRadius: 8, padding: 20, marginBottom: 16 } as React.CSSProperties,
-  label: { fontSize: 9, color: '#60a5fa', letterSpacing: '0.1em', marginBottom: 8 } as React.CSSProperties,
-  input: { background: '#060b14', border: '1px solid #1e2533', borderRadius: 4, color: '#e5e7eb', padding: '6px 10px', fontSize: 12, fontFamily: 'inherit', boxSizing: 'border-box' as const },
-  btn: (active: boolean) => ({
-    background: active ? 'rgba(96,165,250,0.15)' : 'transparent',
-    border: `1px solid ${active ? 'rgba(96,165,250,0.4)' : '#1e2533'}`,
-    color: active ? '#93c5fd' : '#4b5563',
-    padding: '7px 20px', borderRadius: 5, cursor: 'pointer',
-    fontSize: 11, fontFamily: 'inherit', letterSpacing: '0.06em',
-  } as React.CSSProperties),
+// ── Styles ────────────────────────────────────────────────────────────────────
+
+const card: React.CSSProperties = { background: '#0d111a', border: '1px solid #1e2533', borderRadius: 8, padding: 20, marginBottom: 16 }
+const lbl:  React.CSSProperties = { fontSize: 9, color: '#60a5fa', letterSpacing: '0.1em', marginBottom: 8 }
+const inp   = { background: '#060b14', border: '1px solid #1e2533', borderRadius: 4, color: '#e5e7eb', padding: '6px 10px', fontSize: 12, fontFamily: 'inherit', boxSizing: 'border-box' as const }
+
+function PrimaryBtn({ onClick, disabled, children }: { onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
+  return (
+    <button onClick={onClick} disabled={disabled} style={{
+      background: disabled ? '#1e2533' : 'rgba(96,165,250,0.15)',
+      border: `1px solid ${disabled ? '#1e2533' : 'rgba(96,165,250,0.4)'}`,
+      color: disabled ? '#4b5563' : '#93c5fd',
+      padding: '7px 20px', borderRadius: 5, cursor: disabled ? 'not-allowed' : 'pointer',
+      fontSize: 11, fontFamily: 'inherit', letterSpacing: '0.06em',
+    }}>{children}</button>
+  )
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function pctFmt(v: number) { return `${(v * 100).toFixed(1)}%` }
-function retFmt(v: number) { return `${v >= 0 ? '+' : ''}${(v * 100).toFixed(2)}%` }
-function pFmt(p: number | null) { return p == null ? '—' : p < 0.001 ? '<0.001' : p.toFixed(3) }
-function sigStars(p: number | null) { return p == null ? '' : p < 0.01 ? '**' : p < 0.05 ? '*' : '' }
-function hrColor(hr: number) { return hr >= 0.65 ? '#86efac' : hr >= 0.55 ? '#fbbf24' : '#9ca3af' }
+const pctFmt  = (v: number)          => `${(v * 100).toFixed(1)}%`
+const retFmt  = (v: number)          => `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`
+const pFmt    = (p: number | null)   => p == null ? '—' : p < 0.001 ? '<0.001' : p.toFixed(3)
+const sigStar = (p: number | null)   => p == null ? '' : p < 0.01 ? '**' : p < 0.05 ? '*' : ''
+const hrColor = (hr: number)         => hr >= 0.65 ? '#86efac' : hr >= 0.55 ? '#fbbf24' : '#9ca3af'
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function ConceptLab() {
-  const [concept, setConcept]     = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [result, setResult]       = useState<TestResponse | null>(null)
-  const [error, setError]         = useState<string | null>(null)
+  const [concept, setConcept]         = useState('')
+  const [isLoading, setIsLoading]     = useState(false)
+  const [result, setResult]           = useState<TestResponse | null>(null)
+  const [error, setError]             = useState<string | null>(null)
   const [requiresKey, setRequiresKey] = useState(false)
-  const [history, setHistory]     = useState<HistoryRow[]>([])
+  const [history, setHistory]         = useState<HistoryRow[]>([])
 
-  // Fallback structured form state
+  // Fallback form: ticker + direction + conditions array
   const [fbTicker,    setFbTicker]    = useState('SPY')
-  const [fbCondition, setFbCondition] = useState('down_streak')
-  const [fbParams,    setFbParams]    = useState<Record<string, number>>({ days: 3 })
   const [fbDirection, setFbDirection] = useState<'long' | 'short'>('long')
+  const [fbConds,     setFbConds]     = useState<Condition[]>([{ type: 'consecutive_down', params: { n: 3 } }])
+  const [fbNewType,   setFbNewType]   = useState('consecutive_down')
 
   const loadHistory = useCallback(async () => {
     try {
@@ -113,7 +140,7 @@ export function ConceptLab() {
     setError(null)
     setResult(null)
     try {
-      const res = await fetch('/api/research/hypothesis/test', {
+      const res  = await fetch('/api/research/hypothesis/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -134,34 +161,38 @@ export function ConceptLab() {
     }
   }
 
-  const handleConceptSubmit = () => {
-    if (!concept.trim() || isLoading) return
-    runTest({ concept: concept.trim() })
-  }
-
   const handleFallbackSubmit = () => {
-    if (isLoading) return
+    if (isLoading || fbConds.length === 0) return
     const spec: HypothesisSpec = {
-      market_object:   fbTicker.toUpperCase(),
-      condition:       fbCondition,
-      condition_params: fbParams,
-      direction:       fbDirection,
-      horizons:        [5, 10, 20],
-      extracted_claim: `${fbTicker.toUpperCase()} ${fbCondition.replace(/_/g, ' ')} → ${fbDirection}`,
+      ticker:         fbTicker.toUpperCase(),
+      conditions:     fbConds,
+      direction:      fbDirection,
+      horizons:       [1, 5, 10, 20],
+      extracted_claim: `${fbTicker.toUpperCase()} ${fbConds.map(c => c.type.replace(/_/g, ' ')).join(' AND ')} → ${fbDirection}`,
     }
     runTest({ spec })
   }
 
-  const selectedCondDef = CONDITIONS.find(c => c.value === fbCondition)
+  const addCondition = () => {
+    setFbConds(prev => [...prev, { type: fbNewType, params: defaultParams(fbNewType) }])
+  }
+
+  const removeCondition = (idx: number) => {
+    setFbConds(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  const updateCondParam = (idx: number, key: string, val: number) => {
+    setFbConds(prev => prev.map((c, i) => i === idx ? { ...c, params: { ...c.params, [key]: val } } : c))
+  }
 
   return (
     <div style={{ fontFamily: '"JetBrains Mono", "Fira Code", monospace' }}>
 
       {/* ── Input card ──────────────────────────────────────────────────────── */}
-      <div style={s.card}>
-        <div style={s.label}>CONCEPT LAB — NATURAL LANGUAGE BACKTEST</div>
+      <div style={card}>
+        <div style={lbl}>CONCEPT LAB — NATURAL LANGUAGE BACKTEST</div>
         <div style={{ fontSize: 11, color: '#4b5563', marginBottom: 16 }}>
-          Describe a trading concept in plain English. Claude will parse it into a testable condition and backtest it against historical price data.
+          Describe a trading concept in plain English. Claude converts it to a testable condition and backtests it against historical price data.
         </div>
 
         {!requiresKey ? (
@@ -169,22 +200,15 @@ export function ConceptLab() {
             <textarea
               value={concept}
               onChange={e => setConcept(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleConceptSubmit() }}
-              placeholder={'"buy SPY when it drops 3 days in a row" · "short QQQ when RSI above 75" · "buy after a 2% gap down"'}
+              onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) runTest({ concept: concept.trim() }) }}
+              placeholder={'"buy SPY when it drops 3 days in a row" · "short QQQ when RSI > 75" · "buy after a 2% gap down AND RSI < 35"'}
               rows={3}
-              style={{
-                width: '100%', ...s.input, padding: '10px 12px', fontSize: 13,
-                resize: 'vertical', outline: 'none', borderRadius: 6,
-              }}
+              style={{ width: '100%', ...inp, padding: '10px 12px', fontSize: 13, resize: 'vertical', outline: 'none', borderRadius: 6 }}
             />
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 10 }}>
-              <button
-                onClick={handleConceptSubmit}
-                disabled={isLoading || !concept.trim()}
-                style={{ ...s.btn(!isLoading && !!concept.trim()), cursor: isLoading || !concept.trim() ? 'not-allowed' : 'pointer' }}
-              >
+              <PrimaryBtn onClick={() => runTest({ concept: concept.trim() })} disabled={isLoading || !concept.trim()}>
                 {isLoading ? '⟳ RUNNING...' : '⚡ TEST HYPOTHESIS'}
-              </button>
+              </PrimaryBtn>
               <span style={{ fontSize: 10, color: '#374151' }}>Ctrl+Enter</span>
             </div>
           </>
@@ -192,21 +216,18 @@ export function ConceptLab() {
           // ── Fallback structured form ─────────────────────────────────────
           <>
             <div style={{ background: '#1a0f0f', border: '1px solid #7f1d1d', borderRadius: 6, padding: '10px 14px', marginBottom: 16, fontSize: 11, color: '#fca5a5' }}>
-              ⚠ ANTHROPIC_API_KEY not configured — natural language parsing unavailable.
-              Use the structured form below to specify the condition directly.
+              ⚠ ANTHROPIC_API_KEY not configured — natural language parsing unavailable. Build the condition manually below.
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 12, marginBottom: 12 }}>
+            {/* Ticker + direction */}
+            <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 12, marginBottom: 14 }}>
               <div>
-                <div style={{ ...s.label, marginBottom: 4 }}>TICKER</div>
-                <input
-                  value={fbTicker}
-                  onChange={e => setFbTicker(e.target.value.toUpperCase())}
-                  style={{ ...s.input, width: '100%' }}
-                />
+                <div style={{ ...lbl, marginBottom: 4 }}>TICKER</div>
+                <input value={fbTicker} onChange={e => setFbTicker(e.target.value.toUpperCase())}
+                  style={{ ...inp, width: '100%' }} />
               </div>
               <div>
-                <div style={{ ...s.label, marginBottom: 4 }}>DIRECTION</div>
+                <div style={{ ...lbl, marginBottom: 4 }}>DIRECTION</div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   {(['long', 'short'] as const).map(d => (
                     <button key={d} onClick={() => setFbDirection(d)} style={{
@@ -222,49 +243,45 @@ export function ConceptLab() {
               </div>
             </div>
 
+            {/* Conditions list */}
             <div style={{ marginBottom: 12 }}>
-              <div style={{ ...s.label, marginBottom: 4 }}>CONDITION</div>
-              <select
-                value={fbCondition}
-                onChange={e => {
-                  const v = e.target.value
-                  setFbCondition(v)
-                  const def = CONDITIONS.find(c => c.value === v)
-                  if (def) {
-                    const p: Record<string, number> = {}
-                    def.params.forEach(pp => { p[pp.key] = pp.default })
-                    setFbParams(p)
-                  }
-                }}
-                style={{ ...s.input, width: '100%' }}
-              >
-                {CONDITIONS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-              </select>
+              <div style={{ ...lbl, marginBottom: 8 }}>CONDITIONS (AND-combined)</div>
+              {fbConds.map((cond, idx) => {
+                const def = CONDITIONS.find(c => c.value === cond.type)
+                return (
+                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, background: '#060b14', border: '1px solid #1e2533', borderRadius: 4, padding: '8px 10px' }}>
+                    <span style={{ fontSize: 9, color: '#374151', minWidth: 24, textAlign: 'center' }}>
+                      {idx === 0 ? 'IF' : 'AND'}
+                    </span>
+                    <span style={{ fontSize: 11, color: '#9ca3af', flex: 1 }}>{def?.label ?? cond.type}</span>
+                    {def?.params.map(pp => (
+                      <div key={pp.key} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{ fontSize: 9, color: '#4b5563' }}>{pp.label}:</span>
+                        <input type="number" value={cond.params[pp.key] ?? pp.default}
+                          onChange={e => updateCondParam(idx, pp.key, Number(e.target.value))}
+                          style={{ ...inp, width: 60, padding: '3px 6px' }} />
+                      </div>
+                    ))}
+                    <button onClick={() => removeCondition(idx)} style={{ background: 'transparent', border: 'none', color: '#4b5563', cursor: 'pointer', fontSize: 13, padding: '0 4px', fontFamily: 'inherit' }}>×</button>
+                  </div>
+                )
+              })}
+
+              {/* Add condition row */}
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <select value={fbNewType} onChange={e => setFbNewType(e.target.value)}
+                  style={{ ...inp, flex: 1 }}>
+                  {CONDITIONS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </select>
+                <button onClick={addCondition} style={{ ...inp, padding: '6px 12px', cursor: 'pointer', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.3)', borderRadius: 4 }}>
+                  + Add
+                </button>
+              </div>
             </div>
 
-            {selectedCondDef && (
-              <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
-                {selectedCondDef.params.map(p => (
-                  <div key={p.key}>
-                    <div style={{ ...s.label, marginBottom: 4 }}>{p.label.toUpperCase()}</div>
-                    <input
-                      type="number"
-                      value={fbParams[p.key] ?? p.default}
-                      onChange={e => setFbParams(prev => ({ ...prev, [p.key]: Number(e.target.value) }))}
-                      style={{ ...s.input, width: 80 }}
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <button
-              onClick={handleFallbackSubmit}
-              disabled={isLoading}
-              style={{ ...s.btn(!isLoading), cursor: isLoading ? 'not-allowed' : 'pointer' }}
-            >
+            <PrimaryBtn onClick={handleFallbackSubmit} disabled={isLoading || fbConds.length === 0}>
               {isLoading ? '⟳ RUNNING...' : '⚡ TEST HYPOTHESIS'}
-            </button>
+            </PrimaryBtn>
           </>
         )}
 
@@ -277,29 +294,38 @@ export function ConceptLab() {
 
       {/* ── Results card ────────────────────────────────────────────────────── */}
       {result && (
-        <div style={s.card}>
+        <div style={card}>
 
-          {/* Spec summary */}
+          {/* Header: ticker + conditions + badges */}
           <div style={{ borderBottom: '1px solid #1e2533', paddingBottom: 12, marginBottom: 14 }}>
-            <div style={s.label}>EXTRACTED HYPOTHESIS</div>
+            <div style={lbl}>BACKTEST RESULTS</div>
             <div style={{ fontSize: 13, color: '#e5e7eb', marginBottom: 8 }}>{result.spec.extracted_claim}</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
               <span style={{ fontSize: 10, background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.2)', color: '#93c5fd', padding: '2px 8px', borderRadius: 3 }}>
-                {result.spec.market_object}
+                {result.results.ticker}
               </span>
-              <span style={{ fontSize: 10, color: '#6b7280' }}>{result.spec.condition.replace(/_/g, ' ')}</span>
+              <span style={{ fontSize: 10, color: '#6b7280' }}>{result.results.conditions_desc}</span>
               <span style={{ fontSize: 10, color: '#374151' }}>·</span>
               <span style={{ fontSize: 10, color: result.spec.direction === 'long' ? '#86efac' : '#fca5a5' }}>
                 {result.spec.direction === 'long' ? '▲ LONG' : '▼ SHORT'}
               </span>
               <span style={{ fontSize: 10, color: '#374151' }}>·</span>
-              <span style={{ fontSize: 10, color: '#6b7280' }}>{result.results.n_signals} signals</span>
+              <span style={{ fontSize: 10, color: '#6b7280' }}>{result.results.sample_size} signals</span>
+              {/* Verification badge */}
+              <span style={{
+                fontSize: 9, padding: '2px 8px', borderRadius: 3, fontWeight: 700,
+                background: result.results.passed_permutation ? 'rgba(34,197,94,0.12)' : 'rgba(107,114,128,0.12)',
+                border: `1px solid ${result.results.passed_permutation ? '#16a34a' : '#374151'}`,
+                color: result.results.passed_permutation ? '#86efac' : '#6b7280',
+              }}>
+                {result.results.passed_permutation ? '✓ VERIFIED p<0.05' : '○ NOT SIGNIFICANT'}
+              </span>
             </div>
           </div>
 
           {/* Hit rate table */}
           <div style={{ marginBottom: 16 }}>
-            <div style={s.label}>HIT RATE BY HORIZON</div>
+            <div style={lbl}>HIT RATE BY HORIZON</div>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
               <thead>
                 <tr>
@@ -309,35 +335,33 @@ export function ConceptLab() {
                 </tr>
               </thead>
               <tbody>
-                {Object.entries(result.results.horizons)
-                  .sort(([a], [b]) => Number(a) - Number(b))
-                  .map(([h, data]) => (
-                    <tr key={h}>
-                      <td style={{ padding: '6px 8px', color: '#9ca3af' }}>{h}d</td>
-                      <td style={{ padding: '6px 8px', color: '#6b7280' }}>{data.n}</td>
-                      <td style={{ padding: '6px 8px', color: hrColor(data.hit_rate), fontWeight: 600 }}>{pctFmt(data.hit_rate)}</td>
-                      <td style={{ padding: '6px 8px', color: data.avg_return >= 0 ? '#86efac' : '#fca5a5' }}>{retFmt(data.avg_return)}</td>
-                      <td style={{ padding: '6px 8px', color: '#6b7280' }}>{pFmt(data.p_value)}</td>
-                      <td style={{ padding: '6px 8px', color: '#fbbf24', fontWeight: 700 }}>{sigStars(data.p_value)}</td>
-                    </tr>
-                  ))}
+                {result.results.horizons.map(h => (
+                  <tr key={h.days}>
+                    <td style={{ padding: '6px 8px', color: '#9ca3af' }}>{h.days}d</td>
+                    <td style={{ padding: '6px 8px', color: '#6b7280' }}>{h.n}</td>
+                    <td style={{ padding: '6px 8px', color: hrColor(h.hit_rate), fontWeight: 600 }}>{pctFmt(h.hit_rate)}</td>
+                    <td style={{ padding: '6px 8px', color: h.avg_return >= 0 ? '#86efac' : '#fca5a5' }}>{retFmt(h.avg_return)}</td>
+                    <td style={{ padding: '6px 8px', color: '#6b7280' }}>{pFmt(h.p_value)}</td>
+                    <td style={{ padding: '6px 8px', color: '#fbbf24', fontWeight: 700 }}>{sigStar(h.p_value)}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
-            <div style={{ marginTop: 6, fontSize: 9, color: '#374151' }}>* p&lt;0.05 &nbsp;&nbsp; ** p&lt;0.01 &nbsp;&nbsp; Hit rate ≥65%: green · ≥55%: yellow</div>
+            <div style={{ marginTop: 6, fontSize: 9, color: '#374151' }}>* p&lt;0.05 &nbsp; ** p&lt;0.01 &nbsp; hit rate ≥65%: green · ≥55%: yellow</div>
           </div>
 
           {/* Yearly breakdown */}
           {Object.keys(result.results.yearly).length > 0 && (
             <div style={{ marginBottom: 16 }}>
-              <div style={s.label}>YEARLY BREAKDOWN (5D EXIT)</div>
+              <div style={lbl}>YEARLY BREAKDOWN (5D EXIT)</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {Object.entries(result.results.yearly).map(([year, data]) => {
                   const hr = data.hit_rate
-                  const color = hr >= 0.65 ? '#86efac' : hr >= 0.55 ? '#fbbf24' : hr >= 0.45 ? '#9ca3af' : '#fca5a5'
+                  const col = hr >= 0.65 ? '#86efac' : hr >= 0.55 ? '#fbbf24' : hr >= 0.45 ? '#9ca3af' : '#fca5a5'
                   return (
                     <div key={year} style={{ background: '#060b14', border: '1px solid #1e2533', borderRadius: 4, padding: '6px 10px', textAlign: 'center' }}>
                       <div style={{ fontSize: 9, color: '#4b5563', marginBottom: 2 }}>{year}</div>
-                      <div style={{ fontSize: 12, color, fontWeight: 600 }}>{pctFmt(hr)}</div>
+                      <div style={{ fontSize: 12, color: col, fontWeight: 600 }}>{pctFmt(hr)}</div>
                       <div style={{ fontSize: 9, color: '#374151' }}>n={data.n}</div>
                     </div>
                   )
@@ -353,16 +377,12 @@ export function ConceptLab() {
 
           {/* Action buttons */}
           <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
-            <button
-              title="Save to conditional patterns — coming soon"
-              style={{ background: 'transparent', border: '1px solid #1e2533', color: '#374151', padding: '6px 14px', borderRadius: 4, cursor: 'not-allowed', fontSize: 10, fontFamily: 'inherit' }}
-            >
+            <button title="Save to conditional patterns — coming soon"
+              style={{ background: 'transparent', border: '1px solid #1e2533', color: '#374151', padding: '6px 14px', borderRadius: 4, cursor: 'not-allowed', fontSize: 10, fontFamily: 'inherit' }}>
               ☆ Save to Patterns
             </button>
-            <button
-              title="Run across full 1,287-ticker universe — coming soon"
-              style={{ background: 'transparent', border: '1px solid #1e2533', color: '#374151', padding: '6px 14px', borderRadius: 4, cursor: 'not-allowed', fontSize: 10, fontFamily: 'inherit' }}
-            >
+            <button title="Run across full 1,287-ticker universe — coming soon"
+              style={{ background: 'transparent', border: '1px solid #1e2533', color: '#374151', padding: '6px 14px', borderRadius: 4, cursor: 'not-allowed', fontSize: 10, fontFamily: 'inherit' }}>
               ⟳ Run on Full Universe
             </button>
           </div>
@@ -371,8 +391,8 @@ export function ConceptLab() {
 
       {/* ── History ──────────────────────────────────────────────────────────── */}
       {history.length > 0 && (
-        <div style={s.card}>
-          <div style={s.label}>RECENT HYPOTHESES</div>
+        <div style={card}>
+          <div style={lbl}>RECENT HYPOTHESES</div>
           <div>
             {history.map((row, idx) => (
               <div key={row.hypothesis_id} style={{

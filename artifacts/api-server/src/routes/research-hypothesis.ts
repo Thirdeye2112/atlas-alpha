@@ -10,10 +10,10 @@
  * Endpoints
  * ---------
  *   POST /api/research/hypothesis/test
- *     Body: { concept: string } → Claude parses to spec, runs Python backtest
+ *     Body: { concept: string } → Claude parses to conditions-array spec, runs Python backtest
  *     Body: { spec: HypothesisSpec } → skips Claude (fallback form mode)
  *     Returns: { spec, results, narrative }
- *     Returns 400 { error, requiresKey: true } when ANTHROPIC_API_KEY missing and concept provided
+ *     Returns 400 { error, requiresKey: true } when ANTHROPIC_API_KEY absent and concept provided
  *
  *   GET /api/research/hypothesis/history
  *     Returns last 20 completed hypotheses from research_hypotheses table.
@@ -51,21 +51,35 @@ async function query<T>(sql: string, params: unknown[] = []): Promise<T[]> {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+interface Condition {
+  type: string
+  params: Record<string, number>
+}
+
 interface HypothesisSpec {
-  market_object: string
-  condition: string
-  condition_params: Record<string, number>
+  ticker: string
+  conditions: Condition[]
   direction: 'long' | 'short'
   horizons: number[]
   extracted_claim: string
 }
 
+interface HorizonResult {
+  days: number
+  n: number
+  hit_rate: number
+  avg_return: number  // percent (0.82 = 0.82%)
+  p_value: number | null
+}
+
 interface BacktestResults {
-  market_object: string
-  condition: string
-  n_signals: number
-  horizons: Record<string, { n: number; hit_rate: number; avg_return: number; p_value: number | null }>
+  ticker: string
+  conditions_desc: string
+  sample_size: number
+  horizons: HorizonResult[]
   yearly: Record<string, { hit_rate: number; n: number }>
+  passed_permutation: boolean
+  p_value: number | null
   narrative: string
 }
 
@@ -73,33 +87,45 @@ interface BacktestResults {
 
 const SYSTEM_PROMPT = `You are a quantitative trading hypothesis parser. Convert a natural language trading concept into a structured, backtestable specification as JSON.
 
-Supported conditions:
-- down_streak: N consecutive down-close days. params: {"days": N}
-- up_streak: N consecutive up-close days. params: {"days": N}
-- rsi_below: RSI below threshold. params: {"threshold": T, "period": 14}
-- rsi_above: RSI above threshold. params: {"threshold": T, "period": 14}
-- gap_down: Price gaps down >X% from prior close. params: {"pct": X}
-- gap_up: Price gaps up >X% from prior close. params: {"pct": X}
-- price_below_ma: Close below N-day SMA. params: {"period": N}
-- price_above_ma: Close above N-day SMA. params: {"period": N}
-- volume_spike: Volume > N× 20-day average. params: {"multiplier": N}
-
 Output ONLY valid JSON with these exact fields:
 {
-  "market_object": "<TICKER — use SPY if unspecified; always a real ticker symbol>",
-  "condition": "<one of the supported conditions above>",
-  "condition_params": { <params for the condition> },
+  "ticker": "<TICKER — use SPY if not specified; always a real ticker symbol>",
+  "conditions": [
+    {"type": "<condition_type>", "params": {<params>}}
+  ],
   "direction": "long or short",
-  "horizons": [5, 10, 20],
-  "extracted_claim": "<one sentence plain English summary of the hypothesis>"
+  "horizons": [1, 5, 10, 20],
+  "extracted_claim": "<one sentence plain English summary>"
 }
 
-No preamble. No explanation. JSON only.`
+Available condition types (use one or more; multiple conditions are AND-combined):
+- consecutive_down: N consecutive down-close days. params: {"n": N}
+- consecutive_up:   N consecutive up-close days.   params: {"n": N}
+- rsi_below:        RSI < threshold.                params: {"threshold": T, "period": 14}
+- rsi_above:        RSI > threshold.                params: {"threshold": T, "period": 14}
+- price_above_sma:  Close > N-day SMA.              params: {"period": N}
+- price_below_sma:  Close < N-day SMA.              params: {"period": N}
+- jarvis_green:     ML model bullish signal.         params: {}
+- jarvis_red:       ML model bearish signal.         params: {}
+- gap_up:           Open >X% above prior close.      params: {"pct": X}
+- gap_down:         Open >X% below prior close.      params: {"pct": X}
+- volume_spike:     Volume > N× 20-day average.      params: {"multiplier": N}
+- near_52w_high:    Close within X% of 52-week high. params: {"pct": X}
+- near_52w_low:     Close within X% of 52-week low.  params: {"pct": X}
+- nr7:              Narrowest range in last 7 bars.   params: {}
+- inside_bar:       Bar range inside prior bar.       params: {}
+
+No preamble. No explanation. JSON only.
+
+Examples:
+- "buy SPY when down 3 days in a row" → [{"type":"consecutive_down","params":{"n":3}}], long
+- "short QQQ when RSI above 75"       → [{"type":"rsi_above","params":{"threshold":75}}], short
+- "buy after 2% gap down and RSI<35"  → [gap_down pct=2, rsi_below threshold=35], long`
 
 // ── Python runner ─────────────────────────────────────────────────────────────
 
 const PYTHON_BIN    = 'C:\\Atlas\\atlas-research\\.venv\\Scripts\\python.exe'
-const RUNNER_SCRIPT = 'C:\\Atlas\\atlas-research\\scripts\\research-hypothesis-runner.py'
+const RUNNER_SCRIPT = 'C:\\Atlas\\atlas-research\\scripts\\run_hypothesis_test.py'
 
 async function runBacktest(spec: HypothesisSpec): Promise<BacktestResults> {
   return new Promise((resolve, reject) => {
@@ -176,8 +202,8 @@ hypothesisRouter.post('/hypothesis/test', async (req, res) => {
     const results = await runBacktest(spec)
 
     const hypothesisId = `hyp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-    // source_text is NOT NULL — use concept or extracted_claim as the verbatim source for user-submitted hypotheses
-    const sourceText = body.concept ?? spec.extracted_claim
+    const sourceText   = body.concept ?? spec.extracted_claim
+    const condDesc     = results.conditions_desc
     await query(
       `INSERT INTO research_hypotheses
          (hypothesis_id, source_text, extracted_claim, market_object, condition, condition_params,
@@ -187,9 +213,9 @@ hypothesisRouter.post('/hypothesis/test', async (req, res) => {
         hypothesisId,
         sourceText,
         spec.extracted_claim,
-        spec.market_object,
-        spec.condition,
-        JSON.stringify(spec.condition_params),
+        spec.ticker,
+        condDesc,
+        JSON.stringify(spec.conditions),
         spec.horizons,
         spec.direction,
       ]
