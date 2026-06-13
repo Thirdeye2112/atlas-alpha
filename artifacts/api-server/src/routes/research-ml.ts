@@ -96,6 +96,28 @@ function resolveModelName(mode: string): { mode: ModelMode; name: string | null 
 // rank_percentile comes from whichever model is available (regressor preferred).
 // ---------------------------------------------------------------------------
 
+// Quality filter: Tier 1-2 only — price > $10 AND avg daily volume > 100k
+// over last 60 bars. Excludes micro-cap junk where OMNI cross_up is bearish.
+const QUALITY_FILTER_CTE = `
+  quality AS (
+    SELECT
+      rb.ticker,
+      PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY rb.adjusted_close) AS med_price,
+      AVG(rb.volume) AS avg_vol
+    FROM (
+      SELECT ticker, adjusted_close, volume,
+             ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY date DESC) AS rn
+      FROM raw_bars
+      WHERE adjusted_close > 0 AND volume > 0
+    ) rb
+    WHERE rb.rn <= 60
+    GROUP BY rb.ticker
+    HAVING
+      PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY rb.adjusted_close) > 10
+      AND AVG(rb.volume) > 100000
+  ),
+`
+
 const CHAMPION_PREDICTIONS_SQL = `
   WITH reg AS (
     SELECT ticker, date, model_version,
@@ -124,6 +146,45 @@ const CHAMPION_PREDICTIONS_SQL = `
     COALESCE(reg.rank_percentile, clf.clf_rank) AS rank_percentile
   FROM reg
   FULL OUTER JOIN clf ON reg.ticker = clf.ticker
+  WHERE (
+    $2::double precision = 0
+    OR COALESCE(clf.clf_prob, reg.probability_positive) >= $2
+  )
+  ORDER BY rank_percentile DESC NULLS LAST
+  LIMIT $3
+`
+
+// Quality-filtered variant: same as CHAMPION but adds quality CTE and JOIN
+// to restrict results to Tier 1-2 tickers (price > $10, avg vol > 100k).
+const CHAMPION_PREDICTIONS_QUALITY_SQL = `
+  WITH ${QUALITY_FILTER_CTE} reg AS (
+    SELECT ticker, date, model_version,
+           expected_return, probability_positive,
+           expected_drawdown, confidence, rank_percentile
+    FROM predictions
+    WHERE date = $1 AND model_name = 'return_regressor'
+  ),
+  clf AS (
+    SELECT ticker, date,
+           probability_positive AS clf_prob,
+           confidence           AS clf_conf,
+           rank_percentile      AS clf_rank
+    FROM predictions
+    WHERE date = $1 AND model_name = 'positive_classifier'
+  )
+  SELECT
+    COALESCE(reg.ticker, clf.ticker)        AS ticker,
+    $1::text                                AS date,
+    'champion'                              AS model_name,
+    COALESCE(reg.model_version, 'v1')       AS model_version,
+    reg.expected_return,
+    COALESCE(clf.clf_prob, reg.probability_positive) AS probability_positive,
+    reg.expected_drawdown,
+    COALESCE(clf.clf_conf, reg.confidence)  AS confidence,
+    COALESCE(reg.rank_percentile, clf.clf_rank) AS rank_percentile
+  FROM reg
+  FULL OUTER JOIN clf ON reg.ticker = clf.ticker
+  INNER JOIN quality ON quality.ticker = COALESCE(reg.ticker, clf.ticker)
   WHERE (
     $2::double precision = 0
     OR COALESCE(clf.clf_prob, reg.probability_positive) >= $2
@@ -190,16 +251,18 @@ export const mlResearchRouter = Router()
 // ---------------------------------------------------------------------------
 // GET /api/research/predictions
 // Query params:
-//   date?     YYYY-MM-DD  (default: most recent)
-//   model?    champion | return | probability | drawdown | <model_name>  (default: champion)
-//   limit?    integer (default: 200, max: 500)
-//   min_prob? 0.0–1.0
+//   date?           YYYY-MM-DD  (default: most recent)
+//   model?          champion | return | probability | drawdown | <model_name>  (default: champion)
+//   limit?          integer (default: 200, max: 500)
+//   min_prob?       0.0–1.0
+//   quality_filter? 1 | true — restrict to Tier 1-2 (price>$10, avg_vol>100k)
 // ---------------------------------------------------------------------------
 mlResearchRouter.get('/predictions', async (req, res) => {
   try {
-    const limitRaw  = Math.min(parseInt(String(req.query.limit ?? 200), 10), 500)
-    const modelMode = String(req.query.model ?? 'champion')
-    const minProb   = parseFloat(String(req.query.min_prob ?? 0)) || 0
+    const limitRaw     = Math.min(parseInt(String(req.query.limit ?? 200), 10), 500)
+    const modelMode    = String(req.query.model ?? 'champion')
+    const minProb      = parseFloat(String(req.query.min_prob ?? 0)) || 0
+    const qualityOnly  = req.query.quality_filter === '1' || req.query.quality_filter === 'true'
     const { mode, name } = resolveModelName(modelMode)
 
     // Resolve target date
@@ -222,7 +285,8 @@ mlResearchRouter.get('/predictions', async (req, res) => {
     let rows: Prediction[]
 
     if (mode === 'champion') {
-      rows = await query<Prediction>(CHAMPION_PREDICTIONS_SQL, [targetDate, minProb, limitRaw])
+      const sql = qualityOnly ? CHAMPION_PREDICTIONS_QUALITY_SQL : CHAMPION_PREDICTIONS_SQL
+      rows = await query<Prediction>(sql, [targetDate, minProb, limitRaw])
     } else {
       const orderCol = mode === 'drawdown' ? 'expected_drawdown ASC NULLS LAST' : 'rank_percentile DESC NULLS LAST'
       rows = await query<Prediction>(
