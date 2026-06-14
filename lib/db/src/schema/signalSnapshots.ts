@@ -49,6 +49,17 @@ export const signalSnapshotsTable = pgTable("signal_snapshots", {
   smartGateEnter:      boolean("smart_gate_enter"),
   smartGateReason:     text("smart_gate_reason"),
 
+  // ── Score decomposition fields (added for per-component calibration) ─────
+  optionsScore:        integer("options_score"),
+  adx:                 doublePrecision("adx"),
+  adxTrending:         boolean("adx_trending"),
+  alignmentScore:      integer("alignment_score"),
+  macdHistogram:       doublePrecision("macd_histogram"),
+  rsiDivergence:       varchar("rsi_divergence", { length: 20 }),
+  goldenCross:         boolean("golden_cross"),
+  deathCross:          boolean("death_cross"),
+  volSqueeze:          boolean("vol_squeeze"),
+
   forwardReturn5d:     doublePrecision("forward_return_5d"),
   forwardReturn10d:    doublePrecision("forward_return_10d"),
   forwardReturn20d:    doublePrecision("forward_return_20d"),

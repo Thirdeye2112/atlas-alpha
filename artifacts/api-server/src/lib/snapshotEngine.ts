@@ -122,6 +122,16 @@ export async function saveSnapshotsBatch(analyses: AnalysisResult[]): Promise<vo
       pullbackClass:       a.pullbackSetup?.classification ?? null,
       smartGateEnter:      gate.enter,
       smartGateReason:     gate.reasoning,
+      // Score decomposition fields
+      optionsScore:        a.atlasScore.optionsScore ?? null,
+      adx:                 a.regimeIndicators?.adx ?? null,
+      adxTrending:         a.regimeIndicators?.adxTrending ?? null,
+      alignmentScore:      a.atlasScore.alignmentScore ?? null,
+      macdHistogram:       a.momentum?.macdHistogram ?? null,
+      rsiDivergence:       a.momentum?.rsiDivergence ?? null,
+      goldenCross:         a.trend?.goldenCross ?? null,
+      deathCross:          a.trend?.deathCross ?? null,
+      volSqueeze:          a.volatility?.volatilitySqueeze ?? null,
     };
   });
 
