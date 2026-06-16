@@ -1900,6 +1900,255 @@ interface MetaSignalHealthData {
   generatedAt: string;
 }
 
+// ── Intraday Learning Status Types ────────────────────────────────────────────
+
+interface IntradayCandidateRow {
+  setup_type: string;
+  direction: string;
+  sample_size: number;
+  expectancy: number | null;
+  profit_factor: number | null;
+  oos_sample_size: number;
+  oos_expectancy: number | null;
+  oos_profit_factor: number | null;
+  best_context_label: string | null;
+  best_context_exp: number | null;
+  days_collected: number;
+  status: string;
+  notes: string | null;
+}
+
+interface IntradayStatusData {
+  collectionStatus: {
+    daysCollected: number;
+    daysRemaining: number;
+    pctComplete: number;
+    tickerCount: number;
+    totalBars: number;
+    earliestTs: string | null;
+    latestTs: string | null;
+    staleTickers: string[];
+  };
+  setupStats: {
+    totalSetups: number;
+    setupTypes: number;
+    withDailyCtx: number;
+    totalOutcomes: number;
+  };
+  candidateStatus: { status: string; n: number }[];
+  topCandidates: IntradayCandidateRow[];
+  collectingTop: IntradayCandidateRow[];
+  promotedSetups: {
+    setup_type: string; direction: string;
+    oos_expectancy: number | null; oos_profit_factor: number | null; scored_date: string;
+  }[];
+  generatedAt: string;
+}
+
+// ── Intraday Learning Status Section ──────────────────────────────────────────
+
+function IntradayLearningSection({ data: id }: { data: IntradayStatusData }) {
+  const col = id.collectionStatus;
+  const ss  = id.setupStats;
+
+  const statusColor: Record<string, string> = {
+    promoted:   "text-success",
+    candidate:  "text-yellow-400",
+    collecting: "text-muted-foreground",
+    rejected:   "text-destructive",
+  };
+
+  const statusCount = (s: string) =>
+    id.candidateStatus.find(r => r.status === s)?.n ?? 0;
+
+  const fmtPct = (v: number | null) =>
+    v == null ? "n/a" : `${v >= 0 ? "+" : ""}${v.toFixed(3)}%`;
+
+  const fmtPf = (v: number | null) =>
+    v == null ? "n/a" : v.toFixed(2);
+
+  const barFill = Math.max(2, col.pctComplete);
+
+  return (
+    <div className="bg-card border border-border rounded p-4 flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-foreground">
+          Intraday 5-Minute Learning Engine
+        </h3>
+        <span className="text-xs text-muted-foreground">Paper-trade only. No execution.</span>
+      </div>
+
+      {/* Collection progress bar */}
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span>Data collection progress</span>
+          <span>{col.pctComplete}% ({col.daysCollected} / 90 trading days)</span>
+        </div>
+        <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+          <div
+            className="h-full bg-primary rounded-full transition-all"
+            style={{ width: `${barFill}%` }}
+          />
+        </div>
+        {col.daysRemaining > 0 && (
+          <p className="text-xs text-muted-foreground">
+            ~{col.daysRemaining} more trading days before first promotion eligibility.
+          </p>
+        )}
+      </div>
+
+      {/* Stats row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: "5m Bars Collected", value: ss.totalBars.toLocaleString() },
+          { label: "Setups Detected",   value: ss.totalSetups.toLocaleString() },
+          { label: "Setup Types",       value: String(ss.setupTypes) },
+          { label: "Tickers Tracked",   value: String(col.tickerCount) },
+        ].map(({ label, value }) => (
+          <div key={label} className="bg-muted/30 rounded p-2 flex flex-col gap-0.5">
+            <span className="text-xs text-muted-foreground">{label}</span>
+            <span className="text-sm font-semibold text-foreground">{value}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Candidate status pills */}
+      <div className="flex flex-wrap gap-2 items-center">
+        <span className="text-xs text-muted-foreground">Setup status:</span>
+        {["promoted", "candidate", "collecting", "rejected"].map(s => (
+          <span
+            key={s}
+            className={`text-xs px-2 py-0.5 rounded-full bg-muted font-medium ${statusColor[s] ?? ""}`}
+          >
+            {statusCount(s)} {s}
+          </span>
+        ))}
+      </div>
+
+      {/* Stale ticker warning */}
+      {col.staleTickers.length > 0 && (
+        <div className="text-xs text-yellow-400 bg-yellow-400/10 rounded px-3 py-2">
+          Stale tickers (no recent bars): {col.staleTickers.join(", ")}
+        </div>
+      )}
+
+      {/* Promoted setups */}
+      {id.promotedSetups.length > 0 ? (
+        <div className="flex flex-col gap-2">
+          <h4 className="text-xs font-semibold text-success">Promoted Setups</h4>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-muted-foreground border-b border-border">
+                  <th className="text-left py-1 pr-3">Setup</th>
+                  <th className="text-left py-1 pr-3">Dir</th>
+                  <th className="text-right py-1 pr-3">OOS Exp</th>
+                  <th className="text-right py-1">OOS PF</th>
+                </tr>
+              </thead>
+              <tbody>
+                {id.promotedSetups.map((r, i) => (
+                  <tr key={i} className="border-b border-border/50">
+                    <td className="py-1 pr-3 font-medium text-success">{r.setup_type}</td>
+                    <td className="py-1 pr-3 text-muted-foreground">{r.direction}</td>
+                    <td className="py-1 pr-3 text-right font-mono text-success">{fmtPct(r.oos_expectancy)}</td>
+                    <td className="py-1 text-right font-mono">{fmtPf(r.oos_profit_factor)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground italic">
+          No promoted setups yet. Still accumulating data.
+        </p>
+      )}
+
+      {/* Top emerging candidates */}
+      {id.topCandidates.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <h4 className="text-xs font-semibold text-yellow-400">Top Emerging Candidates</h4>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-muted-foreground border-b border-border">
+                  <th className="text-left py-1 pr-2">Setup</th>
+                  <th className="text-left py-1 pr-2">Dir</th>
+                  <th className="text-right py-1 pr-2">IS Exp</th>
+                  <th className="text-right py-1 pr-2">OOS Exp</th>
+                  <th className="text-right py-1 pr-2">OOS PF</th>
+                  <th className="text-right py-1 pr-2">n</th>
+                  <th className="text-left py-1">Best Context</th>
+                </tr>
+              </thead>
+              <tbody>
+                {id.topCandidates.map((r, i) => (
+                  <tr key={i} className="border-b border-border/50">
+                    <td className="py-1 pr-2 font-medium text-yellow-400">{r.setup_type}</td>
+                    <td className="py-1 pr-2 text-muted-foreground">{r.direction}</td>
+                    <td className="py-1 pr-2 text-right font-mono">{fmtPct(r.expectancy)}</td>
+                    <td className="py-1 pr-2 text-right font-mono text-yellow-400">{fmtPct(r.oos_expectancy)}</td>
+                    <td className="py-1 pr-2 text-right font-mono">{fmtPf(r.oos_profit_factor)}</td>
+                    <td className="py-1 pr-2 text-right">{r.sample_size}</td>
+                    <td className="py-1 text-muted-foreground text-xs truncate max-w-[140px]">
+                      {r.best_context_label
+                        ? `${r.best_context_label} (${r.best_context_exp != null ? fmtPct(r.best_context_exp) : ""})`
+                        : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Collecting setups table */}
+      {id.collectingTop.length > 0 && (
+        <details className="text-xs">
+          <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+            All setups (by IS expectancy)
+          </summary>
+          <div className="overflow-x-auto mt-2">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-muted-foreground border-b border-border">
+                  <th className="text-left py-1 pr-3">Setup</th>
+                  <th className="text-left py-1 pr-3">Dir</th>
+                  <th className="text-right py-1 pr-3">IS Exp</th>
+                  <th className="text-right py-1 pr-3">IS PF</th>
+                  <th className="text-right py-1 pr-3">Days</th>
+                  <th className="text-left py-1">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {id.collectingTop.map((r, i) => (
+                  <tr key={i} className="border-b border-border/50">
+                    <td className="py-1 pr-3">{r.setup_type}</td>
+                    <td className="py-1 pr-3 text-muted-foreground">{r.direction}</td>
+                    <td className="py-1 pr-3 text-right font-mono">{fmtPct(r.expectancy)}</td>
+                    <td className="py-1 pr-3 text-right font-mono">{fmtPf(r.profit_factor)}</td>
+                    <td className="py-1 pr-3 text-right">{r.days_collected}</td>
+                    <td className={`py-1 ${statusColor[r.status] ?? ""}`}>{r.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      )}
+
+      <p className="text-xs text-muted-foreground">
+        Data range: {col.earliestTs ? col.earliestTs.slice(0, 10) : "n/a"}
+        {" "}&rarr;{" "}
+        {col.latestTs ? col.latestTs.slice(0, 10) : "n/a"}.
+        Re-runs each night. Daily context attached (conviction, regime, VIX, ML rank).
+      </p>
+    </div>
+  );
+}
+
 // ── Meta Signal Health Section ────────────────────────────────────────────────
 
 function MetaSignalHealthSection({ data: ms }: { data: MetaSignalHealthData }) {
@@ -2252,6 +2501,12 @@ function LearningTab() {
   const { data: metaSignalHealth } = useQuery<MetaSignalHealthData>({
     queryKey:  ["research-meta-signal-health"],
     queryFn:   () => apiFetch("research/meta-signal-health"),
+    staleTime: 300_000,
+  });
+
+  const { data: intradayStatus } = useQuery<IntradayStatusData>({
+    queryKey:  ["research-intraday-learning-status"],
+    queryFn:   () => apiFetch("research/intraday-learning-status"),
     staleTime: 300_000,
   });
 
@@ -2956,6 +3211,13 @@ function AiBrainTab({ stats, signalPerformance }: { stats: BotStats | undefined;
           </div>
         )}
       </div>
+
+      {/* ── Intraday Learning Status ─────────────────────────────────────────── */}
+      {/* eslint-disable-next-line */}
+      {/* @ts-expect-error: TS flow analysis limit in large JSX */}
+      {(intradayStatus as IntradayStatusData | undefined) && (
+        <IntradayLearningSection data={intradayStatus as IntradayStatusData} />
+      )}
 
       {/* ── Meta Signal Health ──────────────────────────────────────────────── */}
       {/* eslint-disable-next-line */}

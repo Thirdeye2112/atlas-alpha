@@ -1230,3 +1230,145 @@ mlResearchRouter.get('/meta-signal-health', async (req, res) => {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Internal error' })
   }
 })
+
+// ---------------------------------------------------------------------------
+// GET /api/research/intraday-learning-status
+// Returns intraday 5-min learning engine collection progress and candidates.
+// ---------------------------------------------------------------------------
+
+mlResearchRouter.get('/intraday-learning-status', async (req, res) => {
+  const pool = getPool()
+  const query = async <T>(sql: string, params: unknown[] = []): Promise<T[]> => {
+    const result = await pool.query(sql, params)
+    return result.rows as T[]
+  }
+
+  try {
+    // Bar coverage
+    const barSummary = await query<{
+      ticker_count: number; total_bars: number
+      earliest_ts: string | null; latest_ts: string | null
+      avg_trading_days: number
+    }>(`
+      SELECT
+        COUNT(DISTINCT ticker)::int      AS ticker_count,
+        COUNT(*)::int                    AS total_bars,
+        MIN(ts)::text                    AS earliest_ts,
+        MAX(ts)::text                    AS latest_ts,
+        ROUND(AVG(trading_days))::int    AS avg_trading_days
+      FROM (
+        SELECT ticker, COUNT(DISTINCT ts::date) AS trading_days
+        FROM intraday_bars WHERE timeframe = '5m'
+        GROUP BY ticker
+      ) sub
+    `)
+
+    // Stale ticker check (no bars in last 3 calendar days)
+    const staleTickers = await query<{ ticker: string; days_ago: number }>(`
+      SELECT ticker, EXTRACT(DAY FROM NOW() - MAX(ts))::int AS days_ago
+      FROM intraday_bars
+      WHERE timeframe = '5m'
+      GROUP BY ticker
+      HAVING MAX(ts) < NOW() - INTERVAL '3 days'
+      ORDER BY days_ago DESC
+    `)
+
+    // Setup totals
+    const setupTotals = await query<{ total_setups: number; setup_types: number; with_daily_ctx: number }>(`
+      SELECT
+        COUNT(*)::int                                         AS total_setups,
+        COUNT(DISTINCT setup_type)::int                       AS setup_types,
+        COUNT(DISTINCT ticker) FILTER (WHERE daily_conviction IS NOT NULL)::int AS with_daily_ctx
+      FROM intraday_setups
+    `)
+
+    // Outcome totals
+    const outcomeTotals = await query<{ total_outcomes: number }>(`
+      SELECT COUNT(*)::int AS total_outcomes FROM intraday_outcomes
+    `)
+
+    // Candidate status breakdown (latest date)
+    const candidateStatus = await query<{ status: string; n: number }>(`
+      SELECT status, COUNT(*)::int AS n
+      FROM intraday_candidate_setups
+      WHERE as_of_date = (SELECT MAX(as_of_date) FROM intraday_candidate_setups)
+      GROUP BY status
+      ORDER BY status
+    `).catch(() => [] as { status: string; n: number }[])
+
+    // Top candidates
+    const topCandidates = await query<{
+      setup_type: string; direction: string; sample_size: number
+      expectancy: number | null; profit_factor: number | null
+      oos_sample_size: number; oos_expectancy: number | null; oos_profit_factor: number | null
+      best_context_label: string | null; best_context_exp: number | null
+      days_collected: number; status: string; notes: string | null
+    }>(`
+      SELECT setup_type, direction, sample_size, expectancy, profit_factor,
+             oos_sample_size, oos_expectancy, oos_profit_factor,
+             best_context_label, best_context_exp, days_collected, status, notes
+      FROM intraday_candidate_setups
+      WHERE as_of_date = (SELECT MAX(as_of_date) FROM intraday_candidate_setups)
+        AND status IN ('candidate', 'promoted')
+      ORDER BY oos_expectancy DESC NULLS LAST
+      LIMIT 10
+    `).catch(() => [])
+
+    // All setups for collecting view (top by IS expectancy)
+    const collectingTop = await query<{
+      setup_type: string; direction: string; sample_size: number
+      expectancy: number | null; profit_factor: number | null; status: string; days_collected: number
+    }>(`
+      SELECT setup_type, direction, sample_size, expectancy, profit_factor, status, days_collected
+      FROM intraday_candidate_setups
+      WHERE as_of_date = (SELECT MAX(as_of_date) FROM intraday_candidate_setups)
+      ORDER BY expectancy DESC NULLS LAST
+      LIMIT 15
+    `).catch(() => [])
+
+    // Progress estimate
+    const avgDays = barSummary[0]?.avg_trading_days ?? 0
+    const MIN_DAYS_FOR_PROMOTION = 90
+    const daysRemaining = Math.max(0, MIN_DAYS_FOR_PROMOTION - avgDays)
+    const pctComplete = Math.min(100, Math.round((avgDays / MIN_DAYS_FOR_PROMOTION) * 100))
+
+    // Promoted setups
+    const promotedSetups = await query<{
+      setup_type: string; direction: string; oos_expectancy: number | null
+      oos_profit_factor: number | null; scored_date: string
+    }>(`
+      SELECT setup_type, direction, oos_expectancy, oos_profit_factor, scored_date::text
+      FROM intraday_promoted_setups
+      WHERE promoted = true
+      ORDER BY oos_expectancy DESC NULLS LAST
+      LIMIT 10
+    `).catch(() => [])
+
+    res.json({
+      collectionStatus: {
+        daysCollected:      avgDays,
+        daysRemaining,
+        pctComplete,
+        tickerCount:        barSummary[0]?.ticker_count ?? 0,
+        totalBars:          barSummary[0]?.total_bars ?? 0,
+        earliestTs:         barSummary[0]?.earliest_ts ?? null,
+        latestTs:           barSummary[0]?.latest_ts ?? null,
+        staleTickers:       staleTickers.map(r => r.ticker),
+      },
+      setupStats: {
+        totalSetups:    setupTotals[0]?.total_setups ?? 0,
+        setupTypes:     setupTotals[0]?.setup_types ?? 0,
+        withDailyCtx:   setupTotals[0]?.with_daily_ctx ?? 0,
+        totalOutcomes:  outcomeTotals[0]?.total_outcomes ?? 0,
+      },
+      candidateStatus,
+      topCandidates,
+      collectingTop,
+      promotedSetups,
+      generatedAt: new Date().toISOString(),
+    })
+  } catch (err: unknown) {
+    req.log?.error({ err }, 'research.intraday-learning-status failed')
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Internal error' })
+  }
+})
