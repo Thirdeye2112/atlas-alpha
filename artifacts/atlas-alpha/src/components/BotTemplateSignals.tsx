@@ -2,7 +2,8 @@
  * BotTemplateSignals — paper-trade-only signals panel for BotLab.
  *
  * Shows prediction enrichment and behavior signals for all open
- * paper-trade positions. Read-only; no trading actions.
+ * paper-trade positions. Read-only; no trading actions. Enrichment fields
+ * come from /api/research/batch/enrichment (predictions + behavior layer).
  */
 
 import { useState } from 'react'

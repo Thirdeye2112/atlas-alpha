@@ -476,18 +476,9 @@ advancedResearchRouter.get('/pipeline/health', async (req, res) => {
       predCount = parseInt(rows[0]?.cnt ?? '0', 10)
     }
 
-    // Latest pipeline run
+    // Latest pipeline run (research_runs is the canonical run log)
     let latestRun: Record<string, unknown> | null = null
-    if (tableChecks['pipeline_run_log']) {
-      const runRows = await query<Record<string, unknown>>(
-        `SELECT run_id, mode, started_at, finished_at, status, error_msg
-         FROM pipeline_run_log
-         WHERE step_name IS NULL
-         ORDER BY started_at DESC
-         LIMIT 1`
-      )
-      latestRun = runRows[0] ?? null
-    } else if (tableChecks['research_runs']) {
+    if (tableChecks['research_runs']) {
       const runRows = await query<Record<string, unknown>>(
         `SELECT run_type, started_at, finished_at, status, error_message
          FROM research_runs

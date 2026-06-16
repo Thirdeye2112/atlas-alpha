@@ -29,13 +29,15 @@ export interface AdvancedUnavailable {
 
 export interface ConfluenceData extends AdvancedAvailable {
   ticker: string
-  setup: Record<string, unknown> | null
-  confluence_score: number | null
-  direction: string | null
-  regime: string | null
-  meta_signal: string | null
-  patterns: string[]
-  setups?: Record<string, unknown>[]
+  setups: Record<string, unknown>[]
+  // The fields below are present only when at least one setup row exists.
+  confluence_score?: number | null
+  direction?: string | null
+  regime_gate?: string | null
+  time_gate?: string | null
+  similarity_return_6?: number | null
+  similarity_hitrate?: number | null
+  updated_at?: string | null
 }
 
 export type ConfluenceResult = ConfluenceData | AdvancedUnavailable
