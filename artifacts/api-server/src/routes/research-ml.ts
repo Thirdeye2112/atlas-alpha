@@ -1374,7 +1374,8 @@ mlResearchRouter.get('/intraday-learning-status', async (req, res) => {
 })
 
 // GET /api/research/intraday/similarity/:ticker
-// Returns the pre-computed similarity result for a ticker's latest candle.
+// Returns the pre-computed similarity result for a ticker's latest candle,
+// enriched with today's active market behaviors and their directional impact.
 // Updated nightly by build_intraday_candle_memory.py --incremental.
 mlResearchRouter.get('/intraday/similarity/:ticker', async (req, res) => {
   const { ticker } = req.params
@@ -1425,6 +1426,96 @@ mlResearchRouter.get('/intraday/similarity/:ticker', async (req, res) => {
     )
     const stats = statsRows[0] ?? { total_rows: 0, earliest_ts: null, latest_ts: null }
 
+    // Active behaviors for this ticker today (most recent event_date)
+    const behaviorRows = await qry<{
+      behavior_id: string
+      intensity: number
+      event_date: string
+      category: string
+      direction: string
+      intraday_weight: number
+    }>(
+      `SELECT ibe.behavior_id, ibe.intensity, ibe.event_date::text,
+              mbc.category, mbc.direction, mbc.intraday_weight
+       FROM intraday_behavior_events ibe
+       JOIN market_behavior_concepts mbc USING (behavior_id)
+       WHERE ibe.ticker = $1
+         AND ibe.event_date = (
+           SELECT MAX(event_date) FROM intraday_behavior_events WHERE ticker = $1
+         )
+         AND mbc.active = true
+       ORDER BY ibe.intensity DESC`,
+      [ticker.toUpperCase()]
+    )
+
+    // Behavior importance scores (most recent run_date)
+    const importanceRows = await qry<{
+      behavior_id: string
+      hit_lift: number | null
+      expectancy_with: number | null
+      hit_rate_with: number | null
+      is_informative: boolean
+    }>(
+      `SELECT behavior_id, hit_lift, expectancy_with, hit_rate_with, is_informative
+       FROM intraday_behavior_importance
+       WHERE run_date = (SELECT MAX(run_date) FROM intraday_behavior_importance)`,
+      []
+    )
+    const importanceMap = new Map(importanceRows.map(r => [r.behavior_id, r]))
+
+    // Enrich active behaviors with importance data
+    const activeBehaviors = behaviorRows.map(b => ({
+      behavior_id:      b.behavior_id,
+      category:         b.category,
+      direction:        b.direction,
+      intensity:        b.intensity,
+      intraday_weight:  b.intraday_weight,
+      event_date:       b.event_date,
+      hit_lift:         importanceMap.get(b.behavior_id)?.hit_lift ?? null,
+      hit_rate_with:    importanceMap.get(b.behavior_id)?.hit_rate_with ?? null,
+      expectancy_with:  importanceMap.get(b.behavior_id)?.expectancy_with ?? null,
+      is_informative:   importanceMap.get(b.behavior_id)?.is_informative ?? false,
+    }))
+
+    // Dominant behavior: highest intensity * intraday_weight among informative ones
+    const informativeBehaviors = activeBehaviors.filter(b => b.is_informative)
+    const dominantBehavior = informativeBehaviors.length > 0
+      ? informativeBehaviors.reduce((best, b) =>
+          (b.intensity * b.intraday_weight) > (best.intensity * best.intraday_weight) ? b : best
+        )
+      : (activeBehaviors.length > 0 ? activeBehaviors[0] : null)
+
+    // Expected next candle direction from behavior signals
+    const bullishBehaviors = informativeBehaviors.filter(b => (b.hit_lift ?? 0) > 0.03)
+    const bearishBehaviors  = informativeBehaviors.filter(b => (b.hit_lift ?? 0) < -0.03)
+    let expectedNextCandleDirection: string
+    let behaviorDirectionConfidence: string
+    if (bullishBehaviors.length > 0 && bearishBehaviors.length === 0) {
+      expectedNextCandleDirection = 'BULLISH'
+      behaviorDirectionConfidence = bullishBehaviors.length >= 2 ? 'HIGH' : 'MODERATE'
+    } else if (bearishBehaviors.length > 0 && bullishBehaviors.length === 0) {
+      expectedNextCandleDirection = 'BEARISH'
+      behaviorDirectionConfidence = bearishBehaviors.length >= 2 ? 'HIGH' : 'MODERATE'
+    } else if (bullishBehaviors.length > 0 && bearishBehaviors.length > 0) {
+      expectedNextCandleDirection = 'MIXED'
+      behaviorDirectionConfidence = 'LOW'
+    } else {
+      expectedNextCandleDirection = 'NEUTRAL'
+      behaviorDirectionConfidence = 'LOW'
+    }
+
+    // Multi-horizon outlook: best hit_rate_with among informative behaviors for direction
+    const outlookBehavior = bullishBehaviors.length > 0
+      ? bullishBehaviors[0]
+      : bearishBehaviors.length > 0 ? bearishBehaviors[0] : null
+
+    const outlook = {
+      next_candle: expectedNextCandleDirection,
+      candles_3:   outlookBehavior?.hit_rate_with != null ? Math.round(outlookBehavior.hit_rate_with * 100) + '% hist HR' : null,
+      candles_6:   row.similarity_hitrate != null ? Math.round(row.similarity_hitrate * 100) + '% similarity HR' : null,
+      candles_12:  row.pct_hit_plus_1atr != null ? Math.round(row.pct_hit_plus_1atr * 100) + '% +1ATR' : null,
+    }
+
     // Warning flags
     const warnings: string[] = []
     if (!row.matched_sample || row.matched_sample < 20) {
@@ -1438,19 +1529,28 @@ mlResearchRouter.get('/intraday/similarity/:ticker', async (req, res) => {
     if (hoursSince > 26) {
       warnings.push(`Similarity data is ${Math.round(hoursSince)}h old -- may not reflect today's candle.`)
     }
+    if (bullishBehaviors.length > 0 && bearishBehaviors.length > 0) {
+      warnings.push(`Conflicting behavior signals (${bullishBehaviors.length} bullish, ${bearishBehaviors.length} bearish) -- reduce position size.`)
+    }
+    if (activeBehaviors.length === 0) {
+      warnings.push('No behavior events found for this ticker today -- behavior layer unavailable.')
+    }
 
     const hitRate = row.similarity_hitrate ?? null
     const expReturn = row.similarity_return_6 ?? null
 
-    // Recommended horizon based on hit rate
+    // Recommended horizon based on hit rate and behavior signals
     let recommendedHorizon = '30m (6 bars)'
     let recommendedExit = 'Hold for primary 30-min target based on historical similar-candle behavior.'
-    if (hitRate !== null && hitRate < 0.52) {
+    if (hitRate !== null && hitRate < 0.52 && informativeBehaviors.length === 0) {
       recommendedHorizon = 'No strong edge detected'
-      recommendedExit = 'Similarity signal is weak -- skip or use tighter stops.'
+      recommendedExit = 'Similarity signal is weak and no informative behaviors active -- skip or use tighter stops.'
     } else if (row.pct_hit_plus_1atr !== null && row.pct_hit_plus_1atr > 0.45) {
       recommendedHorizon = '60m (12 bars)'
       recommendedExit = 'ATR target has good historical hit rate -- hold for +1 ATR target.'
+    } else if (informativeBehaviors.length >= 2 && expectedNextCandleDirection !== 'MIXED') {
+      recommendedHorizon = '15m (3 bars)'
+      recommendedExit = 'Multiple informative behaviors active -- take quick profit at 3-bar target.'
     }
 
     res.json({
@@ -1470,6 +1570,17 @@ mlResearchRouter.get('/intraday/similarity/:ticker', async (req, res) => {
       pct_hit_plus_1atr:   row.pct_hit_plus_1atr,
       pct_hit_minus_1atr:  row.pct_hit_minus_1atr,
       top_match_summary:   row.top_neighbors,
+      // Behavior layer (v2)
+      behavior_layer: {
+        active_behaviors:               activeBehaviors,
+        dominant_behavior:              dominantBehavior,
+        expected_next_candle_direction: expectedNextCandleDirection,
+        behavior_direction_confidence:  behaviorDirectionConfidence,
+        bullish_signals:                bullishBehaviors.length,
+        bearish_signals:                bearishBehaviors.length,
+        informative_count:              informativeBehaviors.length,
+        outlook,
+      },
       recommended_horizon: recommendedHorizon,
       recommended_exit:    recommendedExit,
       warnings,
