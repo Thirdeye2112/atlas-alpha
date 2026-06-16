@@ -1859,6 +1859,178 @@ function SimLabTab() {
   );
 }
 
+// ── Meta Signal Health types ──────────────────────────────────────────────────
+
+interface MetaStatusRow {
+  status: string;
+  count: number;
+  avg_meta_score: number | null;
+  avg_pf_60d: number | null;
+  avg_expectancy_60d: number | null;
+  total_n_60d: number;
+}
+interface MetaComboRow {
+  combo_key: string;
+  meta_score: number | null;
+  conviction_level: string | null;
+  sector_regime: string | null;
+  vix_regime: string | null;
+  quality_tier: number | null;
+  ml_rank_bucket: string | null;
+  confluence_bucket: string | null;
+  jarvis_state: string | null;
+  n_60d: number | null;
+  pf_60d: number | null;
+  expectancy_60d: number | null;
+  win_rate_60d: number | null;
+}
+interface MetaTagStats {
+  total_today: number;
+  tagged: number;
+  pct_tagged: number | null;
+  promoted_today: number;
+  candidate_today: number;
+  rejected_today: number;
+}
+interface MetaSignalHealthData {
+  scoredDate: string | null;
+  statusSummary: MetaStatusRow[];
+  topPromoted: MetaComboRow[];
+  tagStats: MetaTagStats;
+  generatedAt: string;
+}
+
+// ── Meta Signal Health Section ────────────────────────────────────────────────
+
+function MetaSignalHealthSection({ data: ms }: { data: MetaSignalHealthData }) {
+  const statusColor: Record<string, string> = {
+    PROMOTED:    "text-success",
+    CANDIDATE:   "text-yellow-400",
+    REJECTED:    "text-destructive",
+    INSUFFICIENT: "text-muted-foreground",
+  };
+
+  const promoted    = ms.statusSummary.find(r => r.status === "PROMOTED");
+  const candidate   = ms.statusSummary.find(r => r.status === "CANDIDATE");
+  const rejected    = ms.statusSummary.find(r => r.status === "REJECTED");
+  const insufficient = ms.statusSummary.find(r => r.status === "INSUFFICIENT");
+  const total       = ms.statusSummary.reduce((s, r) => s + r.count, 0);
+
+  return (
+    <div className="bg-card border border-border rounded p-4 flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <div className="text-xs font-mono text-primary uppercase tracking-wider font-bold">
+          Meta Signal Health
+        </div>
+        <div className="text-xs font-mono text-muted-foreground/60">
+          {ms.scoredDate ? `scored ${ms.scoredDate}` : "not yet scored"}
+          {" · "}
+          {ms.tagStats.pct_tagged != null
+            ? `${ms.tagStats.pct_tagged}% of today's predictions tagged`
+            : "no predictions tagged"}
+        </div>
+      </div>
+
+      {/* Status summary pills */}
+      <div className="grid grid-cols-4 gap-2">
+        {[
+          { label: "PROMOTED",     row: promoted,     desc: "PF≥1.5, n≥30, WR≥50%" },
+          { label: "CANDIDATE",    row: candidate,    desc: "PF≥1.2, n≥15" },
+          { label: "REJECTED",     row: rejected,     desc: "PF<1.0 or exp≤0" },
+          { label: "INSUFFICIENT", row: insufficient, desc: "n<15" },
+        ].map(({ label, row, desc }) => (
+          <div key={label} className="bg-background/40 border border-border/30 rounded p-2 flex flex-col gap-1">
+            <div className={`text-xs font-mono font-bold ${statusColor[label] ?? ""}`}>{label}</div>
+            <div className="text-lg font-mono font-bold">{row?.count ?? 0}</div>
+            <div className="text-xs font-mono text-muted-foreground/60">
+              {row ? (
+                <>
+                  PF {row.avg_pf_60d?.toFixed(2) ?? "—"}
+                  {" · "}
+                  Exp {row.avg_expectancy_60d != null
+                    ? `${row.avg_expectancy_60d > 0 ? "+" : ""}${(row.avg_expectancy_60d * 100).toFixed(2)}%`
+                    : "—"}
+                </>
+              ) : desc}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Today's tag stats */}
+      {ms.tagStats.total_today > 0 && (
+        <div className="bg-background/30 rounded px-3 py-2 text-xs font-mono text-muted-foreground flex flex-wrap gap-4">
+          <span>Today: <span className="text-foreground">{ms.tagStats.total_today.toLocaleString()}</span> predictions</span>
+          <span>Tagged: <span className="text-foreground">{ms.tagStats.tagged.toLocaleString()}</span></span>
+          <span className="text-success">PROMOTED: {ms.tagStats.promoted_today}</span>
+          <span className="text-yellow-400">CANDIDATE: {ms.tagStats.candidate_today}</span>
+          <span className="text-destructive">REJECTED: {ms.tagStats.rejected_today}</span>
+        </div>
+      )}
+
+      {/* Top PROMOTED combos */}
+      {ms.topPromoted.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <div className="text-xs font-mono text-muted-foreground/70 uppercase tracking-wider mb-1">
+            Top Promoted Combinations (60d rolling)
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs font-mono border-collapse">
+              <thead>
+                <tr className="text-muted-foreground/60">
+                  <th className="text-left py-1 pr-3">Score</th>
+                  <th className="text-left py-1 pr-3">Conviction</th>
+                  <th className="text-left py-1 pr-3">Regime</th>
+                  <th className="text-left py-1 pr-3">VIX</th>
+                  <th className="text-left py-1 pr-3">Tier</th>
+                  <th className="text-left py-1 pr-3">ML</th>
+                  <th className="text-left py-1 pr-3">Jarvis</th>
+                  <th className="text-right py-1 pr-3">n</th>
+                  <th className="text-right py-1 pr-3">PF</th>
+                  <th className="text-right py-1">Exp</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ms.topPromoted.slice(0, 10).map((r, i) => (
+                  <tr key={i} className={`border-t border-border/20 ${i % 2 === 0 ? "" : "bg-background/20"}`}>
+                    <td className="py-1 pr-3 text-success font-bold">
+                      {r.meta_score?.toFixed(1) ?? "—"}
+                    </td>
+                    <td className="py-1 pr-3">{r.conviction_level ?? "—"}</td>
+                    <td className="py-1 pr-3">{r.sector_regime ?? "—"}</td>
+                    <td className="py-1 pr-3">{r.vix_regime ?? "—"}</td>
+                    <td className="py-1 pr-3">{r.quality_tier != null ? `T${r.quality_tier}` : "—"}</td>
+                    <td className="py-1 pr-3">{r.ml_rank_bucket ?? "—"}</td>
+                    <td className={`py-1 pr-3 ${r.jarvis_state === "green" ? "text-success" : r.jarvis_state === "red" ? "text-destructive" : ""}`}>
+                      {r.jarvis_state ?? "—"}
+                    </td>
+                    <td className="py-1 pr-3 text-right">{r.n_60d ?? "—"}</td>
+                    <td className="py-1 pr-3 text-right">{r.pf_60d?.toFixed(2) ?? "—"}</td>
+                    <td className={`py-1 text-right font-bold ${(r.expectancy_60d ?? 0) > 0 ? "text-success" : "text-destructive"}`}>
+                      {r.expectancy_60d != null
+                        ? `${r.expectancy_60d > 0 ? "+" : ""}${(r.expectancy_60d * 100).toFixed(2)}%`
+                        : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="text-xs font-mono text-muted-foreground/40 mt-1 text-right">
+            {total} total combos tracked · {promoted?.count ?? 0} promoted · scored {ms.scoredDate ?? "never"}
+          </div>
+        </div>
+      )}
+
+      {ms.topPromoted.length === 0 && (
+        <div className="text-xs font-mono text-muted-foreground/40 italic py-4 text-center">
+          No PROMOTED combos yet — run compute_signal_combination_scores.py to populate.
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Trade Attribution Section ─────────────────────────────────────────────────
 
 function TradeAttributionSection({ data: ta }: { data: TradeAttributionData }) {
@@ -2074,6 +2246,12 @@ function LearningTab() {
   const { data: tradeAttrib } = useQuery<TradeAttributionData>({
     queryKey:  ["research-trade-attribution"],
     queryFn:   () => apiFetch("research/trade-attribution"),
+    staleTime: 300_000,
+  });
+
+  const { data: metaSignalHealth } = useQuery<MetaSignalHealthData>({
+    queryKey:  ["research-meta-signal-health"],
+    queryFn:   () => apiFetch("research/meta-signal-health"),
     staleTime: 300_000,
   });
 
@@ -2778,6 +2956,13 @@ function AiBrainTab({ stats, signalPerformance }: { stats: BotStats | undefined;
           </div>
         )}
       </div>
+
+      {/* ── Meta Signal Health ──────────────────────────────────────────────── */}
+      {/* eslint-disable-next-line */}
+      {/* @ts-expect-error: TS flow analysis limit in large JSX */}
+      {(metaSignalHealth as MetaSignalHealthData | undefined) && (
+        <MetaSignalHealthSection data={metaSignalHealth as MetaSignalHealthData} />
+      )}
 
       {/* ── Trade Attribution ───────────────────────────────────────────────── */}
       {/* eslint-disable-next-line */}

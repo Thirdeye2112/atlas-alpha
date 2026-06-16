@@ -1092,3 +1092,141 @@ mlResearchRouter.get('/trade-attribution', async (req, res) => {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Internal error' })
   }
 })
+
+// ---------------------------------------------------------------------------
+// GET /api/research/meta-signal-health
+// BotLab Learning tab — Meta Signal Health display.
+// Returns latest signal_combination_scores summary + today's tagged predictions.
+// ---------------------------------------------------------------------------
+mlResearchRouter.get('/meta-signal-health', async (req, res) => {
+  try {
+    // ── Status summary from latest combo scores ───────────────────────────
+    const [latestDate] = await query<{ latest_date: string | null }>(`
+      SELECT MAX(scored_date)::text AS latest_date
+      FROM signal_combination_scores
+    `)
+
+    const statusSummary = await query<{
+      status: string; count: number; avg_meta_score: number | null
+      avg_pf_60d: number | null; avg_expectancy_60d: number | null; total_n_60d: number
+    }>(`
+      SELECT
+        status,
+        COUNT(*)::int                               AS count,
+        ROUND(AVG(meta_score)::numeric, 1)          AS avg_meta_score,
+        ROUND(AVG(pf_60d)::numeric, 3)              AS avg_pf_60d,
+        ROUND(AVG(expectancy_60d)::numeric, 4)      AS avg_expectancy_60d,
+        SUM(COALESCE(n_60d, 0))::int                AS total_n_60d
+      FROM signal_combination_scores
+      WHERE scored_date = (SELECT MAX(scored_date) FROM signal_combination_scores)
+      GROUP BY status
+      ORDER BY
+        CASE status
+          WHEN 'PROMOTED'    THEN 1
+          WHEN 'CANDIDATE'   THEN 2
+          WHEN 'REJECTED'    THEN 3
+          WHEN 'INSUFFICIENT' THEN 4
+          ELSE 5
+        END
+    `)
+
+    // ── Top PROMOTED combos ───────────────────────────────────────────────
+    const topPromoted = await query<{
+      combo_key: string; meta_score: number | null
+      conviction_level: string | null; sector_regime: string | null; vix_regime: string | null
+      quality_tier: number | null; ml_rank_bucket: string | null
+      confluence_bucket: string | null; jarvis_state: string | null
+      n_60d: number | null; pf_60d: number | null
+      expectancy_60d: number | null; win_rate_60d: number | null
+    }>(`
+      SELECT
+        combo_key, meta_score,
+        conviction_level, sector_regime, vix_regime,
+        quality_tier, ml_rank_bucket, confluence_bucket, jarvis_state,
+        n_60d,
+        ROUND(pf_60d::numeric, 3)         AS pf_60d,
+        ROUND(expectancy_60d::numeric, 4)  AS expectancy_60d,
+        ROUND(win_rate_60d::numeric, 3)    AS win_rate_60d
+      FROM signal_combination_scores
+      WHERE scored_date = (SELECT MAX(scored_date) FROM signal_combination_scores)
+        AND status = 'PROMOTED'
+      ORDER BY meta_score DESC NULLS LAST
+      LIMIT 15
+    `)
+
+    // ── Today's predictions with meta scores ──────────────────────────────
+    const todayTagged = await query<{
+      ticker: string; combo_key: string | null; meta_score: number | null
+      combo_status: string | null; combo_pf_60d: number | null
+      combo_expectancy_60d: number | null; combo_sample_size: number | null
+      rank_percentile: number | null; probability_positive: number | null
+    }>(`
+      SELECT
+        ticker,
+        combo_key,
+        ROUND(meta_score::numeric, 1)         AS meta_score,
+        combo_status,
+        ROUND(combo_pf_60d::numeric, 3)       AS combo_pf_60d,
+        ROUND(combo_expectancy_60d::numeric, 4) AS combo_expectancy_60d,
+        combo_sample_size,
+        ROUND(rank_percentile::numeric, 3)    AS rank_percentile,
+        ROUND(probability_positive::numeric, 4) AS probability_positive
+      FROM predictions
+      WHERE date = (SELECT MAX(date) FROM predictions)
+        AND combo_key IS NOT NULL
+      ORDER BY meta_score DESC NULLS LAST
+      LIMIT 50
+    `)
+
+    const [tagStats] = await query<{
+      total_today: number; tagged: number; pct_tagged: number | null
+      promoted_today: number; candidate_today: number; rejected_today: number
+    }>(`
+      SELECT
+        COUNT(*)::int                                                       AS total_today,
+        COUNT(*) FILTER (WHERE combo_key IS NOT NULL)::int                  AS tagged,
+        ROUND(
+          100.0 * COUNT(*) FILTER (WHERE combo_key IS NOT NULL)
+          / NULLIF(COUNT(*), 0), 1
+        )                                                                    AS pct_tagged,
+        COUNT(*) FILTER (WHERE combo_status = 'PROMOTED')::int              AS promoted_today,
+        COUNT(*) FILTER (WHERE combo_status = 'CANDIDATE')::int             AS candidate_today,
+        COUNT(*) FILTER (WHERE combo_status = 'REJECTED')::int              AS rejected_today
+      FROM predictions
+      WHERE date = (SELECT MAX(date) FROM predictions)
+    `)
+
+    // ── Combo PF trend (last 30 scored dates for PROMOTED) ───────────────
+    const pfTrend = await query<{
+      scored_date: string; n_promoted: number; avg_pf_60d: number | null
+      avg_expectancy_60d: number | null; avg_meta_score: number | null
+    }>(`
+      SELECT
+        scored_date::text                           AS scored_date,
+        COUNT(*) FILTER (WHERE status = 'PROMOTED')::int AS n_promoted,
+        ROUND(AVG(pf_60d) FILTER (WHERE status = 'PROMOTED')::numeric, 3) AS avg_pf_60d,
+        ROUND(AVG(expectancy_60d) FILTER (WHERE status = 'PROMOTED')::numeric, 4) AS avg_expectancy_60d,
+        ROUND(AVG(meta_score) FILTER (WHERE status = 'PROMOTED')::numeric, 1) AS avg_meta_score
+      FROM signal_combination_scores
+      GROUP BY scored_date
+      ORDER BY scored_date DESC
+      LIMIT 30
+    `)
+
+    res.json({
+      scoredDate:    latestDate?.latest_date ?? null,
+      statusSummary,
+      topPromoted,
+      todayTagged,
+      tagStats: tagStats ?? {
+        total_today: 0, tagged: 0, pct_tagged: null,
+        promoted_today: 0, candidate_today: 0, rejected_today: 0
+      },
+      pfTrend: pfTrend.reverse(),
+      generatedAt: new Date().toISOString(),
+    })
+  } catch (err: unknown) {
+    req.log?.error({ err }, 'research.meta-signal-health failed')
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Internal error' })
+  }
+})
