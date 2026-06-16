@@ -859,3 +859,236 @@ mlResearchRouter.get('/model-health', async (req, res) => {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Internal error' })
   }
 })
+
+// ---------------------------------------------------------------------------
+// GET /api/research/trade-attribution
+// BotLab Learning tab — Trade Attribution section.
+// Reads from trade_attribution table (populated by reconstruct_trades.py).
+// ---------------------------------------------------------------------------
+mlResearchRouter.get('/trade-attribution', async (req, res) => {
+  try {
+    // ── Overall metrics ────────────────────────────────────────────────────
+    const [overall] = await query<{
+      n: number; win_rate: number; expectancy: number;
+      profit_factor: number; avg_winner: number; avg_loser: number;
+      avg_mfe: number; avg_mae: number;
+      stop_rate: number; t1_rate: number; t2_rate: number; t3_rate: number;
+      signal_flip_rate: number; min_date: string; max_date: string;
+    }>(`
+      SELECT
+        COUNT(*)                                           AS n,
+        ROUND(AVG((return_pct > 0)::int)::numeric, 4)    AS win_rate,
+        ROUND(AVG(return_pct)::numeric, 4)                AS expectancy,
+        ROUND(
+          SUM(CASE WHEN return_pct > 0 THEN return_pct ELSE 0 END) /
+          NULLIF(SUM(CASE WHEN return_pct < 0 THEN ABS(return_pct) ELSE 0 END), 0)::numeric, 4
+        )                                                  AS profit_factor,
+        ROUND(AVG(return_pct) FILTER (WHERE return_pct > 0)::numeric, 4) AS avg_winner,
+        ROUND(AVG(return_pct) FILTER (WHERE return_pct < 0)::numeric, 4) AS avg_loser,
+        ROUND(AVG(max_favorable_excursion)::numeric, 4)   AS avg_mfe,
+        ROUND(AVG(max_adverse_excursion)::numeric, 4)     AS avg_mae,
+        ROUND(AVG(stop_hit::int)::numeric, 4)             AS stop_rate,
+        ROUND(AVG(target1_hit::int)::numeric, 4)          AS t1_rate,
+        ROUND(AVG(target2_hit::int)::numeric, 4)          AS t2_rate,
+        ROUND(AVG(target3_hit::int)::numeric, 4)          AS t3_rate,
+        ROUND(AVG(signal_flip_exit::int)::numeric, 4)     AS signal_flip_rate,
+        MIN(entry_date)::text                             AS min_date,
+        MAX(entry_date)::text                             AS max_date
+      FROM trade_attribution
+      WHERE return_pct IS NOT NULL
+    `)
+
+    // ── Best contexts by expectancy ────────────────────────────────────────
+    const bestContexts = await query<{
+      label: string; n: number; win_rate: number; expectancy: number; profit_factor: number
+    }>(`
+      SELECT label, n, win_rate, expectancy, profit_factor FROM (
+        -- By conviction
+        SELECT
+          'VERY_HIGH conviction'       AS label,
+          COUNT(*)::int                AS n,
+          ROUND(AVG((return_pct>0)::int)::numeric*100,1) AS win_rate,
+          ROUND(AVG(return_pct)::numeric,3)              AS expectancy,
+          ROUND(SUM(CASE WHEN return_pct>0 THEN return_pct ELSE 0 END)/
+            NULLIF(SUM(CASE WHEN return_pct<0 THEN ABS(return_pct) ELSE 0 END),0)::numeric,3) AS profit_factor
+        FROM trade_attribution WHERE return_pct IS NOT NULL AND conviction_level='VERY_HIGH'
+        UNION ALL
+        SELECT 'Jarvis green + Tier 1' AS label, COUNT(*)::int,
+          ROUND(AVG((return_pct>0)::int)::numeric*100,1),
+          ROUND(AVG(return_pct)::numeric,3),
+          ROUND(SUM(CASE WHEN return_pct>0 THEN return_pct ELSE 0 END)/
+            NULLIF(SUM(CASE WHEN return_pct<0 THEN ABS(return_pct) ELSE 0 END),0)::numeric,3)
+        FROM trade_attribution WHERE return_pct IS NOT NULL AND jarvis_green AND quality_tier=1
+        UNION ALL
+        SELECT 'Bull + VERY_HIGH' AS label, COUNT(*)::int,
+          ROUND(AVG((return_pct>0)::int)::numeric*100,1),
+          ROUND(AVG(return_pct)::numeric,3),
+          ROUND(SUM(CASE WHEN return_pct>0 THEN return_pct ELSE 0 END)/
+            NULLIF(SUM(CASE WHEN return_pct<0 THEN ABS(return_pct) ELSE 0 END),0)::numeric,3)
+        FROM trade_attribution WHERE return_pct IS NOT NULL AND sector_regime='bull' AND conviction_level='VERY_HIGH'
+        UNION ALL
+        SELECT 'VIX low + Jarvis green' AS label, COUNT(*)::int,
+          ROUND(AVG((return_pct>0)::int)::numeric*100,1),
+          ROUND(AVG(return_pct)::numeric,3),
+          ROUND(SUM(CASE WHEN return_pct>0 THEN return_pct ELSE 0 END)/
+            NULLIF(SUM(CASE WHEN return_pct<0 THEN ABS(return_pct) ELSE 0 END),0)::numeric,3)
+        FROM trade_attribution WHERE return_pct IS NOT NULL AND vix_regime='low' AND jarvis_green
+        UNION ALL
+        SELECT 'Tier 1 + ML high (>0.7)' AS label, COUNT(*)::int,
+          ROUND(AVG((return_pct>0)::int)::numeric*100,1),
+          ROUND(AVG(return_pct)::numeric,3),
+          ROUND(SUM(CASE WHEN return_pct>0 THEN return_pct ELSE 0 END)/
+            NULLIF(SUM(CASE WHEN return_pct<0 THEN ABS(return_pct) ELSE 0 END),0)::numeric,3)
+        FROM trade_attribution WHERE return_pct IS NOT NULL AND quality_tier=1 AND ml_signal_strength>=0.7
+      ) sub
+      WHERE n >= 20
+      ORDER BY expectancy DESC
+      LIMIT 10
+    `)
+
+    // ── Worst contexts ─────────────────────────────────────────────────────
+    const worstContexts = await query<{
+      label: string; n: number; win_rate: number; expectancy: number; profit_factor: number
+    }>(`
+      SELECT label, n, win_rate, expectancy, profit_factor FROM (
+        SELECT 'LOW conviction' AS label, COUNT(*)::int,
+          ROUND(AVG((return_pct>0)::int)::numeric*100,1),
+          ROUND(AVG(return_pct)::numeric,3),
+          ROUND(SUM(CASE WHEN return_pct>0 THEN return_pct ELSE 0 END)/
+            NULLIF(SUM(CASE WHEN return_pct<0 THEN ABS(return_pct) ELSE 0 END),0)::numeric,3) AS profit_factor
+        FROM trade_attribution WHERE return_pct IS NOT NULL AND conviction_level='LOW'
+        UNION ALL
+        SELECT 'Tier 4 + Bear' AS label, COUNT(*)::int,
+          ROUND(AVG((return_pct>0)::int)::numeric*100,1),
+          ROUND(AVG(return_pct)::numeric,3),
+          ROUND(SUM(CASE WHEN return_pct>0 THEN return_pct ELSE 0 END)/
+            NULLIF(SUM(CASE WHEN return_pct<0 THEN ABS(return_pct) ELSE 0 END),0)::numeric,3)
+        FROM trade_attribution WHERE return_pct IS NOT NULL AND quality_tier=4 AND sector_regime='bear'
+        UNION ALL
+        SELECT 'VIX high' AS label, COUNT(*)::int,
+          ROUND(AVG((return_pct>0)::int)::numeric*100,1),
+          ROUND(AVG(return_pct)::numeric,3),
+          ROUND(SUM(CASE WHEN return_pct>0 THEN return_pct ELSE 0 END)/
+            NULLIF(SUM(CASE WHEN return_pct<0 THEN ABS(return_pct) ELSE 0 END),0)::numeric,3)
+        FROM trade_attribution WHERE return_pct IS NOT NULL AND vix_regime='high'
+        UNION ALL
+        SELECT 'Bear + Jarvis red' AS label, COUNT(*)::int,
+          ROUND(AVG((return_pct>0)::int)::numeric*100,1),
+          ROUND(AVG(return_pct)::numeric,3),
+          ROUND(SUM(CASE WHEN return_pct>0 THEN return_pct ELSE 0 END)/
+            NULLIF(SUM(CASE WHEN return_pct<0 THEN ABS(return_pct) ELSE 0 END),0)::numeric,3)
+        FROM trade_attribution WHERE return_pct IS NOT NULL AND sector_regime='bear' AND jarvis_green=false
+        UNION ALL
+        SELECT 'Tier 3 or 4 (all)' AS label, COUNT(*)::int,
+          ROUND(AVG((return_pct>0)::int)::numeric*100,1),
+          ROUND(AVG(return_pct)::numeric,3),
+          ROUND(SUM(CASE WHEN return_pct>0 THEN return_pct ELSE 0 END)/
+            NULLIF(SUM(CASE WHEN return_pct<0 THEN ABS(return_pct) ELSE 0 END),0)::numeric,3)
+        FROM trade_attribution WHERE return_pct IS NOT NULL AND quality_tier IN (3,4)
+      ) sub
+      WHERE n >= 20
+      ORDER BY expectancy ASC
+      LIMIT 10
+    `)
+
+    // ── Hold period comparison ─────────────────────────────────────────────
+    const holdComparison = await query<{
+      hold: string; n: number; win_rate: number; expectancy: number; profit_factor: number
+    }>(`
+      SELECT * FROM (
+        SELECT '5d'::text AS hold, COUNT(*)::int AS n,
+          ROUND(AVG((return_pct>0)::int)::numeric*100,1) AS win_rate,
+          ROUND(AVG(return_pct)::numeric,3)              AS expectancy,
+          ROUND(SUM(CASE WHEN return_pct>0 THEN return_pct ELSE 0 END)/
+            NULLIF(SUM(CASE WHEN return_pct<0 THEN ABS(return_pct) ELSE 0 END),0)::numeric,3) AS profit_factor
+        FROM trade_attribution WHERE return_pct IS NOT NULL
+        UNION ALL
+        SELECT '10d', COUNT(*)::int,
+          ROUND(AVG((return_pct_10d>0)::int)::numeric*100,1),
+          ROUND(AVG(return_pct_10d)::numeric,3),
+          ROUND(SUM(CASE WHEN return_pct_10d>0 THEN return_pct_10d ELSE 0 END)/
+            NULLIF(SUM(CASE WHEN return_pct_10d<0 THEN ABS(return_pct_10d) ELSE 0 END),0)::numeric,3)
+        FROM trade_attribution WHERE return_pct_10d IS NOT NULL
+        UNION ALL
+        SELECT '20d', COUNT(*)::int,
+          ROUND(AVG((return_pct_20d>0)::int)::numeric*100,1),
+          ROUND(AVG(return_pct_20d)::numeric,3),
+          ROUND(SUM(CASE WHEN return_pct_20d>0 THEN return_pct_20d ELSE 0 END)/
+            NULLIF(SUM(CASE WHEN return_pct_20d<0 THEN ABS(return_pct_20d) ELSE 0 END),0)::numeric,3)
+        FROM trade_attribution WHERE return_pct_20d IS NOT NULL
+      ) h
+      ORDER BY ARRAY_POSITION(ARRAY['5d','10d','20d'], hold)
+    `)
+
+    // ── Top 10 / Bottom 10 combinations ───────────────────────────────────
+    const topCombinations = await query<{
+      combination: string; n: number; win_rate: number; expectancy: number; profit_factor: number
+    }>(`
+      SELECT combination, n, win_rate, expectancy, profit_factor FROM (
+        SELECT
+          conviction_level || ' + ' || sector_regime AS combination,
+          COUNT(*)::int                               AS n,
+          ROUND(AVG((return_pct>0)::int)::numeric*100,1) AS win_rate,
+          ROUND(AVG(return_pct)::numeric,3)               AS expectancy,
+          ROUND(SUM(CASE WHEN return_pct>0 THEN return_pct ELSE 0 END)/
+            NULLIF(SUM(CASE WHEN return_pct<0 THEN ABS(return_pct) ELSE 0 END),0)::numeric,3) AS profit_factor
+        FROM trade_attribution
+        WHERE return_pct IS NOT NULL
+          AND conviction_level IS NOT NULL AND sector_regime IS NOT NULL
+        GROUP BY conviction_level, sector_regime
+        HAVING COUNT(*) >= 20
+      ) sub
+      ORDER BY expectancy DESC
+      LIMIT 10
+    `)
+
+    const bottomCombinations = await query<{
+      combination: string; n: number; win_rate: number; expectancy: number; profit_factor: number
+    }>(`
+      SELECT combination, n, win_rate, expectancy, profit_factor FROM (
+        SELECT
+          conviction_level || ' + ' || sector_regime AS combination,
+          COUNT(*)::int                               AS n,
+          ROUND(AVG((return_pct>0)::int)::numeric*100,1) AS win_rate,
+          ROUND(AVG(return_pct)::numeric,3)               AS expectancy,
+          ROUND(SUM(CASE WHEN return_pct>0 THEN return_pct ELSE 0 END)/
+            NULLIF(SUM(CASE WHEN return_pct<0 THEN ABS(return_pct) ELSE 0 END),0)::numeric,3) AS profit_factor
+        FROM trade_attribution
+        WHERE return_pct IS NOT NULL
+          AND conviction_level IS NOT NULL AND sector_regime IS NOT NULL
+        GROUP BY conviction_level, sector_regime
+        HAVING COUNT(*) >= 20
+      ) sub
+      ORDER BY expectancy ASC
+      LIMIT 10
+    `)
+
+    res.json({
+      overall: {
+        n:               overall?.n            ?? 0,
+        winRate:         overall?.win_rate      ?? null,
+        expectancy:      overall?.expectancy    ?? null,
+        profitFactor:    overall?.profit_factor ?? null,
+        avgWinner:       overall?.avg_winner    ?? null,
+        avgLoser:        overall?.avg_loser     ?? null,
+        avgMfe:          overall?.avg_mfe       ?? null,
+        avgMae:          overall?.avg_mae       ?? null,
+        stopRate:        overall?.stop_rate     ?? null,
+        t1Rate:          overall?.t1_rate       ?? null,
+        t2Rate:          overall?.t2_rate       ?? null,
+        t3Rate:          overall?.t3_rate       ?? null,
+        signalFlipRate:  overall?.signal_flip_rate ?? null,
+        dateRange:       overall?.n ? `${overall.min_date} → ${overall.max_date}` : null,
+      },
+      bestContexts,
+      worstContexts,
+      holdComparison,
+      topCombinations,
+      bottomCombinations,
+      generatedAt: new Date().toISOString(),
+    })
+  } catch (err: unknown) {
+    req.log?.error({ err }, 'research.trade-attribution failed')
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Internal error' })
+  }
+})

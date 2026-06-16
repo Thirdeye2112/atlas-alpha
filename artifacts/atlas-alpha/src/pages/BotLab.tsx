@@ -280,6 +280,22 @@ interface ModelHealthData {
   generatedAt: string;
 }
 
+interface TradeAttributionData {
+  overall: {
+    n: number; winRate: number | null; expectancy: number | null; profitFactor: number | null;
+    avgWinner: number | null; avgLoser: number | null;
+    avgMfe: number | null; avgMae: number | null;
+    stopRate: number | null; t1Rate: number | null; t2Rate: number | null; t3Rate: number | null;
+    signalFlipRate: number | null; dateRange: string | null;
+  };
+  bestContexts:     { label: string; n: number; win_rate: number; expectancy: number; profit_factor: number }[];
+  worstContexts:    { label: string; n: number; win_rate: number; expectancy: number; profit_factor: number }[];
+  holdComparison:   { hold: string; n: number; win_rate: number; expectancy: number; profit_factor: number }[];
+  topCombinations:  { combination: string; n: number; win_rate: number; expectancy: number; profit_factor: number }[];
+  bottomCombinations: { combination: string; n: number; win_rate: number; expectancy: number; profit_factor: number }[];
+  generatedAt: string;
+}
+
 // ── Filter-builder constants (mirrors Scanner.tsx) ────────────────────────────
 
 type CsFieldType = "number" | "enum" | "string" | "array" | "pattern";
@@ -1843,6 +1859,191 @@ function SimLabTab() {
   );
 }
 
+// ── Trade Attribution Section ─────────────────────────────────────────────────
+
+function TradeAttributionSection({ data: ta }: { data: TradeAttributionData }) {
+  return (
+    <div className="bg-card border border-border rounded p-4 flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <div className="text-xs font-mono text-primary uppercase tracking-wider font-bold">
+          Trade Attribution Engine
+        </div>
+        {ta.overall.dateRange && (
+          <div className="text-[10px] font-mono text-muted-foreground">{ta.overall.dateRange}</div>
+        )}
+      </div>
+
+      {/* Headline KPIs */}
+      {ta.overall.n > 0 && (() => {
+        const o = ta.overall;
+        const pfColor = (o.profitFactor ?? 0) >= 1.2 ? "text-success" : (o.profitFactor ?? 0) >= 1.0 ? "text-yellow-400" : "text-destructive";
+        const expColor = (o.expectancy ?? 0) > 0 ? "text-success" : "text-destructive";
+        return (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            {[
+              { label: "TRADES ANALYZED", value: o.n.toLocaleString() },
+              { label: "WIN RATE",        value: o.winRate != null ? `${(o.winRate * 100).toFixed(1)}%` : "—", color: (o.winRate ?? 0) >= 0.52 ? "text-success" : "text-destructive" },
+              { label: "EXPECTANCY",      value: o.expectancy != null ? `${o.expectancy > 0 ? "+" : ""}${o.expectancy.toFixed(2)}%` : "—", color: expColor },
+              { label: "PROFIT FACTOR",   value: o.profitFactor != null ? o.profitFactor.toFixed(3) : "—", color: pfColor },
+              { label: "AVG WINNER",      value: o.avgWinner != null ? `+${o.avgWinner.toFixed(2)}%` : "—", color: "text-success" },
+              { label: "AVG LOSER",       value: o.avgLoser != null ? `${o.avgLoser.toFixed(2)}%` : "—", color: "text-destructive" },
+              { label: "AVG MFE",         value: o.avgMfe != null ? `${o.avgMfe.toFixed(2)}%` : "—" },
+              { label: "AVG MAE",         value: o.avgMae != null ? `${o.avgMae.toFixed(2)}%` : "—" },
+            ].map(({ label, value, color }) => (
+              <div key={label} className="bg-background/60 border border-border/50 rounded p-2">
+                <div className="text-[9px] font-mono text-muted-foreground uppercase tracking-wider">{label}</div>
+                <div className={cn("text-sm font-mono font-bold mt-0.5", color ?? "text-foreground")}>{value}</div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
+      {/* Stop/Target rates */}
+      {ta.overall.n > 0 && (() => {
+        const o = ta.overall;
+        return (
+          <div className="flex flex-wrap gap-2 text-[10px] font-mono text-muted-foreground">
+            {o.stopRate != null && <span>Stop hit: <span className="text-destructive font-bold">{(o.stopRate * 100).toFixed(1)}%</span></span>}
+            {o.t1Rate  != null && <span className="ml-2">T1 (+1R): <span className="text-success font-bold">{(o.t1Rate * 100).toFixed(1)}%</span></span>}
+            {o.t2Rate  != null && <span className="ml-2">T2 (+2R): <span className="text-success font-bold">{(o.t2Rate * 100).toFixed(1)}%</span></span>}
+            {o.t3Rate  != null && <span className="ml-2">T3 (+3R): <span className="text-success font-bold">{(o.t3Rate * 100).toFixed(1)}%</span></span>}
+            {o.signalFlipRate != null && <span className="ml-2">Signal flips: <span className="text-yellow-400 font-bold">{(o.signalFlipRate * 100).toFixed(1)}%</span></span>}
+          </div>
+        );
+      })()}
+
+      {/* Hold comparison */}
+      {ta.holdComparison.length > 0 && (
+        <div>
+          <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-1.5">Hold Period Comparison</div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[10px] font-mono">
+              <thead>
+                <tr className="text-muted-foreground border-b border-border/50">
+                  <th className="text-left py-1 pr-4">Hold</th>
+                  <th className="text-right pr-4">N</th>
+                  <th className="text-right pr-4">Win Rate</th>
+                  <th className="text-right pr-4">Expectancy</th>
+                  <th className="text-right">Profit Factor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ta.holdComparison.map((r) => {
+                  const pfColor = r.profit_factor >= 1.2 ? "text-success" : r.profit_factor >= 1.0 ? "text-yellow-400" : "text-destructive";
+                  const expColor = r.expectancy > 0 ? "text-success" : "text-destructive";
+                  return (
+                    <tr key={r.hold} className="border-b border-border/20">
+                      <td className="py-1 pr-4 font-bold">{r.hold}</td>
+                      <td className="text-right pr-4 text-muted-foreground">{r.n.toLocaleString()}</td>
+                      <td className="text-right pr-4">{r.win_rate.toFixed(1)}%</td>
+                      <td className={cn("text-right pr-4 font-bold", expColor)}>{r.expectancy > 0 ? "+" : ""}{r.expectancy.toFixed(3)}%</td>
+                      <td className={cn("text-right font-bold", pfColor)}>{r.profit_factor.toFixed(3)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Best / Worst contexts */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {ta.bestContexts.length > 0 && (
+          <div>
+            <div className="text-[10px] font-mono text-success uppercase tracking-wider mb-1.5">Best Contexts</div>
+            <div className="flex flex-col gap-1">
+              {ta.bestContexts.slice(0, 5).map((r) => (
+                <div key={r.label} className="flex items-center justify-between bg-success/5 border border-success/20 rounded px-2 py-1">
+                  <span className="text-[10px] font-mono text-foreground/80 truncate max-w-[55%]">{r.label}</span>
+                  <span className="text-[10px] font-mono text-muted-foreground">n={r.n.toLocaleString()}</span>
+                  <span className="text-[10px] font-mono text-success font-bold">{r.win_rate.toFixed(0)}% WR</span>
+                  <span className="text-[10px] font-mono text-success font-bold">{r.expectancy > 0 ? "+" : ""}{r.expectancy.toFixed(2)}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {ta.worstContexts.length > 0 && (
+          <div>
+            <div className="text-[10px] font-mono text-destructive uppercase tracking-wider mb-1.5">Worst Contexts</div>
+            <div className="flex flex-col gap-1">
+              {ta.worstContexts.slice(0, 5).map((r) => (
+                <div key={r.label} className="flex items-center justify-between bg-destructive/5 border border-destructive/20 rounded px-2 py-1">
+                  <span className="text-[10px] font-mono text-foreground/80 truncate max-w-[55%]">{r.label}</span>
+                  <span className="text-[10px] font-mono text-muted-foreground">n={r.n.toLocaleString()}</span>
+                  <span className="text-[10px] font-mono text-destructive font-bold">{r.win_rate.toFixed(0)}% WR</span>
+                  <span className="text-[10px] font-mono text-destructive font-bold">{r.expectancy > 0 ? "+" : ""}{r.expectancy.toFixed(2)}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Top / Bottom combinations */}
+      {(ta.topCombinations.length > 0 || ta.bottomCombinations.length > 0) && (
+        <div>
+          <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-1.5">Signal Combinations</div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {ta.topCombinations.length > 0 && (
+              <div>
+                <div className="text-[9px] font-mono text-success mb-1">TOP COMBINATIONS</div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-[10px] font-mono">
+                    <thead>
+                      <tr className="text-muted-foreground border-b border-border/50">
+                        <th className="text-left py-1 pr-2">Combination</th>
+                        <th className="text-right pr-2">N</th>
+                        <th className="text-right">Exp</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ta.topCombinations.slice(0, 10).map((r) => (
+                        <tr key={r.combination} className="border-b border-border/20">
+                          <td className="py-0.5 pr-2 text-foreground/70">{r.combination}</td>
+                          <td className="text-right pr-2 text-muted-foreground">{r.n.toLocaleString()}</td>
+                          <td className="text-right text-success font-bold">{r.expectancy > 0 ? "+" : ""}{r.expectancy.toFixed(2)}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+            {ta.bottomCombinations.length > 0 && (
+              <div>
+                <div className="text-[9px] font-mono text-destructive mb-1">BOTTOM COMBINATIONS</div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-[10px] font-mono">
+                    <thead>
+                      <tr className="text-muted-foreground border-b border-border/50">
+                        <th className="text-left py-1 pr-2">Combination</th>
+                        <th className="text-right pr-2">N</th>
+                        <th className="text-right">Exp</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ta.bottomCombinations.slice(0, 10).map((r) => (
+                        <tr key={r.combination} className="border-b border-border/20">
+                          <td className="py-0.5 pr-2 text-foreground/70">{r.combination}</td>
+                          <td className="text-right pr-2 text-muted-foreground">{r.n.toLocaleString()}</td>
+                          <td className="text-right text-destructive font-bold">{r.expectancy > 0 ? "+" : ""}{r.expectancy.toFixed(2)}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── LEARNING TAB ──────────────────────────────────────────────────────────────
 
 function LearningTab() {
@@ -1867,6 +2068,12 @@ function LearningTab() {
   const { data: modelHealth } = useQuery<ModelHealthData>({
     queryKey:  ["research-model-health"],
     queryFn:   () => apiFetch("research/model-health"),
+    staleTime: 300_000,
+  });
+
+  const { data: tradeAttrib } = useQuery<TradeAttributionData>({
+    queryKey:  ["research-trade-attribution"],
+    queryFn:   () => apiFetch("research/trade-attribution"),
     staleTime: 300_000,
   });
 
@@ -2571,6 +2778,11 @@ function AiBrainTab({ stats, signalPerformance }: { stats: BotStats | undefined;
           </div>
         )}
       </div>
+
+      {/* ── Trade Attribution ───────────────────────────────────────────────── */}
+      {/* eslint-disable-next-line */}
+      {/* @ts-expect-error: TS flow analysis limit in large JSX — tradeAttrib IS in scope */}
+      {(tradeAttrib as TradeAttributionData | undefined) && <TradeAttributionSection data={tradeAttrib as TradeAttributionData} />}
     </div>
   );
 }
