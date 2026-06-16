@@ -1372,3 +1372,117 @@ mlResearchRouter.get('/intraday-learning-status', async (req, res) => {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Internal error' })
   }
 })
+
+// GET /api/research/intraday/similarity/:ticker
+// Returns the pre-computed similarity result for a ticker's latest candle.
+// Updated nightly by build_intraday_candle_memory.py --incremental.
+mlResearchRouter.get('/intraday/similarity/:ticker', async (req, res) => {
+  const { ticker } = req.params
+  const pool = getPool()
+  const qry = async <T>(sql: string, params: unknown[] = []): Promise<T[]> => {
+    const result = await pool.query(sql, params)
+    return result.rows as T[]
+  }
+  try {
+    // Similarity latest result
+    const latestRows = await qry<{
+      ticker: string
+      as_of_ts: string
+      k_used: number
+      matched_sample: number
+      time_gate: string | null
+      regime_gate: string | null
+      similarity_return_6: number | null
+      similarity_hitrate: number | null
+      similarity_mfe_12: number | null
+      similarity_mae_12: number | null
+      pct_hit_plus_1atr: number | null
+      pct_hit_minus_1atr: number | null
+      top_neighbors: unknown
+      raw_summary: unknown
+      updated_at: string
+    }>(
+      `SELECT * FROM intraday_similarity_latest WHERE ticker = $1`,
+      [ticker.toUpperCase()]
+    )
+
+    if (latestRows.length === 0) {
+      res.status(404).json({
+        error: 'No similarity data found for ticker',
+        ticker,
+        hint: 'Run build_intraday_candle_memory.py --full to initialize the candle memory bank.',
+      })
+      return
+    }
+
+    const row = latestRows[0]
+
+    // Memory bank stats for context
+    const statsRows = await qry<{ total_rows: number; earliest_ts: string; latest_ts: string }>(
+      `SELECT COUNT(*)::int AS total_rows, MIN(ts)::text AS earliest_ts, MAX(ts)::text AS latest_ts
+       FROM intraday_candle_memory WHERE ticker = $1`,
+      [ticker.toUpperCase()]
+    )
+    const stats = statsRows[0] ?? { total_rows: 0, earliest_ts: null, latest_ts: null }
+
+    // Warning flags
+    const warnings: string[] = []
+    if (!row.matched_sample || row.matched_sample < 20) {
+      warnings.push(`Low match count (${row.matched_sample ?? 0}) -- similarity estimates are unreliable below 20 matches.`)
+    }
+    if (stats.total_rows < 1000) {
+      warnings.push(`Small memory bank (${stats.total_rows} candles) -- accuracy improves as history accumulates.`)
+    }
+    const updatedAt = new Date(row.updated_at)
+    const hoursSince = (Date.now() - updatedAt.getTime()) / 3_600_000
+    if (hoursSince > 26) {
+      warnings.push(`Similarity data is ${Math.round(hoursSince)}h old -- may not reflect today's candle.`)
+    }
+
+    const hitRate = row.similarity_hitrate ?? null
+    const expReturn = row.similarity_return_6 ?? null
+
+    // Recommended horizon based on hit rate
+    let recommendedHorizon = '30m (6 bars)'
+    let recommendedExit = 'Hold for primary 30-min target based on historical similar-candle behavior.'
+    if (hitRate !== null && hitRate < 0.52) {
+      recommendedHorizon = 'No strong edge detected'
+      recommendedExit = 'Similarity signal is weak -- skip or use tighter stops.'
+    } else if (row.pct_hit_plus_1atr !== null && row.pct_hit_plus_1atr > 0.45) {
+      recommendedHorizon = '60m (12 bars)'
+      recommendedExit = 'ATR target has good historical hit rate -- hold for +1 ATR target.'
+    }
+
+    res.json({
+      ticker:              row.ticker,
+      timestamp:           row.as_of_ts,
+      k_used:              row.k_used,
+      matched_sample:      row.matched_sample,
+      time_gate:           row.time_gate,
+      regime_gate:         row.regime_gate,
+      similarity_probability: hitRate,
+      similarity_expectancy:  expReturn,
+      similarity_confidence:  row.matched_sample != null && row.matched_sample >= 30 ? 'HIGH'
+                              : row.matched_sample != null && row.matched_sample >= 15 ? 'MODERATE'
+                              : 'LOW',
+      mfe_12_mean:         row.similarity_mfe_12,
+      mae_12_mean:         row.similarity_mae_12,
+      pct_hit_plus_1atr:   row.pct_hit_plus_1atr,
+      pct_hit_minus_1atr:  row.pct_hit_minus_1atr,
+      top_match_summary:   row.top_neighbors,
+      recommended_horizon: recommendedHorizon,
+      recommended_exit:    recommendedExit,
+      warnings,
+      memory_bank: {
+        total_candles: stats.total_rows,
+        earliest:      stats.earliest_ts,
+        latest:        stats.latest_ts,
+      },
+      raw_summary:         row.raw_summary,
+      updated_at:          row.updated_at,
+    })
+  } catch (err: unknown) {
+    req.log?.error({ err }, 'research.intraday-similarity failed')
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Internal error' })
+  }
+})
