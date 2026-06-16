@@ -1,22 +1,18 @@
 /**
  * BotTemplateSignals — paper-trade-only signals panel for BotLab.
  *
- * Shows prediction enrichment and behavior signals for all open
- * paper-trade positions. Read-only; no trading actions. Enrichment fields
- * come from /api/research/batch/enrichment (predictions + behavior layer).
+ * Shows ML enrichment for all open paper-trade positions.
+ * Read-only; no trading actions.
  */
 
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useBatchEnrichment, usePipelineHealth } from '../hooks/useResearchAdvanced'
-import type { EnrichmentItem } from '../hooks/useResearchAdvanced'
+import { useBatchEnrichment, usePipelineHealth, type BatchEnrichmentResult, type PipelineHealth } from '../hooks/useResearchAdvanced'
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '')
 
 async function apiFetch<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}/api/${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-  })
+  const res = await fetch(`${BASE}/api/${path}`, { headers: { 'Content-Type': 'application/json' } })
   if (!res.ok) throw new Error(await res.text())
   return res.json() as Promise<T>
 }
@@ -30,114 +26,179 @@ interface PaperTrade {
   status: string
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+// ── Palette ───────────────────────────────────────────────────────────────────
+const BG0  = '#0f1623'
+const BG1  = '#090e18'
+const BD   = '#1e2533'
+const G    = '#22c55e'
+const R    = '#ef4444'
+const AM   = '#f59e0b'
+const DIM  = '#4b5563'
+const MUT  = '#6b7280'
+const HI   = '#e5e7eb'
 
-function confidenceColor(c: number | null) {
-  if (c == null) return '#6b7280'
-  if (c >= 0.7)  return '#22c55e'
-  if (c >= 0.5)  return '#86efac'
-  if (c >= 0.35) return '#fbbf24'
-  return '#ef4444'
-}
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-// market_behavior_concepts.direction is stored as 'long' | 'short' | 'neutral'.
-function isBull(d: string | null) {
-  const v = (d ?? '').toLowerCase()
-  return v === 'long' || v === 'bull' || v === 'bullish'
-}
-function isBear(d: string | null) {
-  const v = (d ?? '').toLowerCase()
-  return v === 'short' || v === 'bear' || v === 'bearish'
-}
-
-function directionIcon(d: string | null) {
-  if (!d) return '—'
-  if (isBull(d)) return '▲'
-  if (isBear(d)) return '▼'
-  return '—'
+function Dot({ color }: { color: string }) {
+  return <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />
 }
 
 function fmtPct(v: number | null | undefined) {
   if (v == null) return '—'
-  return `${v >= 0 ? '+' : ''}${(v * 100).toFixed(1)}%`
+  const x = v * 100
+  return `${x >= 0 ? '+' : ''}${x.toFixed(1)}%`
 }
 
-function fmtNum(v: number | null | undefined, dp = 1) {
-  if (v == null) return '—'
-  return v.toFixed(dp)
+function rankColor(r: number | null) {
+  if (r == null) return MUT
+  if (r >= 75) return G
+  if (r >= 50) return AM
+  return MUT
 }
 
-// ---------------------------------------------------------------------------
-// Row
-// ---------------------------------------------------------------------------
+// ── Status header ─────────────────────────────────────────────────────────────
 
-interface SignalRowProps {
-  item: EnrichmentItem
-  entryDirection: string
-}
-
-function SignalRow({ item, entryDirection }: SignalRowProps) {
-  const bullBehaviors = item.behaviors.filter((b) => isBull(b.direction))
-  const bearBehaviors = item.behaviors.filter((b) => isBear(b.direction))
-  const behaviorSummary =
-    item.behaviors.length === 0 ? 'none'
-    : `${bullBehaviors.length}↑ ${bearBehaviors.length}↓`
-
-  // Alignment uses rank_percentile (0-1) as the active conviction signal; the
-  // confidence/probability columns are near-constant until calibration is live.
-  const alignedWithEntry =
-    item.rank_percentile !== null && item.rank_percentile >= 0.6
-      ? (entryDirection === 'bull' && (item.expected_return ?? 0) > 0) ||
-        (entryDirection === 'bear' && (item.expected_return ?? 0) < 0)
-      : null
-
+function HeaderStrip({ health }: { health: PipelineHealth | null }) {
+  const sc = !health ? MUT : health.healthy ? G : health.status === 'degraded' ? AM : R
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: '72px 64px 64px 72px 60px 80px',
-      alignItems: 'center',
-      padding: '5px 8px',
-      borderBottom: '1px solid #1e2533',
-      fontFamily: 'monospace',
-      fontSize: 11,
-      gap: 4,
-    }}>
-      <span style={{ fontWeight: 600, color: '#e5e7eb' }}>{item.ticker}</span>
-
-      <span style={{ color: item.expected_return != null && item.expected_return > 0 ? '#22c55e' : '#ef4444' }}>
-        {fmtPct(item.expected_return)}
-      </span>
-
-      <span style={{ color: '#9ca3af' }}>
-        {item.probability_positive != null ? `${Math.round(item.probability_positive * 100)}%` : '—'}
-      </span>
-
-      <span style={{ color: confidenceColor(item.confidence) }}>
-        {item.confidence != null ? `${Math.round(item.confidence * 100)}%` : '—'}
-      </span>
-
-      <span style={{ color: '#9ca3af' }}>
-        {item.rank_percentile != null ? `${fmtNum(item.rank_percentile * 100)}%ile` : '—'}
-      </span>
-
-      <span style={{ color: '#6b7280' }}>
-        {behaviorSummary}
-        {alignedWithEntry === true && (
-          <span style={{ color: '#22c55e', marginLeft: 4 }}>✓</span>
-        )}
-        {alignedWithEntry === false && (
-          <span style={{ color: '#f59e0b', marginLeft: 4 }}>!</span>
-        )}
-      </span>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderBottom: `1px solid ${BD}`, background: BG0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontWeight: 700, fontSize: 12, color: HI }}>⚡ SIGNALS</span>
+        <span style={{ color: DIM, fontSize: 10 }}>read-only · paper trade enrichment</span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10 }}>
+        {health && <Dot color={sc} />}
+        <span style={{ color: sc, fontWeight: 600 }}>{health ? health.status.toUpperCase() : 'CONNECTING…'}</span>
+        {health?.last_pred_date && <span style={{ color: DIM }}>preds: {health.last_pred_date}</span>}
+        {health?.pred_stale && <span style={{ color: AM, fontSize: 9 }}>stale</span>}
+      </div>
     </div>
   )
 }
 
-// ---------------------------------------------------------------------------
-// Main component
-// ---------------------------------------------------------------------------
+// ── Column headers ────────────────────────────────────────────────────────────
+const COLS = '70px 60px 60px 70px 55px 60px'
+
+function ColumnHeaders() {
+  return (
+    <div style={{
+      display: 'grid', gridTemplateColumns: COLS, padding: '4px 12px', gap: 4,
+      fontSize: 9, color: DIM, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase',
+      borderBottom: `1px solid ${BD}`, background: BG0,
+    }}>
+      <span>Ticker</span>
+      <span>Rank</span>
+      <span>P(+)</span>
+      <span>Meta Score</span>
+      <span>Win %</span>
+      <span>Template</span>
+    </div>
+  )
+}
+
+// ── Signal row ────────────────────────────────────────────────────────────────
+
+function SignalRow({
+  item,
+  expanded,
+  onToggle,
+}: {
+  item: BatchEnrichmentResult
+  expanded: boolean
+  onToggle: () => void
+}) {
+  const hasDetail = item.combo_key != null
+
+  return (
+    <>
+      <div
+        onClick={hasDetail ? onToggle : undefined}
+        style={{
+          display: 'grid', gridTemplateColumns: COLS, gap: 4,
+          padding: '6px 12px', alignItems: 'center',
+          borderBottom: `1px solid ${BD}`, fontFamily: 'monospace', fontSize: 11,
+          cursor: hasDetail ? 'pointer' : 'default',
+          background: expanded ? BG1 : 'transparent',
+        }}
+      >
+        <span style={{ fontWeight: 700, color: HI }}>
+          {item.ticker}
+          {hasDetail && <span style={{ color: DIM, marginLeft: 3, fontSize: 9 }}>{expanded ? '▲' : '▼'}</span>}
+        </span>
+
+        <span style={{ color: rankColor(item.rank_percentile) }}>
+          {item.rank_percentile != null ? `${Math.round(item.rank_percentile)}%ile` : '—'}
+        </span>
+
+        <span style={{ color: item.probability_positive != null && item.probability_positive >= 0.55 ? G : MUT }}>
+          {item.probability_positive != null ? `${Math.round(item.probability_positive * 100)}%` : '—'}
+        </span>
+
+        <span style={{ color: item.composite_score != null ? (item.composite_score >= 0 ? G : R) : MUT }}>
+          {item.composite_score != null ? item.composite_score.toFixed(2) : '—'}
+        </span>
+
+        <span style={{ color: MUT }}>
+          {fmtPct(item.mean_ic)}
+        </span>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {item.eligible && <span title="Template eligible" style={{ color: G }}>⚡</span>}
+          {item.top_20_pct && (
+            <span style={{
+              fontSize: 8, fontWeight: 800, padding: '1px 3px', borderRadius: 2,
+              color: G, background: 'rgba(34,197,94,0.10)', border: '1px solid rgba(34,197,94,0.26)',
+            }}>F</span>
+          )}
+          {!item.eligible && !item.top_20_pct && <span style={{ color: DIM }}>—</span>}
+        </div>
+      </div>
+
+      {expanded && item.combo_key && (
+        <div style={{ background: BG1, padding: '8px 16px 10px', borderBottom: `1px solid ${BD}` }}>
+          <div style={{ fontSize: 9, fontWeight: 700, color: HI, marginBottom: 5, fontFamily: 'monospace' }}>
+            Pattern detail — {item.ticker}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 16px', fontSize: 10, fontFamily: 'monospace' }}>
+            <div><span style={{ color: DIM }}>Combo key </span><span style={{ color: '#9ca3af', fontSize: 9 }}>{item.combo_key}</span></div>
+            <div><span style={{ color: DIM }}>Rank check </span><span style={{ color: item.rank_ok ? G : MUT }}>{item.rank_ok ? '✓' : '✗'}</span></div>
+            <div><span style={{ color: DIM }}>IC check </span><span style={{ color: item.ic_ok ? G : MUT }}>{item.ic_ok ? '✓' : '✗'}</span></div>
+            <div><span style={{ color: DIM }}>Confluence </span><span style={{ color: item.confluence_ok ? G : MUT }}>{item.confluence_ok ? '✓' : '✗'}</span></div>
+            <div><span style={{ color: DIM }}>Meta top 20 </span><span style={{ color: item.meta_top20 ? G : MUT }}>{item.meta_top20 ? '✓' : '✗'}</span></div>
+            {item.confluence_score != null && (
+              <div><span style={{ color: DIM }}>CF score </span><span style={{ color: '#9ca3af' }}>{Math.round(item.confluence_score)}</span></div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
+function NoPredRow({ ticker }: { ticker: string }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr', padding: '6px 12px', borderBottom: `1px solid ${BD}`, fontSize: 11, fontFamily: 'monospace', gap: 4 }}>
+      <span style={{ fontWeight: 700, color: DIM }}>{ticker}</span>
+      <span style={{ color: DIM }}>no prediction available</span>
+    </div>
+  )
+}
+
+function LoadingSkeleton() {
+  return (
+    <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {[1, 2, 3].map(i => (
+        <div key={i} style={{ display: 'grid', gridTemplateColumns: COLS, gap: 4 }}>
+          {[45, 40, 35, 55, 35, 30].map((w, j) => (
+            <div key={j} style={{ height: 10, borderRadius: 3, background: 'rgba(255,255,255,0.04)', width: `${w + i * 4}%` }} />
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
 
 export function BotTemplateSignals() {
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -148,178 +209,57 @@ export function BotTemplateSignals() {
     staleTime: 30_000,
   })
 
-  const openTrades = trades.filter((t) => t.status === 'open')
-  const openTickers = [...new Set(openTrades.map((t) => t.ticker))].slice(0, 20)
+  const openTrades  = trades.filter(t => t.status === 'open')
+  const openTickers = [...new Set(openTrades.map(t => t.ticker))].slice(0, 20)
 
-  const { data: enrichment, isLoading: enrichLoading } = useBatchEnrichment(openTickers)
-  const { data: health } = usePipelineHealth()
+  const { items, isLoading: enrichLoading, isError: enrichError } = useBatchEnrichment(openTickers)
+  const { health } = usePipelineHealth()
 
-  const enrichItems = enrichment?.available ? enrichment.tickers : []
-
-  const tradesByTicker = Object.fromEntries(
-    openTrades.map((t) => [t.ticker, t])
-  )
+  const enrichMap = new Map(items.map(i => [i.ticker, i]))
+  const toggle = (t: string) => setExpanded(prev => prev === t ? null : t)
 
   return (
-    <div style={{ fontFamily: 'monospace', color: '#d1d5db' }}>
-      {/* Header strip */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '8px 12px',
-        borderBottom: '1px solid #1e2533',
-        background: '#0f1623',
-      }}>
-        <div style={{ fontWeight: 700, fontSize: 12, color: '#e5e7eb' }}>
-          ⚡ SIGNALS
-          <span style={{ color: '#4b5563', fontWeight: 400, marginLeft: 8, fontSize: 10 }}>
-            read-only · paper trade enrichment
-          </span>
-        </div>
+    <div style={{ fontFamily: 'monospace', color: '#d1d5db', display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <HeaderStrip health={health} />
 
-        {health?.available && (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 5,
-            fontSize: 10,
-            color: health.status === 'healthy' ? '#22c55e' : '#f59e0b',
-          }}>
-            <span style={{
-              display: 'inline-block',
-              width: 6,
-              height: 6,
-              borderRadius: '50%',
-              background: health.status === 'healthy' ? '#22c55e' : '#f59e0b',
-            }} />
-            {health.status}
-            {health.latest_prediction_date && (
-              <span style={{ color: '#4b5563', marginLeft: 4 }}>
-                {health.latest_prediction_date}
-              </span>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* No open positions */}
       {openTickers.length === 0 && (
-        <div style={{ padding: 24, textAlign: 'center', color: '#4b5563', fontSize: 11 }}>
-          No open paper positions. Open positions appear here with live signal enrichment.
+        <div style={{ padding: '32px 24px', textAlign: 'center', color: DIM, fontSize: 11 }}>
+          <div style={{ marginBottom: 6, fontSize: 20 }}>📭</div>
+          No open paper positions.
+          <div style={{ marginTop: 4, fontSize: 10 }}>Open positions appear here with live signal enrichment.</div>
         </div>
       )}
 
-      {/* Backend unavailable */}
-      {openTickers.length > 0 && enrichment && !enrichment.available && (
-        <div style={{
-          padding: '8px 12px',
-          background: '#1c1010',
-          borderBottom: '1px solid #3b1010',
-          color: '#f87171',
-          fontSize: 10,
-        }}>
+      {enrichError && openTickers.length > 0 && (
+        <div style={{ padding: '7px 12px', background: 'rgba(239,68,68,0.06)', borderBottom: `1px solid rgba(239,68,68,0.2)`, color: '#f87171', fontSize: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Dot color={R} />
           Research backend unavailable — enrichment data not loaded.
-          {enrichment.detail && <span style={{ color: '#6b7280', marginLeft: 6 }}>{enrichment.detail}</span>}
         </div>
       )}
 
-      {/* Column headers */}
       {openTickers.length > 0 && (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: '72px 64px 64px 72px 60px 80px',
-          padding: '4px 8px',
-          borderBottom: '1px solid #1e2533',
-          fontSize: 9,
-          color: '#4b5563',
-          gap: 4,
-          background: '#0f1623',
-        }}>
-          <span>TICKER</span>
-          <span>EXP RET</span>
-          <span>PROB+</span>
-          <span>CONF</span>
-          <span>RANK</span>
-          <span>BEHAVIOR</span>
-        </div>
-      )}
-
-      {/* Loading */}
-      {enrichLoading && openTickers.length > 0 && (
-        <div style={{ padding: 12, color: '#6b7280', fontSize: 10 }}>
-          Loading enrichment…
-        </div>
-      )}
-
-      {/* Rows */}
-      {enrichItems.map((item) => (
-        <div key={item.ticker}>
-          <div
-            onClick={() => setExpanded(expanded === item.ticker ? null : item.ticker)}
-            style={{ cursor: 'pointer' }}
-          >
-            <SignalRow
-              item={item}
-              entryDirection={tradesByTicker[item.ticker]?.entryDirection ?? ''}
-            />
+        <>
+          <ColumnHeaders />
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            {enrichLoading && <LoadingSkeleton />}
+            {!enrichLoading && items.map(item => (
+              <SignalRow
+                key={item.ticker}
+                item={item}
+                expanded={expanded === item.ticker}
+                onToggle={() => toggle(item.ticker)}
+              />
+            ))}
+            {!enrichLoading && openTickers
+              .filter(t => !enrichMap.has(t))
+              .map(t => <NoPredRow key={t} ticker={t} />)}
           </div>
+        </>
+      )}
 
-          {/* Expanded behavior detail */}
-          {expanded === item.ticker && item.behaviors.length > 0 && (
-            <div style={{
-              background: '#090e18',
-              padding: '8px 16px',
-              borderBottom: '1px solid #1e2533',
-              fontSize: 10,
-              color: '#9ca3af',
-            }}>
-              <div style={{ fontWeight: 600, color: '#e5e7eb', marginBottom: 6, fontSize: 11 }}>
-                Active behaviors — {item.ticker}
-              </div>
-              {item.behaviors.map((b) => (
-                <div key={b.behavior_id} style={{
-                  display: 'flex',
-                  gap: 12,
-                  marginBottom: 3,
-                  color: isBull(b.direction) ? '#86efac' : isBear(b.direction) ? '#fca5a5' : '#9ca3af',
-                }}>
-                  <span style={{ width: 180 }}>{b.behavior_id}</span>
-                  <span>{b.direction} {directionIcon(b.direction)}</span>
-                  <span>intensity {b.intensity.toFixed(2)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
-
-      {/* Tickers with no prediction */}
-      {openTickers.filter((t) => !enrichItems.find((e) => e.ticker === t)).map((t) => (
-        <div key={t} style={{
-          display: 'grid',
-          gridTemplateColumns: '72px 1fr',
-          padding: '5px 8px',
-          borderBottom: '1px solid #1e2533',
-          fontSize: 11,
-          color: '#4b5563',
-          gap: 4,
-        }}>
-          <span style={{ fontWeight: 600 }}>{t}</span>
-          <span>no prediction available</span>
-        </div>
-      ))}
-
-      {/* Footer note */}
       {openTickers.length > 0 && (
-        <div style={{
-          padding: '6px 12px',
-          fontSize: 9,
-          color: '#374151',
-          borderTop: '1px solid #1e2533',
-        }}>
-          Click a row to expand behavior detail. ✓ = signal aligned with entry. ! = signal diverges from entry direction.
-          Paper trade only — no live orders.
+        <div style={{ padding: '5px 12px', fontSize: 9, color: '#374151', borderTop: `1px solid ${BD}`, background: BG0 }}>
+          Click a row to expand pattern detail. <span style={{ color: G }}>⚡</span> = template eligible. <span style={{ color: G }}>F</span> = meta top 20%. Paper trade only.
         </div>
       )}
     </div>
