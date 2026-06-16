@@ -373,13 +373,15 @@ type SortKey = 'rank_percentile' | 'probability_positive' | 'expected_return' | 
 type SortDir = 'asc' | 'desc'
 
 function PredictionsTable({
-  data, isLoading, modelMode, onModelChange, onTickerClick,
+  data, isLoading, modelMode, onModelChange, onTickerClick, qualityOnly, onQualityToggle,
 }: {
   data: PredictionsResponse | undefined
   isLoading: boolean
   modelMode: ModelMode
   onModelChange: (m: ModelMode) => void
   onTickerClick: (t: string) => void
+  qualityOnly: boolean
+  onQualityToggle: () => void
 }) {
   const [sortKey, setSortKey] = useState<SortKey>('rank_percentile')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
@@ -434,6 +436,22 @@ function PredictionsTable({
 
         {/* Q1: Model selector */}
         <ModelSelector value={modelMode} onChange={onModelChange} />
+
+        {/* Quality filter toggle — Tier 1-2 only (price>$10, avg_vol>100k) */}
+        <button
+          onClick={onQualityToggle}
+          title="Restrict to Tier 1-2 (price>$10, avg_vol>100k)"
+          style={{
+            background: qualityOnly ? 'rgba(34,197,94,0.15)' : '#111827',
+            border: `1px solid ${qualityOnly ? '#22c55e' : '#374151'}`,
+            color: qualityOnly ? '#22c55e' : '#6b7280',
+            padding: '5px 10px', borderRadius: 4, cursor: 'pointer',
+            fontSize: 11, fontFamily: 'inherit', whiteSpace: 'nowrap',
+            transition: 'all 0.15s',
+          }}
+        >
+          {qualityOnly ? '◈ Quality' : '◇ Quality'}
+        </button>
       </div>
 
       {/* Table */}
@@ -946,6 +964,7 @@ export default function ResearchLab() {
   const [activeTab, setActiveTab]           = useState<'predictions' | 'models' | 'runs' | 'concept-lab'>('predictions')
   // Q1: model mode state lives here so the query key updates with it
   const [modelMode, setModelMode]           = useState<ModelMode>('champion')
+  const [qualityOnly, setQualityOnly]       = useState(false)
 
   const metricsQuery = useQuery({
     queryKey: ['research', 'metrics'],
@@ -955,8 +974,12 @@ export default function ResearchLab() {
   })
 
   const predictionsQuery = useQuery({
-    queryKey: ['research', 'predictions', modelMode],
-    queryFn:  () => api.get<PredictionsResponse>('/predictions', { model: modelMode, limit: 200 }),
+    queryKey: ['research', 'predictions', modelMode, qualityOnly],
+    queryFn:  () => api.get<PredictionsResponse>('/predictions', {
+      model: modelMode,
+      limit: 200,
+      ...(qualityOnly ? { quality_filter: '1' } : {}),
+    }),
     staleTime: 120_000,
   })
 
@@ -1038,6 +1061,8 @@ export default function ResearchLab() {
             modelMode={modelMode}
             onModelChange={m => { setModelMode(m) }}
             onTickerClick={handleTickerClick}
+            qualityOnly={qualityOnly}
+            onQualityToggle={() => setQualityOnly(v => !v)}
           />
         )}
 
