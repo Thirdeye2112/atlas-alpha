@@ -158,10 +158,13 @@ advancedResearchRouter.get('/meta/:ticker', async (req, res) => {
     const rankPct     = row.rank_percentile as number | null
     const comboStatus = row.combo_status as string | null
     const metaScore   = row.meta_score as number | null
-    // Meta-filter pass: high confidence + top-40% rank + active combo or no combo data yet
-    const metaPass = confidence !== null && confidence >= 0.5
-                     && rankPct !== null && rankPct >= 60
-                     && (comboStatus === null || comboStatus === 'ACTIVE')
+    // Meta-filter pass: top-40% rank + active/promoted combo (or no combo data yet).
+    // rank_percentile is stored on a 0-1 scale (top decile ~= 0.9). The confidence
+    // and probability_positive columns are currently near-constant (calibration not
+    // yet active) so they are reported for context but not used as hard gates.
+    const ACTIVE_COMBO = new Set([null, 'ACTIVE', 'PROMOTED'])
+    const metaPass = rankPct !== null && rankPct >= 0.6
+                     && ACTIVE_COMBO.has(comboStatus)
 
     return res.json({
       available: true,
@@ -291,18 +294,21 @@ advancedResearchRouter.get('/template/eligible/:ticker', async (req, res) => {
     const rankPct     = pred.rank_percentile as number | null
     const comboStatus = pred.combo_status as string | null
 
-    // Template eligibility: confidence ≥ 0.5, top 40% rank, combo active (or not scored yet)
+    // Template eligibility: top 40% rank (rank_percentile is 0-1 scale) + combo
+    // promoted/active (or not yet scored). confidence is reported for context but
+    // is not a hard gate while calibration is inactive (column is near-constant).
+    const ACTIVE_COMBO = new Set([null, 'ACTIVE', 'PROMOTED'])
     const confOk  = confidence !== null && confidence >= 0.5
-    const rankOk  = rankPct !== null && rankPct >= 60
-    const comboOk = comboStatus === null || comboStatus === 'ACTIVE'
-    const eligible = confOk && rankOk && comboOk
+    const rankOk  = rankPct !== null && rankPct >= 0.6
+    const comboOk = ACTIVE_COMBO.has(comboStatus)
+    const eligible = rankOk && comboOk
 
-    // Fetch top combo patterns from signal_combination_scores if table exists
+    // Fetch top promoted combo patterns from signal_combination_scores if present.
     let activePatterns: string[] = []
     if (await tableExists('signal_combination_scores')) {
       const patRows = await query<{ combo_key: string }>(
         `SELECT combo_key FROM signal_combination_scores
-         WHERE status = 'ACTIVE'
+         WHERE status = 'PROMOTED'
          ORDER BY expectancy_60d DESC NULLS LAST, meta_score DESC NULLS LAST
          LIMIT 5`
       )
@@ -373,7 +379,7 @@ advancedResearchRouter.get('/batch/enrichment', async (req, res) => {
          FROM intraday_behavior_events ibe
          JOIN market_behavior_concepts mbc USING (behavior_id)
          WHERE ibe.ticker IN (${placeholders})
-           AND ibe.event_date >= CURRENT_DATE - INTERVAL '1 day'
+           AND ibe.event_date >= (SELECT MAX(event_date) FROM intraday_behavior_events) - INTERVAL '5 days'
          ORDER BY ibe.ticker, ibe.behavior_id, ibe.event_date DESC`,
         tickers
       )
@@ -437,18 +443,19 @@ advancedResearchRouter.get('/batch/enrichment', async (req, res) => {
 // ---------------------------------------------------------------------------
 
 advancedResearchRouter.get('/pipeline/health', async (req, res) => {
+  // Critical tables use real atlas_research names. (Daily bars live in raw_bars;
+  // intraday bars in intraday_bars; the run log is research_runs — there is no
+  // daily_bars / intraday_candles / pipeline_run_log table.)
   const CRITICAL_TABLES = [
     'predictions',
     'raw_bars',
-    'daily_bars',
-    'intraday_candles',
+    'intraday_bars',
     'intraday_candle_memory',
     'intraday_behavior_events',
     'market_behavior_concepts',
     'intraday_behavior_importance',
     'detected_behaviors',
     'research_runs',
-    'pipeline_run_log',
   ]
 
   try {

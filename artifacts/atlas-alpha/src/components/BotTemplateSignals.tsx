@@ -8,6 +8,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useBatchEnrichment, usePipelineHealth } from '../hooks/useResearchAdvanced'
+import type { EnrichmentItem } from '../hooks/useResearchAdvanced'
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '')
 
@@ -40,10 +41,20 @@ function confidenceColor(c: number | null) {
   return '#ef4444'
 }
 
+// market_behavior_concepts.direction is stored as 'long' | 'short' | 'neutral'.
+function isBull(d: string | null) {
+  const v = (d ?? '').toLowerCase()
+  return v === 'long' || v === 'bull' || v === 'bullish'
+}
+function isBear(d: string | null) {
+  const v = (d ?? '').toLowerCase()
+  return v === 'short' || v === 'bear' || v === 'bearish'
+}
+
 function directionIcon(d: string | null) {
   if (!d) return '—'
-  if (d.toUpperCase() === 'BULLISH' || d === 'bull') return '▲'
-  if (d.toUpperCase() === 'BEARISH' || d === 'bear') return '▼'
+  if (isBull(d)) return '▲'
+  if (isBear(d)) return '▼'
   return '—'
 }
 
@@ -62,19 +73,21 @@ function fmtNum(v: number | null | undefined, dp = 1) {
 // ---------------------------------------------------------------------------
 
 interface SignalRowProps {
-  item: ReturnType<typeof useBatchEnrichment>['data'] extends { tickers: infer T[] } ? T : never
+  item: EnrichmentItem
   entryDirection: string
 }
 
 function SignalRow({ item, entryDirection }: SignalRowProps) {
-  const bullBehaviors = item.behaviors.filter((b) => b.direction === 'BULLISH')
-  const bearBehaviors = item.behaviors.filter((b) => b.direction === 'BEARISH')
+  const bullBehaviors = item.behaviors.filter((b) => isBull(b.direction))
+  const bearBehaviors = item.behaviors.filter((b) => isBear(b.direction))
   const behaviorSummary =
     item.behaviors.length === 0 ? 'none'
     : `${bullBehaviors.length}↑ ${bearBehaviors.length}↓`
 
+  // Alignment uses rank_percentile (0-1) as the active conviction signal; the
+  // confidence/probability columns are near-constant until calibration is live.
   const alignedWithEntry =
-    item.confidence !== null && item.confidence >= 0.5
+    item.rank_percentile !== null && item.rank_percentile >= 0.6
       ? (entryDirection === 'bull' && (item.expected_return ?? 0) > 0) ||
         (entryDirection === 'bear' && (item.expected_return ?? 0) < 0)
       : null
@@ -105,7 +118,7 @@ function SignalRow({ item, entryDirection }: SignalRowProps) {
       </span>
 
       <span style={{ color: '#9ca3af' }}>
-        {item.rank_percentile != null ? `${fmtNum(item.rank_percentile)}%ile` : '—'}
+        {item.rank_percentile != null ? `${fmtNum(item.rank_percentile * 100)}%ile` : '—'}
       </span>
 
       <span style={{ color: '#6b7280' }}>
@@ -268,7 +281,7 @@ export function BotTemplateSignals() {
                   display: 'flex',
                   gap: 12,
                   marginBottom: 3,
-                  color: b.direction === 'BULLISH' ? '#86efac' : b.direction === 'BEARISH' ? '#fca5a5' : '#9ca3af',
+                  color: isBull(b.direction) ? '#86efac' : isBear(b.direction) ? '#fca5a5' : '#9ca3af',
                 }}>
                   <span style={{ width: 180 }}>{b.behavior_id}</span>
                   <span>{b.direction} {directionIcon(b.direction)}</span>
