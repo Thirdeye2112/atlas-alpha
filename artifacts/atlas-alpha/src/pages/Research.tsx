@@ -19,6 +19,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ConceptLab } from '../components/ConceptLab'
+import { BackendHealthPanel } from '../components/BackendHealthPanel'
 
 // ─── lightweight-charts v5 imports ───────────────────────────────────────────
 // Atlas Alpha already has this as a dependency (used in Dashboard.tsx).
@@ -1033,6 +1034,7 @@ export default function ResearchLab() {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <BackendHealthPanel compact />
           {metricsQuery.data?.generatedAt && (
             <span style={{ fontSize: 10, color: '#374151' }}>Updated {fmt.dt(metricsQuery.data.generatedAt)}</span>
           )}

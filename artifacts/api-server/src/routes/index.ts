@@ -20,6 +20,7 @@ import { probabilityRouter } from './research-probability';
 import { hypothesisRouter } from './research-hypothesis';
 import { calibrationRouter } from './research-calibration';
 import { attributionRouter } from './research-attribution';
+import { advancedResearchRouter } from './research-advanced';
 
 const router: IRouter = Router();
 
@@ -42,6 +43,7 @@ router.use('/research', probabilityRouter);
 router.use('/research', hypothesisRouter);
 router.use('/research', calibrationRouter);
 router.use('/research', attributionRouter);
+router.use('/research', advancedResearchRouter);
 router.use(alertsRouter);
 router.use(botRouter);
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { BotTemplateSignals } from "@/components/BotTemplateSignals";
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatPercent } from "@/lib/formatters";
 import { X, Play, Pause, Zap, Brain, TrendingUp, TrendingDown, Clock, DollarSign, Target, AlertTriangle } from "lucide-react";
@@ -3423,6 +3424,9 @@ export default function BotLab() {
           <TabsTrigger value="simlab" className="font-mono text-xs data-[state=active]:bg-violet-700 data-[state=active]:text-white">
             ◎ SIM LAB
           </TabsTrigger>
+          <TabsTrigger value="signals" className="font-mono text-xs data-[state=active]:bg-amber-700 data-[state=active]:text-white">
+            ⚡ SIGNALS
+          </TabsTrigger>
         </TabsList>
 
         <div className="flex-1 overflow-auto mt-4">
@@ -3443,6 +3447,9 @@ export default function BotLab() {
           </TabsContent>
           <TabsContent value="simlab" className="m-0">
             <SimLabTab />
+          </TabsContent>
+          <TabsContent value="signals" className="m-0">
+            <BotTemplateSignals />
           </TabsContent>
         </div>
       </Tabs>
