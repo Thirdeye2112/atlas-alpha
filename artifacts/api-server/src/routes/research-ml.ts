@@ -1408,8 +1408,11 @@ mlResearchRouter.get('/intraday/similarity/:ticker', async (req, res) => {
     )
 
     if (latestRows.length === 0) {
-      res.status(404).json({
-        error: 'No similarity data found for ticker',
+      // Degrade gracefully (HTTP 200) so the UI can render an "unavailable"
+      // state instead of treating a missing ticker as a hard error.
+      res.json({
+        available: false,
+        reason: 'no_similarity_data',
         ticker,
         hint: 'Run build_intraday_candle_memory.py --full to initialize the candle memory bank.',
       })
