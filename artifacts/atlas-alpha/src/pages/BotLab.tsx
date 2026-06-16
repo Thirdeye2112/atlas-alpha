@@ -237,6 +237,49 @@ interface FlipBacktestRow {
   run_at:           string;
 }
 
+interface ModelHealthData {
+  modelHealth: {
+    version:       string | null;
+    lastTrainDate: string | null;
+    latestFoldIc:  number | null;
+    wfMeanIc:      number | null;
+    wfFolds:       number | null;
+    icTrend:       'improving' | 'stable' | 'declining' | null;
+  };
+  featureReliability: {
+    computedDate: string | null;
+    summary:      { ic_trend: string; count: number }[];
+    features:     {
+      feature_name: string; ic_trend: string;
+      ic_30d: number | null; ic_90d: number | null; ic_180d: number | null;
+      currently_reliable: boolean; declining: boolean; unreliable: boolean;
+    }[];
+    counts: { reliable: number; declining: number; unreliable: number; total: number };
+  };
+  predictionAccuracy: {
+    hr5d30d:      number | null;
+    hr5d90d:      number | null;
+    hr10d30d:     number | null;
+    hr10d90d:     number | null;
+    exp30d:       number | null;
+    exp90d:       number | null;
+    n30d:         number;
+    n90d:         number;
+    bestContexts:  { label: string; hr_5d: number; n: number }[];
+    worstContexts: { label: string; hr_5d: number; n: number }[];
+    knownFindings: string[];
+  };
+  adaptiveConfidence: {
+    totalOutcomes:      number;
+    pctCalibrated:      number | null;
+    avgRawConfidence:   number | null;
+    avgCalibConfidence: number | null;
+    topBoostContexts:   { confidence_context: string; avg_mult: number; n: number }[];
+    topPenaltyContexts: { confidence_context: string; avg_mult: number; n: number }[];
+  };
+  generatedAt: string;
+}
+
 // ── Filter-builder constants (mirrors Scanner.tsx) ────────────────────────────
 
 type CsFieldType = "number" | "enum" | "string" | "array" | "pattern";
@@ -1821,8 +1864,18 @@ function LearningTab() {
     staleTime: 300_000,
   });
 
+  const { data: modelHealth } = useQuery<ModelHealthData>({
+    queryKey:  ["research-model-health"],
+    queryFn:   () => apiFetch("research/model-health"),
+    staleTime: 300_000,
+  });
+
   const patterns  = patternsData?.patterns ?? [];
   const hasData   = (stats?.resolvedSnapshots ?? 0) >= 3;
+  const mh        = modelHealth?.modelHealth;
+  const fr        = modelHealth?.featureReliability;
+  const pa        = modelHealth?.predictionAccuracy;
+  const ac        = modelHealth?.adaptiveConfidence;
 
   const statCards = [
     { label: "OBSERVATIONS",      value: stats?.totalSnapshots?.toLocaleString()      ?? "—" },
@@ -2051,6 +2104,201 @@ function LearningTab() {
           Data range: {stats.oldestSnapshotDate} → {stats.newestSnapshotDate ?? "today"}
           {" · "} outcomes resolve 7 days after snapshot
           {" · "} min 3 obs per cluster
+        </div>
+      )}
+
+      {/* ── Model Health ──────────────────────────────────────────────────── */}
+      {mh && (
+        <div className="bg-card border border-border rounded">
+          <div className="px-4 py-2.5 border-b border-border">
+            <span className="text-xs font-mono font-bold text-foreground">Model Health</span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-0 divide-x divide-border">
+            {[
+              { label: "Last Trained",     value: mh.lastTrainDate ? mh.lastTrainDate.slice(0, 10) : "—" },
+              {
+                label: "IC Trend",
+                value: mh.icTrend ?? "—",
+                color: mh.icTrend === "improving" ? "text-success" : mh.icTrend === "declining" ? "text-destructive" : undefined,
+              },
+              {
+                label: "Latest Fold IC",
+                value: mh.latestFoldIc != null ? mh.latestFoldIc.toFixed(4) : "—",
+                color: mh.latestFoldIc != null ? (mh.latestFoldIc > 0.01 ? "text-success" : mh.latestFoldIc < 0 ? "text-destructive" : undefined) : undefined,
+              },
+              {
+                label: "WF Mean IC",
+                value: mh.wfMeanIc != null ? `${mh.wfMeanIc.toFixed(4)} (${mh.wfFolds ?? "?"}f)` : "—",
+                color: mh.wfMeanIc != null ? (mh.wfMeanIc > 0.01 ? "text-success" : mh.wfMeanIc < 0 ? "text-destructive" : undefined) : undefined,
+              },
+            ].map(({ label, value, color }) => (
+              <div key={label} className="p-3">
+                <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">{label}</div>
+                <div className={cn("text-sm font-mono font-bold mt-1", color ?? "text-foreground")}>{value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Feature Reliability ──────────────────────────────────────────── */}
+      {fr && fr.features.length > 0 && (
+        <div className="bg-card border border-border rounded">
+          <div className="px-4 py-2.5 border-b border-border flex items-baseline gap-3">
+            <span className="text-xs font-mono font-bold text-foreground">Feature Reliability</span>
+            <span className="text-[10px] font-mono text-muted-foreground">
+              {fr.counts.reliable} reliable · {fr.counts.declining} declining · {fr.counts.unreliable} unreliable
+              {fr.computedDate && ` · computed ${fr.computedDate}`}
+            </span>
+          </div>
+          <div className="overflow-x-auto max-h-56">
+            <table className="w-full text-xs font-mono">
+              <thead className="sticky top-0 bg-card">
+                <tr className="border-b border-border/60 text-muted-foreground text-[10px] uppercase tracking-wider">
+                  <th className="px-3 py-2 text-left">Feature</th>
+                  <th className="px-3 py-2 text-left">Trend</th>
+                  <th className="px-3 py-2 text-right">IC 30d</th>
+                  <th className="px-3 py-2 text-right">IC 90d</th>
+                  <th className="px-3 py-2 text-right">IC 180d</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fr.features.map(f => (
+                  <tr key={f.feature_name} className="border-b border-border/30 hover:bg-muted/10">
+                    <td className="px-3 py-1.5">
+                      <span className={cn(
+                        f.unreliable ? "text-destructive" :
+                        f.declining  ? "text-warning" :
+                        f.currently_reliable ? "text-success" : "text-foreground"
+                      )}>{f.feature_name}</span>
+                    </td>
+                    <td className="px-3 py-1.5">
+                      <span className={cn(
+                        "px-1 py-0.5 rounded text-[9px] font-bold",
+                        f.ic_trend === "unreliable" ? "bg-destructive/15 text-destructive" :
+                        f.ic_trend === "declining"  ? "bg-warning/15 text-warning" :
+                        f.ic_trend === "improving"  ? "bg-success/15 text-success" :
+                        "bg-muted/30 text-muted-foreground"
+                      )}>{f.ic_trend}</span>
+                    </td>
+                    {[f.ic_30d, f.ic_90d, f.ic_180d].map((v, i) => (
+                      <td key={i} className={cn("px-3 py-1.5 text-right",
+                        v != null && v > 0.007 ? "text-success" :
+                        v != null && v < -0.003 ? "text-destructive" : "text-muted-foreground"
+                      )}>
+                        {v != null ? (v > 0 ? "+" : "") + v.toFixed(4) : "—"}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── Prediction Accuracy ───────────────────────────────────────────── */}
+      {pa && (
+        <div className="bg-card border border-border rounded">
+          <div className="px-4 py-2.5 border-b border-border">
+            <span className="text-xs font-mono font-bold text-foreground">Prediction Accuracy</span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-0 divide-x divide-border border-b border-border">
+            {[
+              { label: "HR 5d (30d)",  value: pa.hr5d30d  != null ? `${(pa.hr5d30d  * 100).toFixed(1)}%` : "—", n: pa.n30d,
+                color: pa.hr5d30d != null ? (pa.hr5d30d > 0.53 ? "text-success" : pa.hr5d30d < 0.49 ? "text-destructive" : undefined) : undefined },
+              { label: "HR 5d (90d)",  value: pa.hr5d90d  != null ? `${(pa.hr5d90d  * 100).toFixed(1)}%` : "—", n: pa.n90d,
+                color: pa.hr5d90d != null ? (pa.hr5d90d > 0.53 ? "text-success" : pa.hr5d90d < 0.49 ? "text-destructive" : undefined) : undefined },
+              { label: "Exp 30d",      value: pa.exp30d   != null ? `${pa.exp30d > 0 ? "+" : ""}${(pa.exp30d * 100).toFixed(3)}%` : "—", n: null,
+                color: pa.exp30d != null ? (pa.exp30d > 0 ? "text-success" : "text-destructive") : undefined },
+              { label: "Exp 90d",      value: pa.exp90d   != null ? `${pa.exp90d > 0 ? "+" : ""}${(pa.exp90d * 100).toFixed(3)}%` : "—", n: null,
+                color: pa.exp90d != null ? (pa.exp90d > 0 ? "text-success" : "text-destructive") : undefined },
+            ].map(({ label, value, n, color }) => (
+              <div key={label} className="p-3">
+                <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">{label}</div>
+                <div className={cn("text-sm font-mono font-bold mt-1", color ?? "text-foreground")}>{value}</div>
+                {n != null && <div className="text-[9px] font-mono text-muted-foreground/50 mt-0.5">n={n.toLocaleString()}</div>}
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-0 divide-x divide-border">
+            <div className="p-3">
+              <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-1.5">Best Contexts</div>
+              {pa.bestContexts.map(c => (
+                <div key={c.label} className="flex justify-between text-[11px] font-mono py-0.5">
+                  <span className="text-foreground">{c.label}</span>
+                  <span className="text-success font-bold">{(c.hr_5d * 100).toFixed(1)}%</span>
+                </div>
+              ))}
+            </div>
+            <div className="p-3">
+              <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-1.5">Worst Contexts</div>
+              {pa.worstContexts.map(c => (
+                <div key={c.label} className="flex justify-between text-[11px] font-mono py-0.5">
+                  <span className="text-foreground">{c.label}</span>
+                  <span className="text-destructive font-bold">{(c.hr_5d * 100).toFixed(1)}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          {pa.knownFindings.length > 0 && (
+            <div className="border-t border-border/50 px-4 py-3">
+              <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-1.5">Key Findings (847K prediction history)</div>
+              {pa.knownFindings.map((f, i) => (
+                <div key={i} className="text-[10px] font-mono text-muted-foreground leading-relaxed">
+                  <span className="text-cyan-400 mr-1">▸</span>{f}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Adaptive Confidence ───────────────────────────────────────────── */}
+      {ac && (
+        <div className="bg-card border border-border rounded">
+          <div className="px-4 py-2.5 border-b border-border">
+            <span className="text-xs font-mono font-bold text-foreground">Adaptive Confidence</span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-0 divide-x divide-border border-b border-border">
+            {[
+              { label: "Outcomes Used",    value: ac.totalOutcomes.toLocaleString() },
+              { label: "% Calibrated",     value: ac.pctCalibrated != null ? `${ac.pctCalibrated}%` : "—" },
+              { label: "Avg Raw Conf",     value: ac.avgRawConfidence   != null ? ac.avgRawConfidence.toFixed(3)   : "—" },
+              { label: "Avg Calib Conf",   value: ac.avgCalibConfidence != null ? ac.avgCalibConfidence.toFixed(3) : "—",
+                color: ac.avgCalibConfidence != null && ac.avgRawConfidence != null
+                  ? (ac.avgCalibConfidence > ac.avgRawConfidence ? "text-success" : "text-destructive") : undefined },
+            ].map(({ label, value, color }) => (
+              <div key={label} className="p-3">
+                <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">{label}</div>
+                <div className={cn("text-sm font-mono font-bold mt-1", color ?? "text-foreground")}>{value}</div>
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-0 divide-x divide-border">
+            <div className="p-3">
+              <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-1.5">Top Boost Contexts</div>
+              {ac.topBoostContexts.length === 0
+                ? <span className="text-[10px] font-mono text-muted-foreground/50">Awaiting calibrated predictions</span>
+                : ac.topBoostContexts.map(c => (
+                  <div key={c.confidence_context} className="flex justify-between text-[10px] font-mono py-0.5 gap-2">
+                    <span className="text-muted-foreground truncate">{c.confidence_context}</span>
+                    <span className="text-success font-bold whitespace-nowrap">{c.avg_mult.toFixed(2)}x</span>
+                  </div>
+                ))}
+            </div>
+            <div className="p-3">
+              <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-1.5">Top Penalty Contexts</div>
+              {ac.topPenaltyContexts.length === 0
+                ? <span className="text-[10px] font-mono text-muted-foreground/50">Awaiting calibrated predictions</span>
+                : ac.topPenaltyContexts.map(c => (
+                  <div key={c.confidence_context} className="flex justify-between text-[10px] font-mono py-0.5 gap-2">
+                    <span className="text-muted-foreground truncate">{c.confidence_context}</span>
+                    <span className="text-destructive font-bold whitespace-nowrap">{c.avg_mult.toFixed(2)}x</span>
+                  </div>
+                ))}
+            </div>
+          </div>
         </div>
       )}
 

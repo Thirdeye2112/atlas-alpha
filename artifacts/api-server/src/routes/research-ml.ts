@@ -610,3 +610,252 @@ mlResearchRouter.get('/metrics/latest', async (req, res) => {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Internal error' })
   }
 })
+
+// ---------------------------------------------------------------------------
+// GET /api/research/model-health
+// BotLab Learning tab — Model Health, Feature Reliability, Prediction Accuracy,
+// Adaptive Confidence.  All data is read-only from the research DB.
+// ---------------------------------------------------------------------------
+mlResearchRouter.get('/model-health', async (req, res) => {
+  try {
+    // ── Model Health ──────────────────────────────────────────────────────
+    const [champion] = await query<{
+      model_version: string; training_end: string | null; created_at: string | null
+      rank_ic: number | null; wf_mean_rank_ic: number | null; wf_n_folds: number | null
+    }>(`
+      SELECT
+        m.model_version,
+        m.training_end::text  AS training_end,
+        m.created_at::text    AS created_at,
+        m.rank_ic,
+        wf.mean_rank_ic       AS wf_mean_rank_ic,
+        wf.n_folds            AS wf_n_folds
+      FROM model_registry m
+      LEFT JOIN (
+        SELECT model_version, AVG(rank_ic) AS mean_rank_ic, COUNT(*) AS n_folds
+        FROM model_registry WHERE rank_ic IS NOT NULL
+        GROUP BY model_version
+      ) wf USING (model_version)
+      ORDER BY m.created_at DESC
+      LIMIT 1
+    `)
+
+    // ── Feature Reliability ───────────────────────────────────────────────
+    const reliabilitySummary = await query<{
+      ic_trend: string; count: number
+    }>(`
+      SELECT ic_trend, COUNT(*)::int AS count
+      FROM feature_reliability
+      WHERE computed_date = (SELECT MAX(computed_date) FROM feature_reliability)
+      GROUP BY ic_trend
+      ORDER BY count DESC
+    `)
+
+    const reliabilityDetail = await query<{
+      feature_name: string; ic_trend: string
+      ic_30d: number | null; ic_90d: number | null; ic_180d: number | null
+      currently_reliable: boolean; declining: boolean; unreliable: boolean
+    }>(`
+      SELECT
+        feature_name, ic_trend,
+        ROUND(ic_30d::numeric, 4)  AS ic_30d,
+        ROUND(ic_90d::numeric, 4)  AS ic_90d,
+        ROUND(ic_180d::numeric, 4) AS ic_180d,
+        currently_reliable, declining, unreliable
+      FROM feature_reliability
+      WHERE computed_date = (SELECT MAX(computed_date) FROM feature_reliability)
+      ORDER BY
+        CASE ic_trend
+          WHEN 'unreliable' THEN 0
+          WHEN 'declining'  THEN 1
+          WHEN 'stable'     THEN 2
+          WHEN 'improving'  THEN 3
+          ELSE 4
+        END,
+        ABS(COALESCE(ic_30d, 0)) DESC
+    `)
+
+    const [reliabilityDate] = await query<{ latest_date: string | null }>(`
+      SELECT MAX(computed_date)::text AS latest_date FROM feature_reliability
+    `)
+
+    // ── Prediction Accuracy — 30d vs 90d ─────────────────────────────────
+    const [accuracy] = await query<{
+      hr_5d_30d: number | null; hr_5d_90d: number | null
+      hr_10d_30d: number | null; hr_10d_90d: number | null
+      exp_30d: number | null; exp_90d: number | null
+      n_30d: number; n_90d: number
+    }>(`
+      SELECT
+        AVG(direction_correct_5d::int)  FILTER (WHERE prediction_date >= CURRENT_DATE - 30)  AS hr_5d_30d,
+        AVG(direction_correct_5d::int)  FILTER (WHERE prediction_date >= CURRENT_DATE - 90)  AS hr_5d_90d,
+        AVG(direction_correct_10d::int) FILTER (WHERE prediction_date >= CURRENT_DATE - 30)  AS hr_10d_30d,
+        AVG(direction_correct_10d::int) FILTER (WHERE prediction_date >= CURRENT_DATE - 90)  AS hr_10d_90d,
+        AVG(actual_return_5d)           FILTER (WHERE prediction_date >= CURRENT_DATE - 30)  AS exp_30d,
+        AVG(actual_return_5d)           FILTER (WHERE prediction_date >= CURRENT_DATE - 90)  AS exp_90d,
+        COUNT(*)                        FILTER (WHERE prediction_date >= CURRENT_DATE - 30
+                                                  AND direction_correct_5d IS NOT NULL)      AS n_30d,
+        COUNT(*)                        FILTER (WHERE prediction_date >= CURRENT_DATE - 90
+                                                  AND direction_correct_5d IS NOT NULL)      AS n_90d
+      FROM prediction_outcomes
+    `)
+
+    const bestContexts = await query<{
+      label: string; hr_5d: number; n: number
+    }>(`
+      SELECT
+        CASE conviction_level
+          WHEN 'VERY_HIGH' THEN 'VERY_HIGH conviction'
+          WHEN 'HIGH'      THEN 'HIGH conviction'
+          ELSE conviction_level
+        END AS label,
+        ROUND(AVG(direction_correct_5d::int)::numeric, 3) AS hr_5d,
+        COUNT(*)::int AS n
+      FROM prediction_outcomes
+      WHERE direction_correct_5d IS NOT NULL
+        AND conviction_level IS NOT NULL
+      GROUP BY conviction_level
+      ORDER BY hr_5d DESC
+      LIMIT 5
+    `)
+
+    const worstContexts = await query<{
+      label: string; hr_5d: number; n: number
+    }>(`
+      SELECT
+        'Tier ' || quality_tier AS label,
+        ROUND(AVG(direction_correct_5d::int)::numeric, 3) AS hr_5d,
+        COUNT(*)::int AS n
+      FROM prediction_outcomes
+      WHERE direction_correct_5d IS NOT NULL
+        AND quality_tier IS NOT NULL
+      GROUP BY quality_tier
+      ORDER BY hr_5d ASC
+      LIMIT 5
+    `)
+
+    // ── Adaptive Confidence ───────────────────────────────────────────────
+    const [calibStats] = await query<{
+      total_outcomes: number
+      pct_calibrated: number | null
+      avg_raw: number | null
+      avg_calibrated: number | null
+    }>(`
+      SELECT
+        COUNT(*)::int AS total_outcomes,
+        ROUND(
+          100.0 * COUNT(*) FILTER (WHERE calibrated_confidence IS NOT NULL)
+          / NULLIF(COUNT(*), 0), 1
+        ) AS pct_calibrated,
+        ROUND(AVG(confidence)::numeric, 4)              AS avg_raw,
+        ROUND(AVG(calibrated_confidence)::numeric, 4)   AS avg_calibrated
+      FROM predictions
+      WHERE date >= CURRENT_DATE - 90
+    `)
+
+    const topBoostContexts = await query<{
+      confidence_context: string; avg_mult: number; n: number
+    }>(`
+      SELECT
+        confidence_context,
+        ROUND(AVG(calibrated_confidence / NULLIF(raw_confidence, 0))::numeric, 3) AS avg_mult,
+        COUNT(*)::int AS n
+      FROM predictions
+      WHERE raw_confidence > 0
+        AND calibrated_confidence IS NOT NULL
+        AND date >= CURRENT_DATE - 90
+      GROUP BY confidence_context
+      HAVING COUNT(*) >= 20
+      ORDER BY avg_mult DESC
+      LIMIT 5
+    `)
+
+    const topPenaltyContexts = await query<{
+      confidence_context: string; avg_mult: number; n: number
+    }>(`
+      SELECT
+        confidence_context,
+        ROUND(AVG(calibrated_confidence / NULLIF(raw_confidence, 0))::numeric, 3) AS avg_mult,
+        COUNT(*)::int AS n
+      FROM predictions
+      WHERE raw_confidence > 0
+        AND calibrated_confidence IS NOT NULL
+        AND date >= CURRENT_DATE - 90
+      GROUP BY confidence_context
+      HAVING COUNT(*) >= 20
+      ORDER BY avg_mult ASC
+      LIMIT 5
+    `)
+
+    // ── Retrain check (latest from step_results if available) ────────────
+    const [lastRetrain] = await query<{
+      started_at: string; status: string
+    }>(`
+      SELECT started_at::text, status
+      FROM research_runs
+      WHERE status != 'running'
+      ORDER BY started_at DESC
+      LIMIT 1
+    `)
+
+    res.json({
+      modelHealth: {
+        version:          champion?.model_version ?? null,
+        lastTrainDate:    champion?.training_end  ?? champion?.created_at ?? null,
+        latestFoldIc:     champion?.rank_ic       ?? null,
+        wfMeanIc:         champion?.wf_mean_rank_ic ?? null,
+        wfFolds:          champion?.wf_n_folds    ?? null,
+        // IC trend: improving if recent fold IC > wf mean
+        icTrend: champion?.rank_ic != null && champion?.wf_mean_rank_ic != null
+          ? (champion.rank_ic > champion.wf_mean_rank_ic + 0.002 ? 'improving'
+            : champion.rank_ic < champion.wf_mean_rank_ic - 0.002 ? 'declining'
+            : 'stable')
+          : null,
+      },
+      featureReliability: {
+        computedDate:    reliabilityDate?.latest_date ?? null,
+        summary:         reliabilitySummary,
+        features:        reliabilityDetail,
+        counts: {
+          reliable:    reliabilityDetail.filter(f => f.currently_reliable).length,
+          declining:   reliabilityDetail.filter(f => f.declining).length,
+          unreliable:  reliabilityDetail.filter(f => f.unreliable).length,
+          total:       reliabilityDetail.length,
+        },
+      },
+      predictionAccuracy: {
+        hr5d30d:     accuracy?.hr_5d_30d  ?? null,
+        hr5d90d:     accuracy?.hr_5d_90d  ?? null,
+        hr10d30d:    accuracy?.hr_10d_30d ?? null,
+        hr10d90d:    accuracy?.hr_10d_90d ?? null,
+        exp30d:      accuracy?.exp_30d    ?? null,
+        exp90d:      accuracy?.exp_90d    ?? null,
+        n30d:        accuracy?.n_30d      ?? 0,
+        n90d:        accuracy?.n_90d      ?? 0,
+        bestContexts,
+        worstContexts,
+        // Known findings surfaced explicitly
+        knownFindings: [
+          'VERY_HIGH conviction in bear/range regimes: 59–60% HR (best combination)',
+          'LOW conviction in bear regime: 39.9% HR (worst combination)',
+          'Quality Tier 3/4: 47–48% HR — main accuracy drag (-4 to -5%)',
+          'VIX high regime: 49.3% HR — systematic underperformance (-2.7%)',
+          'ML rank is stronger for relative ranking (rank_hit=40%) than pure direction',
+          'Bear regime alone outperforms bull (54% vs 52%) — contrarian signal quality',
+        ],
+      },
+      adaptiveConfidence: {
+        totalOutcomes:      calibStats?.total_outcomes   ?? 0,
+        pctCalibrated:      calibStats?.pct_calibrated   ?? null,
+        avgRawConfidence:   calibStats?.avg_raw          ?? null,
+        avgCalibConfidence: calibStats?.avg_calibrated   ?? null,
+        topBoostContexts,
+        topPenaltyContexts,
+      },
+      generatedAt: new Date().toISOString(),
+    })
+  } catch (err: unknown) {
+    req.log?.error({ err }, 'research.model-health failed')
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Internal error' })
+  }
+})
