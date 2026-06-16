@@ -253,6 +253,32 @@ const VALID_INTERVALS = ["1m","2m","5m","15m","30m","60m","90m","1h","1d","5d","
 type ValidInterval = typeof VALID_INTERVALS[number];
 
 /**
+ * Clamp phantom wicks on intraday bars caused by bad Yahoo Finance tick prints.
+ *
+ * Yahoo occasionally serves a single erroneous low/high (e.g. low=135 when
+ * the stock is trading at 170) that creates a massive wick on the chart.
+ * For intraday bars: if a wick extends >WICK_CLAMP_PCT beyond BOTH the open
+ * AND the close it is almost certainly a bad print, not real price discovery.
+ * We clamp it back to bodyLow*(1-threshold) / bodyHigh*(1+threshold).
+ *
+ * Not applied to daily/weekly/monthly bars — large ranges there can be real.
+ */
+const WICK_CLAMP_PCT = 0.15; // 15% — anything beyond this from both O and C is a bad print
+
+function clampIntradayWicks(bars: OHLCVBar[], isIntraday: boolean): OHLCVBar[] {
+  if (!isIntraday) return bars;
+  return bars.map(bar => {
+    const bodyLow  = Math.min(bar.open, bar.close);
+    const bodyHigh = Math.max(bar.open, bar.close);
+    const wickFloor = bodyLow  * (1 - WICK_CLAMP_PCT);
+    const wickCeil  = bodyHigh * (1 + WICK_CLAMP_PCT);
+    const low  = bar.low  < wickFloor ? wickFloor : bar.low;
+    const high = bar.high > wickCeil  ? wickCeil  : bar.high;
+    return (low === bar.low && high === bar.high) ? bar : { ...bar, low, high };
+  });
+}
+
+/**
  * Raw Yahoo Finance OHLCV fetch — no caching, no DB.
  * Exported so ohlcvStore.ts can inject it as a callback and warmup.ts can call it directly.
  */
@@ -271,7 +297,7 @@ export async function fetchYahooRaw(
     interval: mapped,
   }));
 
-  return (historical.quotes ?? [])
+  const bars = (historical.quotes ?? [])
     .filter(q => q.open != null && q.close != null)
     .map(q => {
       const d = q.date instanceof Date ? q.date : new Date(String(q.date));
@@ -284,6 +310,8 @@ export async function fetchYahooRaw(
         volume: q.volume ?? 0,
       };
     });
+
+  return clampIntradayWicks(bars, isIntraday);
 }
 
 export async function fetchOHLCV(ticker: string, period = "3mo", interval = "1d"): Promise<OHLCVBar[]> {
