@@ -47,3 +47,10 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+*.key
+*.pem
+.env
+*recovery*
+Alpaca*Keys*
+Alpaca*
