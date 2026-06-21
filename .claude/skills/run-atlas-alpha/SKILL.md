@@ -28,7 +28,7 @@ pnpm run build
 ```powershell
 # Start API (background window)
 Start-Process powershell -ArgumentList "-NoExit","-Command", `
-  "`$env:PORT='8080'; `$env:DATABASE_URL='postgresql://postgres:Postnat74%3F@localhost:5432/atlas_alpha'; `$env:DATABASE_URL_RESEARCH='postgresql://postgres:Postnat74%3F@localhost:5432/atlas_research'; `$env:SESSION_SECRET='atlas-local-secret-key'; Set-Location 'C:\Atlas\atlas-alpha\artifacts\api-server'; node --enable-source-maps ./dist/index.mjs" `
+  "`$env:PORT='8080'; `$env:DATABASE_URL='<set in .env, do not hardcode>'; `$env:DATABASE_URL_RESEARCH='<set in .env, do not hardcode>'; `$env:SESSION_SECRET='<set in .env, do not hardcode>'; Set-Location 'C:\Atlas\atlas-alpha\artifacts\api-server'; node --enable-source-maps ./dist/index.mjs" `
   -WindowStyle Normal
 Start-Sleep -Seconds 5
 
