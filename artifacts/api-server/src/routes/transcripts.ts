@@ -23,35 +23,56 @@ interface ParsedVideo {
   text: string;
 }
 
-// maxLen caps each video's text (keeps analyze tokens reasonable); pass Infinity
-// to get the full transcript for the history/reader view.
+// Strip YouTube auto-caption (VTT) noise so transcripts are readable and the
+// distiller gets cleaner input: inline <timestamp> / <c> tags + "Kind:" header.
+function cleanCaptions(text: string): string {
+  return text
+    .replace(/<\d{2}:\d{2}:\d{2}\.\d{3}>/g, "")
+    .replace(/<\/?c[^>]*>/g, "")
+    .replace(/Kind:\s*captions\s+Language:\s*\S+/i, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+// Parse a transcript dump into videos. Robust to BOTH formats we've seen:
+//   * newer scraper: "VIDEO TITLE:" + "VIDEO URL:" + ---- + body + ==== divider
+//   * older dump:    "VIDEO TITLE:" + ---- + body   (no URL, no ==== dividers)
+// Splitting on the "VIDEO TITLE:" marker handles both. maxLen caps each body
+// (pass Infinity for the full transcript reader view).
 function parseTranscriptFile(filePath: string, maxLen = 6000): ParsedVideo[] {
   const content = fs.readFileSync(filePath, "utf-8");
   const videos: ParsedVideo[] = [];
 
-  // Split on the "===...===" divider lines (80 = signs)
-  const blocks = content.split(/={60,}/);
+  const parts = content.split(/^VIDEO TITLE:[ \t]*/m);
+  for (let i = 1; i < parts.length; i++) {   // parts[0] is the file header
+    const block = parts[i];
+    const nl = block.indexOf("\n");
+    const title = (nl >= 0 ? block.slice(0, nl) : block).trim();
+    // stop this video at the next ==== divider (newer format) if present
+    const rest = (nl >= 0 ? block.slice(nl + 1) : "").split(/^={10,}[ \t]*$/m)[0];
 
-  for (const block of blocks) {
-    const trimmed = block.trim();
-    if (!trimmed) continue;
+    const urlMatch = rest.match(/^VIDEO URL:\s*(\S+)/m);
+    const url = urlMatch?.[1]?.trim() ?? "";
+    const idMatch = url.match(/(?:v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
 
-    const titleMatch  = trimmed.match(/VIDEO TITLE:\s*(.+)/);
-    const urlMatch    = trimmed.match(/VIDEO URL:\s*(https?:\/\/\S+)/);
-    const idMatch     = urlMatch?.[1]?.match(/(?:v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
-
-    if (!titleMatch || !urlMatch) continue;
-
-    // Body is everything after the "---" separator
-    const bodyStart = trimmed.indexOf("\n-");
-    const body = bodyStart >= 0 ? trimmed.slice(bodyStart).replace(/^-+/m, "").trim() : "";
-    if (body.length < 50) continue;  // skip [No transcript] stubs
+    // body = after the first dashed separator if present, else the rest minus the URL line
+    let body = rest;
+    const dash = body.search(/^-{5,}[ \t]*$/m);
+    if (dash >= 0) {
+      const after = body.indexOf("\n", dash);
+      body = after >= 0 ? body.slice(after + 1) : "";
+    } else if (urlMatch) {
+      body = body.replace(/^VIDEO URL:.*$/m, "");
+    }
+    body = cleanCaptions(body);
+    if (body.length < 50) continue;            // skip [No transcript] stubs
 
     videos.push({
-      title:   titleMatch[1].trim(),
-      url:     urlMatch[1].trim(),
-      videoId: idMatch?.[1] ?? urlMatch[1].trim(),
-      text:    body.slice(0, maxLen),  // cap per video to keep tokens reasonable (Infinity = full)
+      title,
+      url:     url || title,                   // url doubles as the dedup key (DB unique)
+      videoId: idMatch?.[1] ?? (url || title),
+      text:    body.slice(0, maxLen),
     });
   }
 
@@ -139,7 +160,7 @@ transcriptsRouter.get("/transcripts/status", async (req, res) => {
     if (fileExists) {
       try {
         const content = fs.readFileSync(filePath, "utf-8");
-        totalVideos = (content.match(/VIDEO URL:/g) ?? []).length;
+        totalVideos = (content.match(/^VIDEO TITLE:/gm) ?? []).length;
       } catch { /* ignore */ }
     }
 
