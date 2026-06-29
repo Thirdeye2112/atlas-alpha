@@ -122,13 +122,16 @@ transcriptsRouter.get("/transcripts/status", async (req, res) => {
     const filePath  = getFilePath();
     const fileExists = fs.existsSync(filePath);
 
-    const [{ processed }] = await db
-      .select({ processed: sql<number>`count(*)::int` })
-      .from(transcriptInsightsTable);
-
-    const [{ totalInsights }] = await db
-      .select({ totalInsights: sql<number>`coalesce(sum(jsonb_array_length(insights)),0)::int` })
-      .from(transcriptInsightsTable);
+    let processed = 0;
+    let totalInsights = 0;
+    try {
+      const [r1] = await db.select({ processed: sql<number>`count(*)::int` }).from(transcriptInsightsTable);
+      const [r2] = await db.select({ totalInsights: sql<number>`coalesce(sum(jsonb_array_length(insights)),0)::int` }).from(transcriptInsightsTable);
+      processed    = r1?.processed    ?? 0;
+      totalInsights = r2?.totalInsights ?? 0;
+    } catch {
+      // Table may not exist yet — return zeros so the UI still renders
+    }
 
     let totalVideos = 0;
     if (fileExists) {
