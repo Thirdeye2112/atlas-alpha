@@ -177,6 +177,148 @@ function InsightCard({ insight }: { insight: Insight }) {
   );
 }
 
+// ── Transcript history (raw transcript reader) ──────────────────────────────────
+
+interface VideoSummary {
+  videoId: string;
+  title: string;
+  url: string;
+  textLength: number;
+  processed: boolean;
+  insightCount: number;
+  summary: string;
+  processedAt: string | null;
+}
+
+interface VideoDetail extends VideoSummary {
+  text: string;
+  insights: Omit<Insight, "videoTitle" | "videoUrl" | "processedAt">[];
+}
+
+function VideoHistoryCard({ video }: { video: VideoSummary }) {
+  const [expanded, setExpanded] = useState(false);
+  const [detail, setDetail] = useState<VideoDetail | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const toggle = async () => {
+    const next = !expanded;
+    setExpanded(next);
+    if (next && !detail) {
+      setLoading(true);
+      try {
+        const r = await fetch(`/api/transcripts/video/${encodeURIComponent(video.videoId)}`);
+        if (r.ok) setDetail(await r.json() as VideoDetail);
+      } catch { /* ignore */ }
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="bg-card border border-border rounded-lg overflow-hidden">
+      <button onClick={() => void toggle()} className="w-full flex items-center gap-3 p-3 text-left hover:bg-muted/30 transition-colors">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-foreground leading-snug truncate">{video.title}</p>
+          <div className="flex items-center gap-2 mt-1 text-[10px] font-mono text-muted-foreground">
+            <span className={cn("px-1.5 py-0.5 rounded border", video.processed ? "text-emerald-400 border-emerald-400/30 bg-emerald-400/10" : "text-muted-foreground border-border")}>
+              {video.processed ? `${video.insightCount} insight${video.insightCount !== 1 ? "s" : ""}` : "not analyzed"}
+            </span>
+            <span>{(video.textLength / 1000).toFixed(1)}k chars</span>
+          </div>
+        </div>
+        {expanded ? <ChevronUp className="w-4 h-4 shrink-0 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 shrink-0 text-muted-foreground" />}
+      </button>
+
+      {expanded && (
+        <div className="border-t border-border/50 p-3 space-y-3">
+          {loading && <p className="text-xs text-muted-foreground font-mono">Loading transcript…</p>}
+          {detail && (
+            <>
+              {detail.summary && (
+                <div>
+                  <p className="text-[10px] font-mono uppercase text-muted-foreground mb-1">Summary</p>
+                  <p className="text-xs text-foreground leading-relaxed">{detail.summary}</p>
+                </div>
+              )}
+              {detail.insights.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-mono uppercase text-muted-foreground mb-1">Distilled insights</p>
+                  <ul className="space-y-1">
+                    {detail.insights.map((ins, i) => (
+                      <li key={i} className="text-xs text-foreground flex gap-2">
+                        <span className={cn("shrink-0 text-[9px] font-mono px-1 rounded border uppercase self-start", CAT_COLORS[ins.category])}>{ins.category.replace("_", " ")}</span>
+                        <span>{ins.text}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-[10px] font-mono uppercase text-muted-foreground">Raw transcript</p>
+                  <a href={detail.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[11px] text-primary hover:underline">Watch <ExternalLink className="w-2.5 h-2.5" /></a>
+                </div>
+                <pre className="text-[11px] text-muted-foreground leading-relaxed whitespace-pre-wrap max-h-96 overflow-y-auto bg-background rounded p-2 border border-border/50">{detail.text}</pre>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TranscriptHistory() {
+  const [videos,  setVideos]  = useState<VideoSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search,  setSearch]  = useState("");
+  const [meta,    setMeta]    = useState<{ count: number; processedCount: number } | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      setLoading(true);
+      try {
+        const r = await fetch("/api/transcripts/videos");
+        if (r.ok) {
+          const d = await r.json() as { videos: VideoSummary[]; count: number; processedCount: number };
+          setVideos(d.videos ?? []);
+          setMeta({ count: d.count, processedCount: d.processedCount });
+        }
+      } catch { /* ignore */ }
+      setLoading(false);
+    })();
+  }, []);
+
+  const filtered = search.trim()
+    ? videos.filter(v => v.title.toLowerCase().includes(search.toLowerCase()))
+    : videos;
+
+  if (loading) return <p className="text-xs text-muted-foreground font-mono py-10 text-center">Loading transcript history…</p>;
+  if (videos.length === 0) return (
+    <div className="text-center text-muted-foreground py-16 text-sm">
+      No transcripts found. Check the transcript file path above, or run the scraper.
+    </div>
+  );
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <p className="text-xs text-muted-foreground font-mono">
+          {meta?.count.toLocaleString()} videos · <span className="text-emerald-400">{meta?.processedCount.toLocaleString()} analyzed</span>
+          {search ? ` · ${filtered.length} matching` : ""}
+        </p>
+        <input
+          type="text"
+          placeholder="Search transcripts…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="w-52 bg-card border border-border rounded px-3 py-1 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+        />
+      </div>
+      {filtered.map(v => <VideoHistoryCard key={v.videoId} video={v} />)}
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function TranscriptLab() {
@@ -187,6 +329,7 @@ export default function TranscriptLab() {
   const [running,  setRunning]  = useState(false);
   const [toast,    setToast]    = useState<string | null>(null);
   const [search,   setSearch]   = useState("");
+  const [view,     setView]     = useState<"insights" | "history">("insights");
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -299,6 +442,27 @@ export default function TranscriptLab() {
           </div>
         )}
 
+        {/* View toggle: distilled insights vs raw transcript history */}
+        <div className="flex gap-1">
+          {([["insights", "Insights"], ["history", "Transcript History"]] as const).map(([k, label]) => (
+            <button
+              key={k}
+              onClick={() => setView(k)}
+              className={cn(
+                "px-3 py-1 rounded text-xs font-mono font-semibold transition-colors",
+                view === k
+                  ? "bg-primary/10 text-primary border border-primary/30"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted border border-transparent"
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {view === "history" && <TranscriptHistory />}
+
+        {view === "insights" && (<>
         {/* Category tabs + search */}
         {insights.length > 0 && (
           <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -351,6 +515,7 @@ export default function TranscriptLab() {
             No insights match your filter.
           </div>
         )}
+        </>)}
 
       </div>
     </div>

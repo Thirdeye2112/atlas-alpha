@@ -23,7 +23,9 @@ interface ParsedVideo {
   text: string;
 }
 
-function parseTranscriptFile(filePath: string): ParsedVideo[] {
+// maxLen caps each video's text (keeps analyze tokens reasonable); pass Infinity
+// to get the full transcript for the history/reader view.
+function parseTranscriptFile(filePath: string, maxLen = 6000): ParsedVideo[] {
   const content = fs.readFileSync(filePath, "utf-8");
   const videos: ParsedVideo[] = [];
 
@@ -49,7 +51,7 @@ function parseTranscriptFile(filePath: string): ParsedVideo[] {
       title:   titleMatch[1].trim(),
       url:     urlMatch[1].trim(),
       videoId: idMatch?.[1] ?? urlMatch[1].trim(),
-      text:    body.slice(0, 6000),  // cap per video to keep tokens reasonable
+      text:    body.slice(0, maxLen),  // cap per video to keep tokens reasonable (Infinity = full)
     });
   }
 
@@ -257,5 +259,95 @@ transcriptsRouter.delete("/transcripts/insights", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "transcripts delete error");
     res.status(500).json({ error: "Failed to clear insights" });
+  }
+});
+
+// GET /api/transcripts/videos  — per-video history (so you can browse the raw
+// transcripts and spot details the distiller skipped). Joins the file's videos
+// with their distilled insights/summary by URL. Optional ?search= title filter.
+transcriptsRouter.get("/transcripts/videos", async (req, res) => {
+  try {
+    const filePath = getFilePath();
+    if (!fs.existsSync(filePath)) {
+      res.json({ available: false, reason: `Transcript file not found: ${filePath}`, videos: [] });
+      return;
+    }
+    const search = (typeof req.query.search === "string" ? req.query.search : "").toLowerCase();
+
+    const videos = parseTranscriptFile(filePath, Infinity);
+
+    let byUrl = new Map<string, { rawSummary: string | null; insights: TranscriptInsight[]; processedAt: Date | null }>();
+    try {
+      const rows = await db.select().from(transcriptInsightsTable);
+      byUrl = new Map(rows.map(r => [r.videoUrl, {
+        rawSummary: r.rawSummary,
+        insights: (r.insights as TranscriptInsight[]) ?? [],
+        processedAt: r.processedAt ?? null,
+      }]));
+    } catch { /* table may not exist yet — everything shows as unprocessed */ }
+
+    let list = videos.map(v => {
+      const row = byUrl.get(v.url);
+      return {
+        videoId:      v.videoId,
+        title:        v.title,
+        url:          v.url,
+        textLength:   v.text.length,
+        processed:    !!row,
+        insightCount: row?.insights.length ?? 0,
+        summary:      row?.rawSummary ?? "",
+        processedAt:  row?.processedAt ?? null,
+      };
+    });
+    if (search) list = list.filter(v => v.title.toLowerCase().includes(search));
+
+    res.json({
+      available: true,
+      count: list.length,
+      processedCount: list.filter(v => v.processed).length,
+      videos: list,
+    });
+  } catch (err) {
+    req.log.error({ err }, "transcripts videos error");
+    res.status(500).json({ error: "Failed to list videos" });
+  }
+});
+
+// GET /api/transcripts/video/:videoId  — one video's FULL raw transcript text +
+// its distilled summary/insights. The reader view for "is there more to pull out?".
+transcriptsRouter.get("/transcripts/video/:videoId", async (req, res) => {
+  try {
+    const filePath = getFilePath();
+    if (!fs.existsSync(filePath)) {
+      res.status(404).json({ error: "Transcript file not found" });
+      return;
+    }
+    const key = decodeURIComponent(req.params.videoId);
+    const videos = parseTranscriptFile(filePath, Infinity);
+    const v = videos.find(x => x.videoId === key || x.url === key);
+    if (!v) {
+      res.status(404).json({ error: `Video not found: ${key}` });
+      return;
+    }
+
+    let row: { rawSummary: string | null; insights: TranscriptInsight[]; processedAt: Date | null } | undefined;
+    try {
+      const [r] = await db.select().from(transcriptInsightsTable).where(eq(transcriptInsightsTable.videoUrl, v.url));
+      if (r) row = { rawSummary: r.rawSummary, insights: (r.insights as TranscriptInsight[]) ?? [], processedAt: r.processedAt ?? null };
+    } catch { /* table may not exist yet */ }
+
+    res.json({
+      videoId:     v.videoId,
+      title:       v.title,
+      url:         v.url,
+      text:        v.text,
+      processed:   !!row,
+      summary:     row?.rawSummary ?? "",
+      insights:    row?.insights ?? [],
+      processedAt: row?.processedAt ?? null,
+    });
+  } catch (err) {
+    req.log.error({ err }, "transcripts video error");
+    res.status(500).json({ error: "Failed to fetch video" });
   }
 });
