@@ -35,6 +35,29 @@ function cleanCaptions(text: string): string {
     .trim();
 }
 
+// YouTube auto-captions repeat each phrase 2-3 times as the rolling caption
+// scrolls ("good morning good afternoon good morning good afternoon ..."). Collapse
+// any window of up to MAXW words that immediately repeats the preceding window.
+// Heavier than cleanCaptions, so only used when serving/analyzing a single video.
+function dedupeCaptions(text: string): string {
+  const words = text.split(/\s+/).filter(Boolean);
+  const out: string[] = [];
+  const MAXW = 12;
+  const eqCI = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+  for (const w of words) {
+    out.push(w);
+    const maxL = Math.min(MAXW, out.length >> 1);
+    for (let L = maxL; L >= 1; L--) {
+      let match = true;
+      for (let k = 0; k < L; k++) {
+        if (!eqCI(out[out.length - L + k], out[out.length - 2 * L + k])) { match = false; break; }
+      }
+      if (match) { out.length -= L; break; }   // drop the repeated window
+    }
+  }
+  return out.join(" ");
+}
+
 // Parse a transcript dump into videos. Robust to BOTH formats we've seen:
 //   * newer scraper: "VIDEO TITLE:" + "VIDEO URL:" + ---- + body + ==== divider
 //   * older dump:    "VIDEO TITLE:" + ---- + body   (no URL, no ==== dividers)
@@ -95,7 +118,7 @@ async function extractInsights(client: Anthropic, video: ParsedVideo): Promise<{
 
 VIDEO: "${video.title}"
 TRANSCRIPT:
-${video.text}
+${dedupeCaptions(video.text)}
 
 Extract all concrete, actionable trading insights. Return a JSON object with exactly these fields:
 {
@@ -361,7 +384,7 @@ transcriptsRouter.get("/transcripts/video/:videoId", async (req, res) => {
       videoId:     v.videoId,
       title:       v.title,
       url:         v.url,
-      text:        v.text,
+      text:        dedupeCaptions(v.text),
       processed:   !!row,
       summary:     row?.rawSummary ?? "",
       insights:    row?.insights ?? [],
