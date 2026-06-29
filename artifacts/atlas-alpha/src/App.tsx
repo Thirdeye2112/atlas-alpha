@@ -8,6 +8,7 @@ import Watchlist from "@/pages/Watchlist";
 import Research from "@/pages/Research";
 import BacktestLab from "@/pages/BacktestLab";
 import BotLab from "@/pages/BotLab";
+import CommandRef from "@/pages/CommandRef";
 import AppLayout from "@/components/layout/AppLayout";
 import NotFound from "@/pages/not-found";
 import { useEffect } from "react";
@@ -39,6 +40,7 @@ function App() {
               <Route path="/research" component={Research} />
               <Route path="/backtest" component={BacktestLab} />
               <Route path="/bot" component={BotLab} />
+              <Route path="/commands" component={CommandRef} />
               <Route component={NotFound} />
             </Switch>
           </AppLayout>
