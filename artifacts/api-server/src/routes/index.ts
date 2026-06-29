@@ -21,6 +21,7 @@ import { hypothesisRouter } from './research-hypothesis';
 import { calibrationRouter } from './research-calibration';
 import { attributionRouter } from './research-attribution';
 import { advancedResearchRouter } from './research-advanced';
+import { transcriptsRouter } from './transcripts';
 
 const router: IRouter = Router();
 
@@ -46,5 +47,6 @@ router.use('/research', attributionRouter);
 router.use('/research', advancedResearchRouter);
 router.use(alertsRouter);
 router.use(botRouter);
+router.use(transcriptsRouter);
 
 export default router;
