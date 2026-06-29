@@ -87,10 +87,11 @@ function StatusBar({ status, onRun, onReset, running }: {
           <button
             onClick={() => onRun(batchSize)}
             disabled={running || !status?.fileExists}
+            title={!status?.fileExists ? "Transcript file not found — check the path shown above" : undefined}
             className={cn(
               "flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold transition-colors",
-              running
-                ? "bg-muted text-muted-foreground cursor-not-allowed"
+              (running || !status?.fileExists)
+                ? "bg-muted text-muted-foreground cursor-not-allowed opacity-50"
                 : "bg-primary text-primary-foreground hover:bg-primary/80"
             )}
           >
