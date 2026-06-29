@@ -4,7 +4,7 @@ import {
   useGetMarketOverview, 
   getGetMarketOverviewQueryKey 
 } from "@workspace/api-client-react";
-import { Activity, LayoutDashboard, Radar, TestTube2, Bell, BotIcon, BookOpen } from "lucide-react";
+import { Activity, LayoutDashboard, Radar, TestTube2, Bell, BotIcon, BookOpen, ScrollText } from "lucide-react";
 import { formatCurrency, formatPercent } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 
@@ -110,7 +110,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     { href: "/scanner", label: "Scanner",   icon: Radar },
     { href: "/backtest",label: "Lab",       icon: TestTube2 },
     { href: "/bot",      label: "Bot Lab",  icon: BotIcon },
-    { href: "/commands", label: "Ref",      icon: BookOpen },
+    { href: "/transcripts", label: "Transcripts", icon: ScrollText },
+    { href: "/commands",    label: "Ref",          icon: BookOpen },
   ];
 
   return (
