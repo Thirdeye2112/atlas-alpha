@@ -7,3 +7,6 @@ export * from "./ohlcvHistory";
 export * from "./paperTrading";
 export * from "./signalSnapshots";
 export * from "./simTrades";
+export * from "./intradayTrading";
+export * from "./behaviorKnowledge";
+export * from "./transcriptInsights";
