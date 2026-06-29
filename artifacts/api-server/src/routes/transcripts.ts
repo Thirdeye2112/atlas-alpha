@@ -249,6 +249,44 @@ transcriptsRouter.get("/transcripts/insights", async (req, res) => {
   }
 });
 
+// GET /api/transcripts/history  — all processed videos with their insights grouped
+transcriptsRouter.get("/transcripts/history", async (req, res) => {
+  try {
+    const page  = Math.max(1, Number(req.query.page  ?? 1));
+    const limit = Math.min(Number(req.query.limit ?? 50), 200);
+    const offset = (page - 1) * limit;
+
+    const rows = await db
+      .select()
+      .from(transcriptInsightsTable)
+      .orderBy(sql`processed_at DESC`)
+      .limit(limit)
+      .offset(offset);
+
+    const [{ total }] = await db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(transcriptInsightsTable);
+
+    res.json({
+      videos: rows.map(r => ({
+        videoTitle:   r.videoTitle,
+        videoUrl:     r.videoUrl,
+        rawSummary:   r.rawSummary,
+        tokenCount:   r.tokenCount,
+        processedAt:  r.processedAt,
+        insightCount: (r.insights as TranscriptInsight[]).length,
+        insights:     r.insights as TranscriptInsight[],
+      })),
+      total,
+      page,
+      limit,
+    });
+  } catch (err) {
+    req.log.error({ err }, "transcripts history error");
+    res.status(500).json({ error: "Failed to fetch history" });
+  }
+});
+
 // DELETE /api/transcripts/insights  — reset all
 transcriptsRouter.delete("/transcripts/insights", async (req, res) => {
   try {
