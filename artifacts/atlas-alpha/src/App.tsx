@@ -9,6 +9,7 @@ import Research from "@/pages/Research";
 import BacktestLab from "@/pages/BacktestLab";
 import BotLab from "@/pages/BotLab";
 import CommandRef from "@/pages/CommandRef";
+import TranscriptLab from "@/pages/TranscriptLab";
 import AppLayout from "@/components/layout/AppLayout";
 import NotFound from "@/pages/not-found";
 import { useEffect } from "react";
@@ -41,6 +42,7 @@ function App() {
               <Route path="/backtest" component={BacktestLab} />
               <Route path="/bot" component={BotLab} />
               <Route path="/commands" component={CommandRef} />
+              <Route path="/transcripts" component={TranscriptLab} />
               <Route component={NotFound} />
             </Switch>
           </AppLayout>
