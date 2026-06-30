@@ -7,6 +7,12 @@ import { checkAlertsForTicker } from "./alerts.js";
 import { generateNarrative } from "../lib/narrative.js";
 import { computeRetracementForecast } from "../lib/retracementEngine.js";
 import { detectFormingPatterns } from "../lib/formingPatterns.js";
+import { calcPatternOverlaysMultiTF } from "../lib/patternOverlays.js";
+import { calcPullbackReversal } from "../lib/pullbackReversal.js";
+import {
+  calcTrend, calcMomentum, calcVolume, calcVolatility,
+  calcPatterns, calcChartSignals, calcExhaustion, calcRecentCandleStructure,
+} from "../lib/indicators.js";
 import type { OHLCVBar } from "../lib/marketData.js";
 
 const router: IRouter = Router();
@@ -139,10 +145,17 @@ router.get("/stock/:ticker/ohlcv", async (req, res): Promise<void> => {
   }
 });
 
-// ── Intraday forming patterns (wedges/flags/triangles on the chosen timeframe) ──
-// Runs the SAME forming-pattern detector used on daily, but on intraday bars, so
-// the system "sees" the wedge/flag you're trading on the 5m tape — with its
-// direction + measured-move target — plus the effort/result volume read.
+// ── Intraday TA patterns — the FULL pattern suite on the chosen timeframe ──────
+// Runs every pattern/structure detector the daily analysis uses, but on intraday
+// bars, so the system "sees" what you trade on the 5m/15m tape:
+//   * forming patterns  — rising/falling wedge, triangles, flags (direction +
+//                         measured-move target + drawable trendlines)
+//   * structural        — golden/death cross, BB breakout/breakdown, double top,
+//                         support/resistance, market structure (calcPatterns)
+//   * candlestick pins  — engulfing, hammer, doji, stars, etc. (calcChartSignals)
+//   * exhaustion        — distribution top, capitulation, reversal bar, parabolic
+//   * pullback-reversal + multi-TF pattern overlays + recent-candle structure
+// Each directional pattern is annotated with the effort/result volume read.
 // GET /api/stock/:ticker/intraday-patterns?interval=5m&period=5d
 router.get("/stock/:ticker/intraday-patterns", async (req, res): Promise<void> => {
   const ticker   = (req.params.ticker as string).toUpperCase();
@@ -151,24 +164,56 @@ router.get("/stock/:ticker/intraday-patterns", async (req, res): Promise<void> =
   try {
     const bars = await fetchOHLCV(ticker, period, interval);
     if (bars.length < 30) {
-      res.json({ ticker, interval, period, count: 0, patterns: [], volume: null,
-        note: "Not enough intraday bars to detect patterns." });
+      res.json({ ticker, interval, period, count: 0, forming: [], patterns: [],
+        signals: [], exhaustion: null, pullback: null, overlays: [], recentCandles: null,
+        volume: null, note: "Not enough intraday bars to detect patterns." });
       return;
     }
-    const patterns = detectFormingPatterns(bars);
-    const volume   = readVolumeEffort(bars);
-    // Annotate: does the volume read confirm each pattern's direction?
-    const annotated = patterns.map(p => {
-      const bearish = p.direction === "short";
-      const confirmed =
-        (volume.signal === "no_demand" && bearish) ||
-        (volume.signal === "demand_confirmed" && !bearish);
-      const contradicted =
-        (volume.signal === "no_demand" && !bearish) ||
-        (volume.signal === "demand_confirmed" && bearish);
-      return { ...p, volumeConfirms: confirmed, volumeContradicts: contradicted };
+    const price   = bars[bars.length - 1].close;
+    const avgVol  = bars.reduce((s, b) => s + (b.volume ?? 0), 0) / bars.length;
+
+    // shared building blocks (same as the daily analysis, computed on intraday bars)
+    const trend      = calcTrend(bars, price);
+    const momentum   = calcMomentum(bars);
+    const volume     = calcVolume(bars, avgVol);
+    const volatility = calcVolatility(bars, price);
+
+    // every pattern detector
+    const forming       = detectFormingPatterns(bars);
+    const patternRes    = calcPatterns(bars, trend, volatility);
+    const signals       = calcChartSignals(bars);
+    const exhaustion    = calcExhaustion(bars, momentum, volume, trend, volatility);
+    const pullback      = calcPullbackReversal(bars, trend, momentum, volume, exhaustion);
+    const overlays      = calcPatternOverlaysMultiTF(bars, []);
+    const recentCandles = calcRecentCandleStructure(bars);
+
+    const vol = readVolumeEffort(bars);
+    const annotate = <T extends { direction?: string }>(p: T) => {
+      const bearish = p.direction === "short" || p.direction === "bearish" || p.direction === "bear";
+      return {
+        ...p,
+        volumeConfirms:    (vol.signal === "no_demand" && bearish) || (vol.signal === "demand_confirmed" && !bearish),
+        volumeContradicts: (vol.signal === "no_demand" && !bearish) || (vol.signal === "demand_confirmed" && bearish),
+      };
+    };
+
+    const count = forming.length + patternRes.patterns.length + signals.length + overlays.length
+      + (exhaustion?.exhaustionSignal && exhaustion.exhaustionSignal !== "none" ? 1 : 0);
+
+    res.json({
+      ticker, interval, period, count,
+      forming:       forming.map(annotate),
+      patterns:      patternRes.patterns,                 // structural pattern names
+      marketStructure: patternRes.marketStructure,
+      supportLevel:  patternRes.supportLevel,
+      resistanceLevel: patternRes.resistanceLevel,
+      signals:       signals.map(annotate),               // candlestick signal pins
+      exhaustion,                                          // distribution/capitulation/reversal/parabolic
+      pullback,                                            // pullback-reversal setup
+      overlays:      overlays.map(annotate),               // multi-TF pattern overlays
+      recentCandles,
+      volume: vol,
     });
-    res.json({ ticker, interval, period, count: annotated.length, patterns: annotated, volume });
   } catch (err) {
     req.log.warn({ err, ticker }, "Intraday patterns failed");
     res.status(404).json({ error: `No intraday data for ${ticker}` });
