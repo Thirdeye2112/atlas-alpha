@@ -282,6 +282,8 @@ export interface AtlasAlphaScore {
   marketRegimeScore: number;
   /** 0-100 counter-trend score: high values flag capitulation, reversal bars, or extended-decline snap-back setups that trend-following misses */
   exhaustionScore: number;
+  /** 0-100 score from the research V4 ML model (all 47 features); null when no prediction exists for this ticker. Fused into `overall`. */
+  mlScore: number | null;
   bullishProbability: number;
   bearishProbability: number;
   confidenceScore: number;

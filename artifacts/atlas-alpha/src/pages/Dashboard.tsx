@@ -1414,6 +1414,9 @@ export default function Dashboard() {
                 )} />
                 <MiniGauge title="Regime" score={displayAnalysis.atlasScore.marketRegimeScore} />
                 <MiniGauge title="Exhaustion" score={displayAnalysis.atlasScore.exhaustionScore} />
+                {displayAnalysis.atlasScore.mlScore != null && (
+                  <MiniGauge title="ML Model" score={displayAnalysis.atlasScore.mlScore} />
+                )}
                 <MiniGauge title="Confidence" score={displayAnalysis.atlasScore.confidenceScore} />
                 <MiniGauge title="Risk" score={displayAnalysis.atlasScore.riskScore} />
               </div>
