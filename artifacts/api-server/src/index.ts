@@ -4,6 +4,7 @@ import { startLearningScheduler, startResolutionScheduler, startScheduler } from
 import { startBotScheduler } from "./lib/botScheduler";
 import { hydrateFromDb } from "./lib/dbCache";
 import { initCalibrationFromDB } from "./lib/calibrationStore";
+import { initPredictions } from "./lib/predictionStore";
 import { loadDynamicUniverse } from "./lib/dynamicUniverse";
 
 const rawPort = process.env["PORT"];
@@ -42,6 +43,7 @@ app.listen(port, (err) => {
     Promise.all([
       hydrateFromDb(),
       initCalibrationFromDB(),
+      initPredictions(),
     ]).catch(err => logger.error({ err }, "Startup DB hydration failed"));
   });
 

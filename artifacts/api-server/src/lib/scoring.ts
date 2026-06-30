@@ -3,7 +3,7 @@ import type { TrendResult, MomentumResult, VolumeResult, OptionsResult, Relative
 // Bump this string whenever scoring weights or formula change materially.
 // calibration_models rows with a different score_version are automatically
 // treated as stale and excluded from inference.
-export const SCORE_VERSION = "v1.3";
+export const SCORE_VERSION = "v1.4";
 
 export type AtlasLabel = "extreme_bearish" | "bearish" | "neutral" | "bullish" | "extreme_bullish";
 export type Direction = "bullish" | "bearish" | "neutral";
@@ -19,6 +19,9 @@ export interface AtlasAlphaScore {
   relativeStrengthScore: number;
   marketRegimeScore: number;
   exhaustionScore: number;
+  /** 0–100 score from the research V4 ML model (all 47 features), or null when no
+   *  prediction exists for this ticker/date. Fused into `overall` at ML_WEIGHT. */
+  mlScore: number | null;
   bullishProbability: number;
   bearishProbability: number;
   confidenceScore: number;
@@ -48,7 +51,15 @@ export interface ScoreOpts {
   weights?: WeightOverrides | null;
   rankIC?: number;
   icRating?: string;
+  /** 0–100 score from the research V4 ML model for this ticker (built from all 47
+   *  features). Typically rank_percentile×100 from the `predictions` table. When
+   *  provided, it's fused into `overall` at ML_WEIGHT and the factor terms scale down
+   *  proportionally; when null/undefined, scoring is unchanged (graceful fallback). */
+  mlScore?: number | null;
 }
+
+/** Weight given to the research V4 ML model when a prediction is available. */
+const ML_WEIGHT = 0.20;
 
 function clamp(val: number, min = 0, max = 100): number {
   return Math.max(min, Math.min(max, val));
@@ -100,14 +111,25 @@ export function calcAtlasScore(
   const rsW     = ow ? (ow.relativeStrength / 100) * FACT_BG : 0.20;
   const regW    = ow ? (ow.regime           / 100) * FACT_BG : 0.04;
 
+  // V4 ML model fusion: when a prediction exists for this ticker, the model (built
+  // from all 47 features) takes ML_WEIGHT of the score and the seven factor terms
+  // scale down by (1 - ML_WEIGHT) so the total weight still sums to 1.0. When no
+  // prediction exists, mlW = 0 and the formula is identical to before (no behaviour
+  // change for un-scored tickers).
+  const mlScore = (opts?.mlScore != null && Number.isFinite(opts.mlScore))
+    ? clamp(opts.mlScore) : null;
+  const mlW   = mlScore != null ? ML_WEIGHT : 0;
+  const facS  = 1 - mlW;   // scale applied to the existing factor budget
+
   const overall = clamp(
-    trend.trendAlignmentScore       * trendW * regimeGate +
-    momentum.momentumScore          * momW   * regimeGate +
-    volume.volumeScore              * volW +
-    options.optionsScore            * OPTS_W +
-    rs.rsScore                      * rsW +
-    marketRegimeScore               * regW +
-    exhaustion.exhaustionScore      * EXHS_W
+    (trend.trendAlignmentScore      * trendW * regimeGate +
+     momentum.momentumScore         * momW   * regimeGate +
+     volume.volumeScore             * volW +
+     options.optionsScore           * OPTS_W +
+     rs.rsScore                     * rsW +
+     marketRegimeScore              * regW +
+     exhaustion.exhaustionScore     * EXHS_W) * facS +
+    (mlScore ?? 0)                  * mlW
   );
 
   const label = labelFromScore(overall);
@@ -191,6 +213,7 @@ export function calcAtlasScore(
     relativeStrengthScore: Math.round(rs.rsScore),
     marketRegimeScore: Math.round(marketRegimeScore),
     exhaustionScore: Math.round(exhaustion.exhaustionScore),
+    mlScore: mlScore != null ? Math.round(mlScore) : null,
     bullishProbability,
     bearishProbability,
     confidenceScore: Math.round(cappedConfidence),

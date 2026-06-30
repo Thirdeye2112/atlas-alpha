@@ -16,6 +16,7 @@ import { calcPullbackReversal, type PullbackReversalResult } from "./pullbackRev
 import { analysisCache } from "./cache.js";
 import { getUniverse } from "./scannerUniverse.js";
 import { calibrationStore } from "./calibrationStore.js";
+import { predictionStore } from "./predictionStore.js";
 import { runCalibrationBackground } from "./backtestEngine.js";
 import { logger } from "./logger.js";
 
@@ -66,10 +67,11 @@ function buildResult(
   const regimeIndicators = calcRegimeIndicators(spyBars, spyTrend);
   const exhaustion     = calcExhaustion(bars, momentum, volume, trend, volatility);
   const calEntry       = calibrationStore.getFitted(sym, 10);
+  const mlScore        = predictionStore.getMlScore(sym);   // V4 model rank (all 47 features), or null
   const atlasScore     = calcAtlasScore(
     trend, momentum, volume, options, rs,
     regimeIndicators.regimeScore, volatility.expectedMovePercent, exhaustion,
-    { weights: calEntry?.optimalWeights ?? null, rankIC: calEntry?.rankIC, icRating: calEntry?.icRating }
+    { weights: calEntry?.optimalWeights ?? null, rankIC: calEntry?.rankIC, icRating: calEntry?.icRating, mlScore }
   );
 
   // calcPatterns runs on already-fetched daily bars (fast, ~0.1ms per ticker);
