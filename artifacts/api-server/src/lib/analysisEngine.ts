@@ -12,6 +12,7 @@ import {
 } from "./indicators.js";
 import { calcAtlasScore, type AtlasAlphaScore } from "./scoring.js";
 import { calcPatternOverlaysMultiTF, type PatternOverlay } from "./patternOverlays.js";
+import { detectFormingPatterns, type FormingPattern } from "./formingPatterns.js";
 import { calcPullbackReversal, type PullbackReversalResult } from "./pullbackReversal.js";
 import { analysisCache } from "./cache.js";
 import { getUniverse } from "./scannerUniverse.js";
@@ -34,6 +35,7 @@ export interface AnalysisResult {
   exhaustion: ExhaustionResult;
   chartSignals: ChartSignal[];
   patternOverlays: PatternOverlay[];
+  formingPatterns: FormingPattern[];
   fibLevels: FibLevelsResult | null;
   volumeProfile: VolumeProfileResult | null;
   weeklyContext: WeeklyContextResult | null;
@@ -80,6 +82,8 @@ function buildResult(
   const patterns     = calcPatterns(bars, trend, volatility);
   const chartSignals = lightMode ? [] : calcChartSignals(bars);
   const patternOverlays  = lightMode ? [] : calcPatternOverlaysMultiTF(bars, weeklyBars);
+  // Forming (not-yet-broken-out) patterns on the right edge, projected to fulfilment.
+  const formingPatterns  = lightMode ? [] : detectFormingPatterns(bars);
 
   // TA overlays — always computed (fast, ≤1ms each); omitted from scanner light-mode paths
   const fibLevels     = lightMode ? null : calcFibLevels(bars);
@@ -103,6 +107,7 @@ function buildResult(
     exhaustion,
     chartSignals,
     patternOverlays,
+    formingPatterns,
     fibLevels,
     volumeProfile,
     weeklyContext,

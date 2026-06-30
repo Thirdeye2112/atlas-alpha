@@ -1152,6 +1152,9 @@ export default function Dashboard() {
                   signals={[]}
                   showSwingPoints={false}
                   patternOverlays={[]}
+                  // Forming (not-yet-broken-out) patterns projected on the right edge.
+                  // Daily-timed lines, so only overlay them on the daily interval.
+                  formingPatterns={timeframe.interval === "1d" ? ((displayAnalysis as { formingPatterns?: import("@/components/charts/LightweightChart").FormingPattern[] } | undefined)?.formingPatterns ?? []) : []}
                   scoreOverlay={[]}
                   activeTool={drawingTool}
                   drawings={drawings}

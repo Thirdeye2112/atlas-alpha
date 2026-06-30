@@ -18,6 +18,26 @@ import type { PatternOverlay } from "@workspace/api-client-react";
 
 export type { PatternOverlay };
 
+// Forming (not-yet-broken-out) pattern projection — sent by the api in
+// StockAnalysis.formingPatterns (not in the generated client type yet).
+export interface FormingPattern {
+  name: string;
+  label: string;
+  status: "forming";
+  direction: "long" | "short";
+  flipped: boolean;
+  breakoutLevel: number;
+  barsToBreakout: number;
+  target: number;
+  expectedLow: number;
+  confidence: number;
+  winRate: number | null;
+  sampleN: number | null;
+  rvol: number | null;
+  upperLine: { time: string; price: number }[];
+  lowerLine: { time: string; price: number }[];
+}
+
 export type DrawingTool = "pointer" | "trendline" | "hline" | "ray" | "rectangle";
 
 export interface DrawingObject {
@@ -79,6 +99,7 @@ interface Props {
   showSwingPoints?: boolean;
   swingLookback?: number;
   patternOverlays?: PatternOverlay[];
+  formingPatterns?: FormingPattern[];
   extendedHours?: ExtendedHoursPoint;
   scoreOverlay?: ScoreOverlayPoint[];
   /** Fixed candle width/spacing (px). When set, candles render at this size for
@@ -200,6 +221,7 @@ export default function LightweightChart({
   showSwingPoints = false,
   swingLookback = 3,
   patternOverlays = [],
+  formingPatterns = [],
   extendedHours,
   scoreOverlay = [],
   barSpacing,
@@ -592,6 +614,50 @@ export default function LightweightChart({
       }
     }
 
+    // ── Forming (not-yet-broken-out) patterns: dashed converging trendlines on the
+    //    right edge + projected breakout / target / expected-low level lines. ───────
+    if (formingPatterns.length > 0 && formattedData.length >= 6) {
+      const lastBar  = formattedData[formattedData.length - 1];
+      const stubBar  = formattedData[Math.max(0, formattedData.length - 10)];
+      for (const fp of formingPatterns) {
+        const isLong = fp.direction === "long";
+        const dirColor = isLong ? "rgba(34,197,94,0.9)" : "rgba(239,68,68,0.9)";
+        const amber = "rgba(251,191,36,0.85)";
+        // converging trendlines (dashed amber) — the forming wedge/triangle walls
+        for (const ln of [fp.upperLine, fp.lowerLine]) {
+          const pts = ln.filter(p => p.price > 0 && isFinite(p.price));
+          if (pts.length < 2) continue;
+          const ls = chart.addSeries(LineSeries, {
+            color: amber, lineWidth: 1, lineStyle: LineStyle.Dashed,
+            priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+            title: "",
+          });
+          ls.setData(pts.map(p => ({ time: p.time, value: p.price })));
+        }
+        // projected levels: breakout, target (dir-colored), expected low — near right edge
+        const levels: { price: number; color: string; style: LineStyle; title: string }[] = [
+          { price: fp.breakoutLevel, color: amber,   style: LineStyle.Dotted,
+            title: `${fp.label} BO ${isLong ? "▲" : "▼"} ~${fp.barsToBreakout}b` },
+          { price: fp.target,        color: dirColor, style: LineStyle.Dashed,
+            title: `tgt $${fp.target} (${fp.confidence}%${fp.flipped ? " ⟲flip" : ""})` },
+          { price: fp.expectedLow,   color: "rgba(148,163,184,0.7)", style: LineStyle.Dotted,
+            title: `exp-low $${fp.expectedLow}` },
+        ];
+        for (const lv of levels) {
+          if (!lv.price || !isFinite(lv.price) || lv.price <= 0) continue;
+          const ls = chart.addSeries(LineSeries, {
+            color: lv.color, lineWidth: 1, lineStyle: lv.style,
+            priceLineVisible: false, lastValueVisible: true, crosshairMarkerVisible: false,
+            title: lv.title,
+          });
+          ls.setData([
+            { time: stubBar.time, value: lv.price },
+            { time: lastBar.time, value: lv.price },
+          ]);
+        }
+      }
+    }
+
     if (signals.length > 0) {
       const dataTimeSet = new Set(formattedData.map(d => String(d.time)));
       const markers = signals
@@ -792,7 +858,7 @@ export default function LightweightChart({
       chartRef.current  = null;
       seriesRef.current = null;
     };
-  }, [data, height, priceLines, signals, showSwingPoints, swingLookback, patternOverlays, extendedHours, scoreOverlay, lineSeries, barSpacing, showVolume, paintCanvas]);
+  }, [data, height, priceLines, signals, showSwingPoints, swingLookback, patternOverlays, formingPatterns, extendedHours, scoreOverlay, lineSeries, barSpacing, showVolume, paintCanvas]);
 
   useEffect(() => {
     drawingsRef.current  = drawings;
