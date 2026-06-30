@@ -1140,19 +1140,19 @@ export default function Dashboard() {
                 <LightweightChart
                   data={ohlcv}
                   height={378}
+                  // Fixed candle width so the daily chart renders at the same scale /
+                  // candle size as the 5-minute chart (instead of stretching to fit).
+                  barSpacing={6}
+                  // Minimal chart: price + crosshair (price-at-cursor) only. The
+                  // analytical overlays below are intentionally disabled.
+                  showVolume={false}
                   onCandleClick={timeframe.interval === "1d" || timeframe.interval === "1wk" || timeframe.interval === "1mo" ? handleCandleClick : undefined}
-                  priceLines={analysis ? buildPriceLines(analysis) : []}
+                  priceLines={[]}
                   lineSeries={anchoredVwapSeries}
-                  signals={
-                    // Show candle-level signal pins on 1M and shorter only (3M is too cluttered with pattern overlays)
-                    ["1mo", "5d", "1d"].includes(timeframe.period) && displayAnalysis?.chartSignals
-                      ? displayAnalysis.chartSignals as ChartSignalMarker[]
-                      : []
-                  }
-                  showSwingPoints={["6mo", "1y", "2y", "5y", "max"].includes(timeframe.period)}
-                  swingLookback={timeframe.period === "6mo" ? 3 : timeframe.period === "1y" ? 4 : 5}
-                  patternOverlays={displayAnalysis?.patternOverlays as PatternOverlay[] ?? []}
-                  scoreOverlay={scoreOverlayData}
+                  signals={[]}
+                  showSwingPoints={false}
+                  patternOverlays={[]}
+                  scoreOverlay={[]}
                   activeTool={drawingTool}
                   drawings={drawings}
                   onDrawingsChange={setDrawings}

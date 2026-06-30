@@ -81,6 +81,12 @@ interface Props {
   patternOverlays?: PatternOverlay[];
   extendedHours?: ExtendedHoursPoint;
   scoreOverlay?: ScoreOverlayPoint[];
+  /** Fixed candle width/spacing (px). When set, candles render at this size for
+   *  ALL intervals (so a daily chart looks like a 5m chart) instead of fitContent
+   *  stretching bars to fill the width. Omit for the legacy fit-all behaviour. */
+  barSpacing?: number;
+  /** Show the volume histogram pane (default true). Set false for a price-only chart. */
+  showVolume?: boolean;
   activeTool?: DrawingTool;
   drawings?: DrawingObject[];
   onDrawingsChange?: (drawings: DrawingObject[]) => void;
@@ -196,6 +202,8 @@ export default function LightweightChart({
   patternOverlays = [],
   extendedHours,
   scoreOverlay = [],
+  barSpacing,
+  showVolume = true,
   activeTool = "pointer",
   drawings = [],
   onDrawingsChange,
@@ -335,6 +343,7 @@ export default function LightweightChart({
         timeVisible: true,
         secondsVisible: false,
         rightOffset: 10,
+        ...(barSpacing ? { barSpacing, minBarSpacing: 1 } : {}),
       },
       rightPriceScale: {
         minimumWidth: 60,
@@ -381,22 +390,24 @@ export default function LightweightChart({
       });
     }
 
-    const volumeSeries = chart.addSeries(HistogramSeries, {
-      priceFormat: { type: "volume" },
-      priceScaleId: "volume",
-    });
-    volumeSeries.priceScale().applyOptions({
-      scaleMargins: { top: hasScore ? 0.83 : 0.78, bottom: 0 },
-    });
-    volumeSeries.setData(
-      formattedData.map(bar => ({
-        time: bar.time,
-        value: bar.volume,
-        color: bar.close >= bar.open
-          ? "rgba(34,197,94,0.35)"
-          : "rgba(239,68,68,0.35)",
-      }))
-    );
+    if (showVolume) {
+      const volumeSeries = chart.addSeries(HistogramSeries, {
+        priceFormat: { type: "volume" },
+        priceScaleId: "volume",
+      });
+      volumeSeries.priceScale().applyOptions({
+        scaleMargins: { top: hasScore ? 0.83 : 0.78, bottom: 0 },
+      });
+      volumeSeries.setData(
+        formattedData.map(bar => ({
+          time: bar.time,
+          value: bar.volume,
+          color: bar.close >= bar.open
+            ? "rgba(34,197,94,0.35)"
+            : "rgba(239,68,68,0.35)",
+        }))
+      );
+    }
 
     if (hasScore) {
       const scoreSeries = chart.addSeries(HistogramSeries, {
@@ -719,7 +730,13 @@ export default function LightweightChart({
     };
     resizeCanvas();
 
-    chart.timeScale().fitContent();
+    // Fixed barSpacing => keep candles a constant size (daily looks like 5m) and
+    // show the most recent bars; otherwise fit all bars to the width (legacy).
+    if (barSpacing) {
+      chart.timeScale().scrollToRealTime();
+    } else {
+      chart.timeScale().fitContent();
+    }
 
     chartRef.current   = chart;
     seriesRef.current  = candlestickSeries;
@@ -775,7 +792,7 @@ export default function LightweightChart({
       chartRef.current  = null;
       seriesRef.current = null;
     };
-  }, [data, height, priceLines, signals, showSwingPoints, swingLookback, patternOverlays, extendedHours, scoreOverlay, lineSeries, paintCanvas]);
+  }, [data, height, priceLines, signals, showSwingPoints, swingLookback, patternOverlays, extendedHours, scoreOverlay, lineSeries, barSpacing, showVolume, paintCanvas]);
 
   useEffect(() => {
     drawingsRef.current  = drawings;
