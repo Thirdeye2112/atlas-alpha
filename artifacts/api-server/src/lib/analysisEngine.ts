@@ -14,6 +14,7 @@ import { calcAtlasScore, type AtlasAlphaScore } from "./scoring.js";
 import { calcPatternOverlaysMultiTF, type PatternOverlay } from "./patternOverlays.js";
 import { detectFormingPatterns, type FormingPattern } from "./formingPatterns.js";
 import { calcPullbackReversal, type PullbackReversalResult } from "./pullbackReversal.js";
+import { readVolumeEffort, annotateWithVolume, type VolumeEffortRead } from "./volumeEffort.js";
 import { analysisCache } from "./cache.js";
 import { getUniverse } from "./scannerUniverse.js";
 import { calibrationStore } from "./calibrationStore.js";
@@ -42,6 +43,9 @@ export interface AnalysisResult {
   marketCycle: MarketCycleResult | null;
   pullbackSetup: PullbackReversalResult | null;
   recentCandles: RecentCandleStructure | null;
+  /** Effort-vs-result volume read; forming patterns below are tagged confirmed/
+   *  contradicted by it (parity with the intraday-patterns endpoint). */
+  volumeEffort: VolumeEffortRead;
   historicalDate?: string;
   cachedAt: string;
 }
@@ -82,8 +86,11 @@ function buildResult(
   const patterns     = calcPatterns(bars, trend, volatility);
   const chartSignals = lightMode ? [] : calcChartSignals(bars);
   const patternOverlays  = lightMode ? [] : calcPatternOverlaysMultiTF(bars, weeklyBars);
+  // Effort-vs-result volume read; forming patterns are tagged confirmed/contradicted
+  // by it (same as the intraday-patterns endpoint, so both timeframes match).
+  const volumeEffort     = readVolumeEffort(bars);
   // Forming (not-yet-broken-out) patterns on the right edge, projected to fulfilment.
-  const formingPatterns  = lightMode ? [] : detectFormingPatterns(bars);
+  const formingPatterns  = lightMode ? [] : detectFormingPatterns(bars).map(p => annotateWithVolume(p, volumeEffort));
 
   // TA overlays — always computed (fast, ≤1ms each); omitted from scanner light-mode paths
   const fibLevels     = lightMode ? null : calcFibLevels(bars);
@@ -114,6 +121,7 @@ function buildResult(
     marketCycle,
     pullbackSetup,
     recentCandles,
+    volumeEffort,
     ...(historicalDate ? { historicalDate } : {}),
     cachedAt: new Date().toISOString(),
   };
