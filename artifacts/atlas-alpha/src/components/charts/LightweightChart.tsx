@@ -36,6 +36,7 @@ export interface FormingPattern {
   rvol: number | null;
   upperLine: { time: string; price: number }[];
   lowerLine: { time: string; price: number }[];
+  poleLine?: { time: string; price: number }[];
 }
 
 export type DrawingTool = "pointer" | "trendline" | "hline" | "ray" | "rectangle";
@@ -239,7 +240,10 @@ export default function LightweightChart({
   const pendingRef        = useRef<DrawingObject | null>(null);
   const hoverRef          = useRef<{ time: string; price: number } | null>(null);
   const drawingsRef       = useRef<DrawingObject[]>(drawings);
+  const formingRef        = useRef<FormingPattern[]>(formingPatterns);
   const activeToolRef     = useRef<DrawingTool>(activeTool);
+  const paintCanvasRef    = useRef<(() => void) | null>(null);
+  useEffect(() => { formingRef.current = formingPatterns; paintCanvasRef.current?.(); }, [formingPatterns]);
 
   const paintCanvas = useCallback(() => {
     const canvas = drawingCanvasRef.current;
@@ -344,8 +348,70 @@ export default function LightweightChart({
       }
     }
 
+    // ── Forming patterns: draw the ACTUAL shape (flag pole + channel, converging
+    //    walls) and project the breakout/target/exit into FUTURE x-space with X/+ marks.
+    const ts = chart.timeScale();
+    const xOf = (t: string) => ts.timeToCoordinate(t as Time);
+    const yOf = (p: number) => series.priceToCoordinate(p);
+    const barPx = (() => { try { return ts.options().barSpacing || 6; } catch { return 6; } })();
+    const drawCross = (cx: number, cy: number, color: string, kind: "x" | "plus", r = 6) => {
+      ctx.strokeStyle = color; ctx.lineWidth = 2.5; ctx.setLineDash([]); ctx.beginPath();
+      if (kind === "x") { ctx.moveTo(cx - r, cy - r); ctx.lineTo(cx + r, cy + r); ctx.moveTo(cx + r, cy - r); ctx.lineTo(cx - r, cy + r); }
+      else { ctx.moveTo(cx - r, cy); ctx.lineTo(cx + r, cy); ctx.moveTo(cx, cy - r); ctx.lineTo(cx, cy + r); }
+      ctx.stroke();
+    };
+    for (const fp of formingRef.current) {
+      const isLong = fp.direction === "long";
+      const dirColor = isLong ? "rgba(34,197,94,0.95)" : "rgba(239,68,68,0.95)";
+      const amber = "rgba(251,191,36,0.9)";
+      const grey  = "rgba(148,163,184,0.85)";
+      const drawSeg = (a: { time: string; price: number }, b: { time: string; price: number }, color: string, width: number, dash: number[]) => {
+        const x1 = xOf(a.time), y1 = yOf(a.price), x2 = xOf(b.time), y2 = yOf(b.price);
+        if (x1 == null || y1 == null || x2 == null || y2 == null) return null;
+        ctx.strokeStyle = color; ctx.lineWidth = width; ctx.setLineDash(dash);
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); ctx.setLineDash([]);
+        return { x2, y2 };
+      };
+      ctx.globalAlpha = 0.95;
+      // flag pole (thick, direction-colored)
+      if (fp.poleLine && fp.poleLine.length === 2) drawSeg(fp.poleLine[0], fp.poleLine[1], dirColor, 3, []);
+      // pattern walls / flag channel (amber, solid)
+      const wallEnd = drawSeg(fp.upperLine[0], fp.upperLine[1], amber, 1.5, []);
+      drawSeg(fp.lowerLine[0], fp.lowerLine[1], amber, 1.5, []);
+      // project breakout/target/exit into the future: x = last bar x + barSpacing * bars
+      const lastT = fp.upperLine[1].time;
+      const lastX = xOf(lastT);
+      if (lastX == null) continue;
+      const projX = lastX + barPx * Math.max(1, fp.barsToBreakout);
+      const yBO = yOf(fp.breakoutLevel), yTgt = yOf(fp.target), yLow = yOf(fp.expectedLow);
+      // dashed guide from the wall to the projected breakout point
+      if (wallEnd && yBO != null) {
+        ctx.strokeStyle = amber; ctx.lineWidth = 1; ctx.setLineDash([4, 3]);
+        ctx.beginPath(); ctx.moveTo(wallEnd.x2, wallEnd.y2); ctx.lineTo(projX, yBO); ctx.stroke(); ctx.setLineDash([]);
+      }
+      ctx.font = `bold 10px "JetBrains Mono","Fira Code",monospace`; ctx.textAlign = "left";
+      // TARGET → bold X
+      if (yTgt != null) {
+        drawCross(projX, yTgt, dirColor, "x", 7);
+        ctx.fillStyle = dirColor;
+        ctx.fillText(`tgt $${fp.target} ${isLong ? "▲" : "▼"} ${fp.confidence}%${fp.flipped ? " ⟲" : ""}`, projX + 10, yTgt + 3);
+      }
+      // EXIT / expected low → bold + cross
+      if (yLow != null) {
+        drawCross(projX, yLow, grey, "plus", 6);
+        ctx.fillStyle = grey;
+        ctx.fillText(`exit $${fp.expectedLow}`, projX + 10, yLow + 3);
+      }
+      // breakout dot + label at the apex
+      if (yBO != null) {
+        ctx.fillStyle = amber; ctx.beginPath(); ctx.arc(projX, yBO, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.fillText(`${fp.label} ~${fp.barsToBreakout}b`, projX + 10, yBO - 6);
+      }
+    }
+
     ctx.restore();
   }, []);
+  paintCanvasRef.current = paintCanvas;
 
   useEffect(() => {
     if (!chartContainerRef.current || data.length === 0) return;
@@ -614,49 +680,9 @@ export default function LightweightChart({
       }
     }
 
-    // ── Forming (not-yet-broken-out) patterns: dashed converging trendlines on the
-    //    right edge + projected breakout / target / expected-low level lines. ───────
-    if (formingPatterns.length > 0 && formattedData.length >= 6) {
-      const lastBar  = formattedData[formattedData.length - 1];
-      const stubBar  = formattedData[Math.max(0, formattedData.length - 10)];
-      for (const fp of formingPatterns) {
-        const isLong = fp.direction === "long";
-        const dirColor = isLong ? "rgba(34,197,94,0.9)" : "rgba(239,68,68,0.9)";
-        const amber = "rgba(251,191,36,0.85)";
-        // converging trendlines (dashed amber) — the forming wedge/triangle walls
-        for (const ln of [fp.upperLine, fp.lowerLine]) {
-          const pts = ln.filter(p => p.price > 0 && isFinite(p.price));
-          if (pts.length < 2) continue;
-          const ls = chart.addSeries(LineSeries, {
-            color: amber, lineWidth: 1, lineStyle: LineStyle.Dashed,
-            priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
-            title: "",
-          });
-          ls.setData(pts.map(p => ({ time: p.time, value: p.price })));
-        }
-        // projected levels: breakout, target (dir-colored), expected low — near right edge
-        const levels: { price: number; color: string; style: LineStyle; title: string }[] = [
-          { price: fp.breakoutLevel, color: amber,   style: LineStyle.Dotted,
-            title: `${fp.label} BO ${isLong ? "▲" : "▼"} ~${fp.barsToBreakout}b` },
-          { price: fp.target,        color: dirColor, style: LineStyle.Dashed,
-            title: `tgt $${fp.target} (${fp.confidence}%${fp.flipped ? " ⟲flip" : ""})` },
-          { price: fp.expectedLow,   color: "rgba(148,163,184,0.7)", style: LineStyle.Dotted,
-            title: `exp-low $${fp.expectedLow}` },
-        ];
-        for (const lv of levels) {
-          if (!lv.price || !isFinite(lv.price) || lv.price <= 0) continue;
-          const ls = chart.addSeries(LineSeries, {
-            color: lv.color, lineWidth: 1, lineStyle: lv.style,
-            priceLineVisible: false, lastValueVisible: true, crosshairMarkerVisible: false,
-            title: lv.title,
-          });
-          ls.setData([
-            { time: stubBar.time, value: lv.price },
-            { time: lastBar.time, value: lv.price },
-          ]);
-        }
-      }
-    }
+    // Forming patterns are drawn on the custom canvas overlay (paintCanvas) so the
+    // actual pattern shape (flag pole + channel, converging walls) and the X/+ target
+    // markers can project into future x-space beyond the last candle.
 
     if (signals.length > 0) {
       const dataTimeSet = new Set(formattedData.map(d => String(d.time)));

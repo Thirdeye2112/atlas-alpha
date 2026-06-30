@@ -28,8 +28,9 @@ export interface FormingPattern {
   winRate: number | null;       // historical win rate of this projection
   sampleN: number | null;       // historical sample size
   rvol: number | null;          // current relative volume (expansion confirms)
-  upperLine: { time: string; price: number }[];  // converging upper trendline (2 pts)
-  lowerLine: { time: string; price: number }[];  // converging lower trendline (2 pts)
+  upperLine: { time: string; price: number }[];  // upper trendline / flag channel top (2 pts)
+  lowerLine: { time: string; price: number }[];  // lower trendline / flag channel bottom (2 pts)
+  poleLine?: { time: string; price: number }[];  // flag/pennant pole (flagpole), 2 pts
 }
 
 // Data-driven edge (synced from atlas-research/reports/stocks/pattern_edge.json).
@@ -41,12 +42,15 @@ const PATTERN_EDGE: Record<string, { direction: "long" | "short"; target: number
   descending_triangle: { direction: "long",  target: 5.13, low: -4.53, bars: 6, win: 51.9, n: 33924, flipped: true },
   symmetric_triangle:  { direction: "long",  target: 4.15, low: -4.16, bars: 6, win: 50.7, n: 39645, flipped: false },
   rectangle:           { direction: "long",  target: 4.40, low: -4.03, bars: 6, win: 52.4, n: 17650, flipped: false },
+  bull_flag:           { direction: "long",  target: 4.17, low: -4.18, bars: 6, win: 50.6, n: 40975, flipped: false },
+  bear_flag:           { direction: "long",  target: 5.72, low: -5.26, bars: 6, win: 52.9, n: 35833, flipped: true },
 };
 
 const LABELS: Record<string, string> = {
   rising_wedge: "Rising Wedge", falling_wedge: "Falling Wedge",
   ascending_triangle: "Ascending Triangle", descending_triangle: "Descending Triangle",
   symmetric_triangle: "Symmetric Triangle", rectangle: "Rectangle / Range",
+  bull_flag: "Bull Flag", bear_flag: "Bear Flag",
 };
 
 interface Pivot { idx: number; price: number; kind: "H" | "L"; }
@@ -81,13 +85,98 @@ function fitLine(pts: { idx: number; price: number }[]): { slope: number; ic: nu
 
 const r4 = (v: number) => Math.round(v * 1e4) / 1e4;
 
+function relVol(bars: OHLCVBar[]): number | null {
+  const last = bars.length - 1;
+  if (last <= 20) return null;
+  let s = 0; for (let k = last - 20; k < last; k++) s += bars[k].volume;
+  const avg = s / 20;
+  return avg > 0 ? bars[last].volume / avg : null;
+}
+
+function buildForming(geo: string, px: number, breakoutLevel: number, barsTo: number,
+                      rvol: number | null, upper: { time: string; price: number }[],
+                      lower: { time: string; price: number }[],
+                      pole?: { time: string; price: number }[]): FormingPattern {
+  const e = PATTERN_EDGE[geo];
+  // The historical move plays out AFTER the breakout, so measure target/exit from the
+  // breakout level (the projected entry), not the current mid-pattern price. For a long
+  // this keeps target > breakout > exit; for a short, target < breakout < exit.
+  const ref = breakoutLevel > 0 ? breakoutLevel : px;
+  const dirSign = e.direction === "long" ? 1 : -1;
+  const target = ref * (1 + dirSign * Math.abs(e.target) / 100);
+  const expectedLow = ref * (1 - dirSign * Math.abs(e.low) / 100);
+  let conf = Math.min(95, 40 + (e.win - 50) * 1.5 + (e.n >= 1000 ? 10 : 0));
+  if (rvol && rvol > 1.3) conf = Math.min(99, conf + 8);
+  return {
+    name: geo, label: `${LABELS[geo]} (forming)`, status: "forming",
+    direction: e.direction, flipped: e.flipped,
+    breakoutLevel: r4(breakoutLevel), barsToBreakout: e.bars || barsTo,
+    target: r4(target), expectedLow: r4(expectedLow),
+    confidence: Math.round(conf), winRate: e.win, sampleN: e.n,
+    rvol: rvol ? Math.round(rvol * 100) / 100 : null,
+    upperLine: upper, lowerLine: lower, ...(pole ? { poleLine: pole } : {}),
+  };
+}
+
 /**
- * Detect forming (not-yet-broken-out) wedges / triangles / rectangles on the right
- * edge and project breakout, target, expected low, and bars-to-fulfilment.
+ * Forming FLAG / PENNANT: a sharp POLE (swing low -> swing high) followed by a tight
+ * CONSOLIDATION (the flag) that has NOT yet broken out of the pole high. Returns the
+ * pole line + the flag channel so the chart can draw the actual shape.
+ */
+function detectFormingFlag(bars: OHLCVBar[]): FormingPattern | null {
+  const piv = swingPivots(bars, 2);
+  if (piv.length < 2) return null;
+  const last = bars.length - 1;
+  // find the most recent strong pole: an L pivot then an H pivot, >=4% in <=15 bars,
+  // whose high is recent enough that a flag could still be forming after it.
+  for (let i = piv.length - 1; i >= 1; i--) {
+    const hiP = piv[i], loP = piv[i - 1];
+    if (hiP.kind !== "H" || loP.kind !== "L") continue;
+    const pole = (hiP.price - loP.price) / loP.price;
+    const poleBars = hiP.idx - loP.idx;
+    if (pole < 0.04 || poleBars > 15 || poleBars < 1) continue;
+    const flagBars = last - hiP.idx;
+    if (flagBars < 3 || flagBars > 15) continue;             // flag must be forming, not stale
+    // flag window: bars after the pole high
+    const seg = bars.slice(hiP.idx, last + 1);
+    const segHi = Math.max(...seg.map(b => b.high));
+    const segLo = Math.min(...seg.map(b => b.low));
+    const px = bars[last].close;
+    // still inside the flag (not yet broken out above the pole high) and a real pullback
+    if (segHi > hiP.price * 1.005) return null;              // already broke out -> not forming
+    const pullback = (hiP.price - segLo) / (hiP.price - loP.price);
+    if (pullback < 0.1 || pullback > 0.8) return null;       // healthy flag retraces 10–80% of pole
+    // channel lines over the flag bars (top through highs, bottom through lows)
+    const fpts = seg.map((b, k) => ({ idx: hiP.idx + k, hi: b.high, lo: b.low }));
+    const top = fitLine(fpts.map(p => ({ idx: p.idx, price: p.hi })));
+    const bot = fitLine(fpts.map(p => ({ idx: p.idx, price: p.lo })));
+    if (!top || !bot) return null;
+    const geo = pole > 0 ? "bull_flag" : "bear_flag";
+    const breakout = hiP.price;                              // breakout = pole high
+    const upper = [{ time: bars[hiP.idx].time, price: r4(top.slope * hiP.idx + top.ic) },
+                   { time: bars[last].time,    price: r4(top.slope * last + top.ic) }];
+    const lower = [{ time: bars[hiP.idx].time, price: r4(bot.slope * hiP.idx + bot.ic) },
+                   { time: bars[last].time,    price: r4(bot.slope * last + bot.ic) }];
+    const poleLine = [{ time: bars[loP.idx].time, price: r4(loP.price) },
+                      { time: bars[hiP.idx].time, price: r4(hiP.price) }];
+    return buildForming(geo, px, breakout, Math.max(2, Math.round(poleBars / 2)),
+                        relVol(bars), upper, lower, poleLine);
+  }
+  return null;
+}
+
+/**
+ * Detect forming (not-yet-broken-out) flags / wedges / triangles / rectangles on the
+ * right edge and project breakout, target, expected low, and bars-to-fulfilment.
  */
 export function detectFormingPatterns(bars: OHLCVBar[]): FormingPattern[] {
   const out: FormingPattern[] = [];
   if (bars.length < 30) return out;
+
+  // Flags first (pole + channel is the most recognisable forming shape).
+  const flag = detectFormingFlag(bars);
+  if (flag) out.push(flag);
+
   const piv = swingPivots(bars, 3);
   if (piv.length < 4) return out;
 
@@ -106,12 +195,7 @@ export function detectFormingPatterns(bars: OHLCVBar[]): FormingPattern[] {
   if (w0 <= 0 || w1 <= 0) return out;
 
   const px = bars[last].close;
-  // relative volume (expansion confirms a forming pattern)
-  let rvol: number | null = null;
-  if (last > 20) {
-    let s = 0; for (let k = last - 20; k < last; k++) s += bars[k].volume;
-    const avg = s / 20; if (avg > 0) rvol = bars[last].volume / avg;
-  }
+  const rvol = relVol(bars);  // volume expansion confirms a forming pattern
 
   const hiChg = hline(i1) - hline(i0);
   const loChg = lline(i1) - lline(i0);
@@ -131,31 +215,13 @@ export function detectFormingPatterns(bars: OHLCVBar[]): FormingPattern[] {
   }
   if (!geo) return out;
 
-  const e = PATTERN_EDGE[geo];
-  const direction = e.direction;
-  const isLong = direction === "long";
+  const isLong = PATTERN_EDGE[geo].direction === "long";
   const breakoutLevel = isLong ? hline(last) : lline(last);
-
-  // bars to breakout: where converging lines meet (apex), capped; else use median
+  // bars to breakout: where converging lines meet (apex), capped; else median
   const conv = (w0 - w1) / Math.max(i1 - i0, 1);
-  let barsTo = conv > 1e-9 ? Math.max(1, Math.min(Math.round(w1 / conv), 30)) : 10;
-  if (e.bars) barsTo = e.bars;
-
-  const target = px * (1 + e.target / 100);
-  const expectedLow = px * (1 + e.low / 100);
-
-  let conf = Math.min(95, 40 + (e.win - 50) * 1.5 + (e.n >= 1000 ? 10 : 0));
-  if (rvol && rvol > 1.3) conf = Math.min(99, conf + 8);
-
-  out.push({
-    name: geo, label: `${LABELS[geo]} (forming)`, status: "forming",
-    direction, flipped: e.flipped,
-    breakoutLevel: r4(breakoutLevel), barsToBreakout: barsTo,
-    target: r4(target), expectedLow: r4(expectedLow),
-    confidence: Math.round(conf), winRate: e.win, sampleN: e.n,
-    rvol: rvol ? Math.round(rvol * 100) / 100 : null,
-    upperLine: [{ time: bars[i0].time, price: r4(hline(i0)) }, { time: bars[last].time, price: r4(hline(last)) }],
-    lowerLine: [{ time: bars[i0].time, price: r4(lline(i0)) }, { time: bars[last].time, price: r4(lline(last)) }],
-  });
+  const barsTo = conv > 1e-9 ? Math.max(1, Math.min(Math.round(w1 / conv), 30)) : 10;
+  const upper = [{ time: bars[i0].time, price: r4(hline(i0)) }, { time: bars[last].time, price: r4(hline(last)) }];
+  const lower = [{ time: bars[i0].time, price: r4(lline(i0)) }, { time: bars[last].time, price: r4(lline(last)) }];
+  out.push(buildForming(geo, px, breakoutLevel, barsTo, rvol, upper, lower));
   return out;
 }
