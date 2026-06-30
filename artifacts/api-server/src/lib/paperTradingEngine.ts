@@ -374,9 +374,14 @@ async function openPosition(
   directionOverride?: string,  // used for reversal flips when Atlas score hasn't caught up yet
 ): Promise<number> {
   const price    = a.quote.price as number;
-  const basePosValue = (config.virtualPortfolio * config.positionSizePct) / 100;
-  const posValue = basePosValue * positionMultiplier;
-  const shares   = posValue / price;
+  // LEARNING mode: when fixedShares > 0, buy exactly that many shares of each pick
+  // (equal tiny exposure across many names to track success/miss), ignoring % sizing
+  // and the scanner positionMultiplier. Otherwise size as a % of the virtual book.
+  const useFixed = (config.fixedShares ?? 0) > 0;
+  const shares   = useFixed
+    ? config.fixedShares
+    : ((config.virtualPortfolio * config.positionSizePct) / 100) * positionMultiplier / price;
+  const posValue = shares * price;
   const ticker   = a.quote.ticker as string;
   const direction = directionOverride ?? a.atlasScore.direction;
 

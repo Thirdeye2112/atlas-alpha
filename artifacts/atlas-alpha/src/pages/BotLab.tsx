@@ -22,6 +22,7 @@ interface BotConfig {
   entryCriteria: CustomCriterion[];
   maxPositions: number;
   positionSizePct: number;
+  fixedShares: number;
   exitScoreThreshold: number;
   exitOnDirectionFlip: boolean;
   maxHoldDays: number;
@@ -761,6 +762,7 @@ function ConfigTab({ config, onSaved }: { config: BotConfig; onSaved: () => void
   const [maxHold, setMaxHold]       = useState(config.maxHoldDays);
   const [maxPos, setMaxPos]         = useState(config.maxPositions);
   const [posSizePct, setPosSizePct]       = useState(config.positionSizePct);
+  const [fixedShares, setFixedShares]     = useState(config.fixedShares ?? 0);
   const [portfolio, setPortfolio]         = useState(config.virtualPortfolio);
   const [takeProfitPct, setTakeProfitPct] = useState(config.takeProfitPct);
   const [stopLossPct, setStopLossPct]     = useState(config.stopLossPct);
@@ -787,6 +789,7 @@ function ConfigTab({ config, onSaved }: { config: BotConfig; onSaved: () => void
         aiGateEnabled,
         maxPositions:        maxPos,
         positionSizePct:     posSizePct,
+        fixedShares:         fixedShares,
         virtualPortfolio:    portfolio,
       }),
     }),
@@ -1000,13 +1003,18 @@ function ConfigTab({ config, onSaved }: { config: BotConfig; onSaved: () => void
           <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mt-1">Position Sizing</div>
           <label className="flex items-center justify-between">
             <span className="text-xs font-mono text-foreground">Max concurrent positions</span>
-            <input type="number" min={1} max={20} value={maxPos} onChange={e => setMaxPos(Number(e.target.value))}
+            <input type="number" min={1} max={50} value={maxPos} onChange={e => setMaxPos(Number(e.target.value))}
               className="bg-background border border-border rounded px-2 py-1 text-xs font-mono text-foreground w-16 text-center focus:outline-none focus:border-primary" />
           </label>
           <label className="flex items-center justify-between">
-            <span className="text-xs font-mono text-foreground">Position size (% of portfolio)</span>
-            <input type="number" min={1} max={100} value={posSizePct} onChange={e => setPosSizePct(Number(e.target.value))}
+            <span className="text-xs font-mono text-foreground">Fixed shares per pick (0 = use %)</span>
+            <input type="number" min={0} max={1000} value={fixedShares} onChange={e => setFixedShares(Number(e.target.value))}
               className="bg-background border border-border rounded px-2 py-1 text-xs font-mono text-foreground w-16 text-center focus:outline-none focus:border-primary" />
+          </label>
+          <label className="flex items-center justify-between">
+            <span className="text-xs font-mono text-foreground">Position size (% of portfolio){fixedShares > 0 ? " — disabled (fixed shares)" : ""}</span>
+            <input type="number" min={1} max={100} value={posSizePct} disabled={fixedShares > 0} onChange={e => setPosSizePct(Number(e.target.value))}
+              className="bg-background border border-border rounded px-2 py-1 text-xs font-mono text-foreground w-16 text-center focus:outline-none focus:border-primary disabled:opacity-40" />
           </label>
           <label className="flex items-center justify-between">
             <span className="text-xs font-mono text-foreground">Virtual portfolio ($)</span>

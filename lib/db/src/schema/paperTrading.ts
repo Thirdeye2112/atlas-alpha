@@ -9,6 +9,10 @@ export const botConfigTable = pgTable("bot_config", {
   entryCriteria:       jsonb("entry_criteria").notNull().default([]),
   maxPositions:        integer("max_positions").notNull().default(5),
   positionSizePct:     doublePrecision("position_size_pct").notNull().default(5.0),
+  // Fixed-share sizing for LEARNING mode: when > 0, the bot buys exactly this many
+  // shares of each pick (ignoring positionSizePct / virtualPortfolio %) so it can
+  // track success/miss across many names with tiny, equal exposure. 0 = use % sizing.
+  fixedShares:         integer("fixed_shares").notNull().default(0),
   exitScoreThreshold:  integer("exit_score_threshold").notNull().default(55),
   exitOnDirectionFlip: boolean("exit_on_direction_flip").notNull().default(true),
   maxHoldDays:         integer("max_hold_days").notNull().default(30),
