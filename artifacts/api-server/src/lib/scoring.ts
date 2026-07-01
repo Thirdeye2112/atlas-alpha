@@ -3,7 +3,7 @@ import type { TrendResult, MomentumResult, VolumeResult, OptionsResult, Relative
 // Bump this string whenever scoring weights or formula change materially.
 // calibration_models rows with a different score_version are automatically
 // treated as stale and excluded from inference.
-export const SCORE_VERSION = "v1.4";
+export const SCORE_VERSION = "v1.5";
 
 export type AtlasLabel = "extreme_bearish" | "bearish" | "neutral" | "bullish" | "extreme_bullish";
 export type Direction = "bullish" | "bearish" | "neutral";
@@ -101,14 +101,18 @@ export function calcAtlasScore(
   // Exhaustion (12%) are pinned; the remaining 79% budget is allocated proportionally
   // by optimalWeights from the calibration store.
   // Global defaults: Trend 24%, Momentum 18%, Volume 13%, RS 20%, Regime 4%.
+  // Fix #3: trend & RS are both lagging measures of the SAME past move (a name that
+  // ran is above its MAs AND outperforming SPY), so weighting them as two independent
+  // 44% votes over-counts stale strength. Cut their combined default weight 44%→36%
+  // and redistribute the freed 8% to the forward factors (momentum/volume/exhaustion).
   const OPTS_W  = 0.09;
-  const EXHS_W  = 0.12;
-  const FACT_BG = 1 - OPTS_W - EXHS_W; // 0.79
+  const EXHS_W  = 0.14;                 // was 0.12
+  const FACT_BG = 1 - OPTS_W - EXHS_W;  // 0.77
   const ow      = opts?.weights;
-  const trendW  = ow ? (ow.trend            / 100) * FACT_BG : 0.24;
-  const momW    = ow ? (ow.momentum         / 100) * FACT_BG : 0.18;
-  const volW    = ow ? (ow.volume           / 100) * FACT_BG : 0.13;
-  const rsW     = ow ? (ow.relativeStrength / 100) * FACT_BG : 0.20;
+  const trendW  = ow ? (ow.trend            / 100) * FACT_BG : 0.20;  // was 0.24
+  const momW    = ow ? (ow.momentum         / 100) * FACT_BG : 0.22;  // was 0.18
+  const volW    = ow ? (ow.volume           / 100) * FACT_BG : 0.15;  // was 0.13
+  const rsW     = ow ? (ow.relativeStrength / 100) * FACT_BG : 0.16;  // was 0.20
   const regW    = ow ? (ow.regime           / 100) * FACT_BG : 0.04;
 
   // V4 ML model fusion: when a prediction exists for this ticker, the model (built
@@ -121,12 +125,26 @@ export function calcAtlasScore(
   const mlW   = mlScore != null ? ML_WEIGHT : 0;
   const facS  = 1 - mlW;   // scale applied to the existing factor budget
 
+  // Fix #4: laggard-override gate. When the two laggards (trend/RS) are strong but the
+  // live forward reads (momentum + volume) do NOT confirm, the tape is likely topping on
+  // stale strength — discount the laggards so a distributing name can't score bullish on
+  // where-it's-been alone. (LIXT: trend/RS ~100 vs momentum 49 / volume 45.)
+  const laggard = (trend.trendAlignmentScore + rs.rsScore) / 2;
+  const forward = (momentum.momentumScore + volume.volumeScore) / 2;
+  // Proportional (not a cliff): the further forward lags the laggards, the harder the
+  // discount, from 1.0 (fully confirmed) down to 0.55 (stale strength, no confirmation).
+  let laggardDamp = 1;
+  if (laggard > 60 && forward < laggard - 10) {
+    const gap = Math.min(1, (laggard - forward) / 50);   // 0..1
+    laggardDamp = 1 - 0.45 * gap;
+  }
+
   const overall = clamp(
-    (trend.trendAlignmentScore      * trendW * regimeGate +
+    (trend.trendAlignmentScore      * trendW * regimeGate * laggardDamp +
      momentum.momentumScore         * momW   * regimeGate +
      volume.volumeScore             * volW +
      options.optionsScore           * OPTS_W +
-     rs.rsScore                     * rsW +
+     rs.rsScore                     * rsW * laggardDamp +
      marketRegimeScore              * regW +
      exhaustion.exhaustionScore     * EXHS_W) * facS +
     (mlScore ?? 0)                  * mlW

@@ -202,7 +202,28 @@ export function calcTrend(bars: OHLCVBar[], price: number): TrendResult {
   if (price > ema21) aboveCount++;
   if (price > ema34) aboveCount++;
 
-  const trendAlignmentScore = clamp((aboveCount / 7) * 100);
+  const alignBase = (aboveCount / 7) * 100;
+
+  // Slope / deceleration (fix #2). "Price is above the MAs" is purely lagging — a
+  // stock that spiked and is now rolling over stays above its slower MAs for weeks
+  // and would read 100 the whole way down. Fade the score when the trend is no
+  // longer *accelerating*: the medium MAs flattening, or price's distance above the
+  // SMA20 contracting (converging back = the move is exhausting, not extending).
+  const slopeLB = 5;
+  const sma20Prev = sma20Arr[sma20Arr.length - 1 - slopeLB] ?? sma20;
+  const sma50Prev = sma50Arr[sma50Arr.length - 1 - slopeLB] ?? sma50;
+  const closePrev = closes[closes.length - 1 - slopeLB] ?? price;
+  const dist20Prev = sma20Prev > 0 ? ((closePrev - sma20Prev) / sma20Prev) * 100 : priceVsSma20;
+  const sma20Rising  = sma20 > sma20Prev;
+  const sma50Rising  = sma50 > sma50Prev;
+  const distExpanding = priceVsSma20 > dist20Prev;   // pulling further above vs converging back
+  let factor = 1;
+  if (!sma50Rising)   factor -= 0.15;                 // trend MA flattening / turning
+  if (!sma20Rising)   factor -= 0.10;
+  if (!distExpanding) factor -= 0.15;                 // distance contracting = decelerating
+  factor = Math.max(0.4, factor);
+
+  const trendAlignmentScore = clamp(alignBase * factor);
 
   let trendDirection: TrendResult["trendDirection"] = "neutral";
   if (trendAlignmentScore >= 80 && priceVsSma200 > 5) trendDirection = "strong_up";
@@ -384,7 +405,61 @@ export function calcMomentum(bars: OHLCVBar[]): MomentumResult {
   };
 }
 
-export function calcVolume(bars: OHLCVBar[], avgVolume: number): VolumeResult {
+// Typical US-equity intraday CUMULATIVE volume profile (regular session 9:30–16:00
+// ET = 390 min). U-shaped: heavy open, slow midday, heavy close. Anchors are
+// [minutesFromOpen, cumulativeFractionOfDayVolume]; we linearly interpolate.
+// Used to pace-adjust relative volume so an intraday read of today's still-forming
+// daily bar isn't divided by a FULL-day average (which made RVOL collapse by
+// time-of-day — e.g. a 10:28am read showed ~0.16x when volume was actually normal).
+const INTRADAY_CUM_VOL: [number, number][] = [
+  [0, 0.0], [30, 0.115], [60, 0.20], [90, 0.27], [120, 0.33], [150, 0.39],
+  [180, 0.44], [210, 0.49], [240, 0.55], [270, 0.61], [300, 0.67], [330, 0.74],
+  [360, 0.84], [390, 1.0],
+];
+
+/** Expected fraction of a full day's volume that has traded by `minsFromOpen`. */
+function cumVolFraction(minsFromOpen: number): number {
+  if (minsFromOpen <= 0) return INTRADAY_CUM_VOL[0][1];
+  if (minsFromOpen >= 390) return 1;
+  for (let i = 1; i < INTRADAY_CUM_VOL.length; i++) {
+    const [m1, f1] = INTRADAY_CUM_VOL[i];
+    if (minsFromOpen <= m1) {
+      const [m0, f0] = INTRADAY_CUM_VOL[i - 1];
+      return f0 + (f1 - f0) * ((minsFromOpen - m0) / (m1 - m0));
+    }
+  }
+  return 1;
+}
+
+/**
+ * Fraction of a full session's volume expected to have traded as of `asOf`
+ * (or now if omitted). Returns 1 for any completed/historical day so backtests
+ * and EOD reads are unaffected; floors at 0.08 to avoid wild early-session
+ * projections. Live intraday reads get the U-shaped pace so RVOL = today's
+ * volume vs its NORMAL pace for this time of day.
+ */
+export function sessionVolumeFraction(asOf?: string): number {
+  // Historical/backtest reads pass an explicit asOf (a completed trading day).
+  if (asOf) return 1;
+  // Live: derive current Eastern-time hour:minute without a tz dependency.
+  let hh = 0, mm = 0;
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hour12: false,
+    }).formatToParts(new Date());
+    hh = Number(parts.find(p => p.type === "hour")?.value ?? "0");
+    mm = Number(parts.find(p => p.type === "minute")?.value ?? "0");
+  } catch {
+    return 1; // tz unavailable — fall back to full-day comparison
+  }
+  if (hh === 24) hh = 0; // some environments render midnight as 24
+  const minsFromOpen = hh * 60 + mm - (9 * 60 + 30); // minutes past 9:30 ET
+  if (minsFromOpen <= 0) return 1;   // pre-market: judge against full day
+  if (minsFromOpen >= 390) return 1; // after close: full day complete
+  return Math.max(0.08, cumVolFraction(minsFromOpen));
+}
+
+export function calcVolume(bars: OHLCVBar[], avgVolume: number, sessionFraction = 1): VolumeResult {
   const closes = bars.map(b => b.close);
   const volumes = bars.map(b => b.volume);
   const highs = bars.map(b => b.high);
@@ -428,7 +503,11 @@ export function calcVolume(bars: OHLCVBar[], avgVolume: number): VolumeResult {
   const vwap = totalVol > 0 ? totalPV / totalVol : closes[closes.length - 1];
 
   const currentVol = volumes[volumes.length - 1] ?? 0;
-  const relativeVolume = avgVolume > 0 ? currentVol / avgVolume : 1;
+  // Pace-adjust: today's still-forming volume is compared to the volume normally
+  // traded by THIS time of day (avgVolume × sessionFraction), not the full day.
+  // sessionFraction defaults to 1, so historical/EOD reads are unchanged.
+  const paceVolume = avgVolume * (sessionFraction > 0 ? sessionFraction : 1);
+  const relativeVolume = paceVolume > 0 ? currentVol / paceVolume : 1;
   const volumeSpike = relativeVolume > 1.5;
 
   let score = 50;
@@ -1424,9 +1503,36 @@ export function calcRelativeStrength(
   const vsIwm   = Math.round((perfPct(tickerBars, t1m) - perfPct(iwmBars, t1m)) * 10) / 10;
   const vsSector = Math.round(weightedVsSpy * 0.5 * 10) / 10;
 
-  const rsScore = clamp(50 + weightedVsSpy * 2);
+  // De-saturated RS (fix #1). The old `clamp(50 + weightedVsSpy*2)` pinned at 100
+  // for anything >+25% vs SPY, so a +71% and a +300% microcap looked identical and
+  // RS stayed maxed right at the top of a parabolic run. Rank this ticker's relative
+  // return against the rolling cross-section of everything analysed (a real
+  // percentile), so it stays discriminative; fall back to a non-saturating tanh map
+  // during cold-start before the universe distribution has filled.
+  pushRsSample(weightedVsSpy);
+  const pctile = rsPercentile(weightedVsSpy);
+  const rsScore = pctile != null
+    ? clamp(pctile)
+    : clamp(50 + 50 * Math.tanh(weightedVsSpy / 40));
 
   return { vsSpy, vsQqq, vsIwm, vsSector, rsScore, sectorName };
+}
+
+// Rolling cross-sectional distribution of relative-return values, filled as the
+// scanner/warmup analyses the universe. Used for the RS percentile above.
+const RS_SAMPLE_CAP = 3000;
+const _rsSamples: number[] = [];
+function pushRsSample(v: number): void {
+  if (!Number.isFinite(v)) return;
+  _rsSamples.push(v);
+  if (_rsSamples.length > RS_SAMPLE_CAP) _rsSamples.shift();
+}
+function rsPercentile(v: number): number | null {
+  const n = _rsSamples.length;
+  if (n < 150) return null;                 // not enough cross-section yet → fallback
+  let below = 0;
+  for (const s of _rsSamples) if (s <= v) below++;
+  return (below / n) * 100;
 }
 
 // ── Feature: Fibonacci Retracement Levels ────────────────────────────────────
