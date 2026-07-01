@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BotTemplateSignals } from "@/components/BotTemplateSignals";
@@ -1176,16 +1177,25 @@ function WhyPanel({ log }: { log: DecisionLog }) {
 
 function PositionsTab({ trades, onClose, onFlip }: { trades: PaperTrade[]; onClose: (id: number) => void; onFlip: (id: number) => void }) {
   const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [sortKey, setSortKey] = useState<"ticker" | "entryPrice" | "currentPrice" | "unrealizedPnlPct" | "currentScore" | "holdDays">("unrealizedPnlPct");
+  type SortKey = "ticker" | "entryPrice" | "currentPrice" | "unrealizedPnlPct" | "currentScore"
+    | "holdDays" | "stopPrice" | "t1Price" | "t2Price" | "status" | "entryTrigger" | "currentCyclePhase";
+  const [sortKey, setSortKey] = useState<SortKey>("unrealizedPnlPct");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const open = trades.filter(t => t.status === "open");
 
-  function toggleSort(k: typeof sortKey) {
+  function toggleSort(k: SortKey) {
     if (sortKey === k) setSortDir(d => d === "asc" ? "desc" : "asc");
     else { setSortKey(k); setSortDir("desc"); }
   }
 
-  const SortTh = ({ label, k, align = "right" }: { label: string; k: typeof sortKey; align?: "left" | "right" | "center" }) => (
+  // Value used for sorting each column. STATUS is a computed rank (T2 locked > T1 > none).
+  const sortVal = (t: PaperTrade, k: SortKey): number | string => {
+    if (k === "status") return t.t2Hit ? 2 : t.t1Hit ? 1 : 0;
+    const v = t[k as keyof PaperTrade] as number | string | null | undefined;
+    return v ?? (k === "ticker" || k === "entryTrigger" || k === "currentCyclePhase" ? "" : -Infinity);
+  };
+
+  const SortTh = ({ label, k, align = "right" }: { label: string; k: SortKey; align?: "left" | "right" | "center" }) => (
     <th
       className={cn(
         "py-2 px-2 cursor-pointer hover:text-foreground transition-colors whitespace-nowrap select-none",
@@ -1198,8 +1208,8 @@ function PositionsTab({ trades, onClose, onFlip }: { trades: PaperTrade[]; onClo
   );
 
   const sortedOpen = [...open].sort((a, b) => {
-    const av = (a[sortKey] as number | string | null | undefined) ?? (sortKey === "ticker" ? "" : -Infinity);
-    const bv = (b[sortKey] as number | string | null | undefined) ?? (sortKey === "ticker" ? "" : -Infinity);
+    const av = sortVal(a, sortKey);
+    const bv = sortVal(b, sortKey);
     const diff = av < bv ? -1 : av > bv ? 1 : 0;
     return sortDir === "asc" ? diff : -diff;
   });
@@ -1221,13 +1231,13 @@ function PositionsTab({ trades, onClose, onFlip }: { trades: PaperTrade[]; onClo
             <SortTh label="ENTRY" k="entryPrice" />
             <SortTh label="CURRENT" k="currentPrice" />
             <SortTh label="P&L" k="unrealizedPnlPct" />
-            <th className="text-left py-2 px-2">STOP</th>
-            <th className="text-right py-2 px-2">T1</th>
-            <th className="text-right py-2 px-2">T2</th>
-            <th className="text-center py-2 px-2">STATUS</th>
-            <th className="text-left py-2 px-2">TRIGGER</th>
+            <SortTh label="STOP" k="stopPrice" align="left" />
+            <SortTh label="T1" k="t1Price" />
+            <SortTh label="T2" k="t2Price" />
+            <SortTh label="STATUS" k="status" align="center" />
+            <SortTh label="TRIGGER" k="entryTrigger" align="left" />
             <SortTh label="SCORE" k="currentScore" />
-            <th className="text-center py-2 px-2">CYCLE</th>
+            <SortTh label="CYCLE" k="currentCyclePhase" align="center" />
             <SortTh label="HOLD" k="holdDays" />
             <th className="text-center py-2 px-2">CLOSE</th>
           </tr>
@@ -1265,7 +1275,14 @@ function PositionsTab({ trades, onClose, onFlip }: { trades: PaperTrade[]; onClo
               >
                 <td className="py-2 px-2">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <div className="font-bold text-primary">{t.ticker}</div>
+                    <Link
+                      href={`/?ticker=${t.ticker}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="font-bold text-primary hover:underline hover:text-primary/80 cursor-pointer"
+                      title={`Open ${t.ticker} in Dashboard`}
+                    >
+                      {t.ticker}
+                    </Link>
                     <span className={cn(
                       "text-[9px] font-bold font-mono px-1 py-0.5 rounded border",
                       isShort
