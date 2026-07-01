@@ -31,6 +31,14 @@ export interface FormingPattern {
   upperLine: { time: string; price: number }[];  // upper trendline / flag channel top (2 pts)
   lowerLine: { time: string; price: number }[];  // lower trendline / flag channel bottom (2 pts)
   poleLine?: { time: string; price: number }[];  // flag/pennant pole (flagpole), 2 pts
+  // ── macro-structure fields (multi-month triangle spanning the whole range) ──
+  macro?: boolean;                 // true for the long-lookback structural triangle
+  upperEdgeNow?: number;           // where the upper (resistance) trendline sits TODAY
+  lowerEdgeNow?: number;           // where the lower (support) trendline sits TODAY
+  apexBars?: number;               // bars until the two trendlines converge (apex)
+  positionInApex?: number;         // 0 = at lower edge, 1 = at upper edge (how coiled)
+  state?: "inside" | "breakout" | "breakdown";  // current position vs the edges
+  spanBars?: number;               // how many bars the structure spans (age of the pattern)
 }
 
 // Data-driven edge (synced from atlas-research/reports/stocks/pattern_edge.json).
@@ -69,6 +77,40 @@ function swingPivots(bars: OHLCVBar[], window = 3): Pivot[] {
     else if (isLow) piv.push({ idx: i, price: bars[i].low, kind: "L" });
   }
   return piv;
+}
+
+/** Envelope (touch-point) trendline through pivots — the line a chartist draws by
+ *  connecting the extreme touches, not a regression through the middle.
+ *  side "upper": the line that sits ABOVE all pivots yet as low as possible (rests on
+ *  the high tops). side "lower": BELOW all pivots yet as high as possible (rests on the
+ *  low bottoms). Brute-force over pivot pairs (few pivots), pick the tightest valid line. */
+function envelopeLine(pts: { idx: number; price: number }[], side: "upper" | "lower"): { slope: number; ic: number } | null {
+  if (pts.length < 2) return null;
+  const tol = 0.005;                                // 0.5% touch tolerance
+  let best: { slope: number; ic: number; valLast: number } | null = null;
+  const lastIdx = pts[pts.length - 1].idx;
+  for (let i = 0; i < pts.length; i++) {
+    for (let j = i + 1; j < pts.length; j++) {
+      const a = pts[i], b = pts[j];
+      if (b.idx === a.idx) continue;
+      const slope = (b.price - a.price) / (b.idx - a.idx);
+      const ic = a.price - slope * a.idx;
+      // the line must bound all pivots on the correct side (within tolerance)
+      let valid = true;
+      for (const p of pts) {
+        const lineY = slope * p.idx + ic;
+        if (side === "upper" && p.price > lineY * (1 + tol)) { valid = false; break; }
+        if (side === "lower" && p.price < lineY * (1 - tol)) { valid = false; break; }
+      }
+      if (!valid) continue;
+      const valLast = slope * lastIdx + ic;
+      // upper: the tightest (lowest) bounding line; lower: the tightest (highest) one
+      if (!best || (side === "upper" ? valLast < best.valLast : valLast > best.valLast)) {
+        best = { slope, ic, valLast };
+      }
+    }
+  }
+  return best ? { slope: best.slope, ic: best.ic } : null;
 }
 
 /** Least-squares slope+intercept through (idx, price) points. */
@@ -166,11 +208,117 @@ function detectFormingFlag(bars: OHLCVBar[]): FormingPattern | null {
 }
 
 /**
+ * Detect the MACRO structure the eye draws: converging trendlines fitted across the
+ * WHOLE range (major pivots, long lookback) — the multi-month symmetric / ascending /
+ * descending triangle. Unlike detectFormingPatterns' last-4-pivot window, this anchors
+ * to every major high and low, computes where each trendline sits TODAY, the apex, how
+ * coiled price is, and whether it has broken out — so the system sees the same triangle
+ * you draw and can trigger off the actual trendline (not a short-window approximation).
+ */
+export function detectMacroStructure(bars: OHLCVBar[]): FormingPattern | null {
+  const n = bars.length;
+  if (n < 60) return null;                         // need real history for a macro read
+  // major pivots: window scales with history (≈ a trading month on daily), min 5.
+  const win = Math.max(5, Math.min(12, Math.round(n / 40)));
+  const piv = swingPivots(bars, win);
+  const allHighs = piv.filter(p => p.kind === "H");
+  const allLows  = piv.filter(p => p.kind === "L");
+  if (allHighs.length < 2 || allLows.length < 2) return null;
+
+  // Anchor to the consolidation AFTER the dominant peak — a triangle forms from the
+  // highest high forward (descending resistance) + the higher-lows under it. Fitting
+  // across the whole range would drag the lines through any prior base breakout.
+  const peak = allHighs.reduce((m, p) => (p.price > m.price ? p : m), allHighs[0]);
+  let highs = allHighs.filter(p => p.idx >= peak.idx);
+  let lows  = allLows.filter(p => p.idx >= peak.idx);
+  // need enough post-peak structure; if the peak is too recent, fall back to the
+  // second-half of the range so a still-forming triangle isn't missed.
+  if (highs.length < 2 || lows.length < 2 || (n - 1 - peak.idx) < 20) {
+    const halfIdx = Math.floor(bars.length / 2);
+    highs = allHighs.filter(p => p.idx >= halfIdx);
+    lows  = allLows.filter(p => p.idx >= halfIdx);
+  }
+  if (highs.length < 2 || lows.length < 2) return null;
+
+  // envelope (touch-point) lines so the edges match a hand-drawn triangle
+  const hiLine = envelopeLine(highs.map(p => ({ idx: p.idx, price: p.price })), "upper");
+  const loLine = envelopeLine(lows.map(p => ({ idx: p.idx, price: p.price })), "lower");
+  if (!hiLine || !loLine) return null;
+
+  const last = n - 1;
+  const upperNow = hiLine.slope * last + hiLine.ic;
+  const lowerNow = loLine.slope * last + loLine.ic;
+  if (upperNow <= lowerNow) return null;           // lines already crossed — no valid apex ahead
+
+  // must be CONVERGING (upper falling relative to lower): lines meet in the future
+  const converging = hiLine.slope < loLine.slope;
+  if (!converging) return null;
+  const apexBars = Math.round((loLine.ic - hiLine.ic) / (hiLine.slope - loLine.slope)) - last;
+  if (apexBars <= 0 || apexBars > n) return null;  // apex must be ahead and plausibly near
+
+  // classify the converging shape from the two slopes
+  const FLAT = 1e-4 * (upperNow || 1);             // ~flat threshold scaled to price
+  let geo: string;
+  if (Math.abs(hiLine.slope) < FLAT && loLine.slope > FLAT) geo = "ascending_triangle";
+  else if (Math.abs(loLine.slope) < FLAT && hiLine.slope < -FLAT) geo = "descending_triangle";
+  else if (hiLine.slope > 0 && loLine.slope > 0) geo = "rising_wedge";
+  else if (hiLine.slope < 0 && loLine.slope < 0) geo = "falling_wedge";
+  else geo = "symmetric_triangle";
+
+  const px = bars[last].close;
+  const width = upperNow - lowerNow;
+  const positionInApex = Math.max(0, Math.min(1, (px - lowerNow) / width));
+  const state: "inside" | "breakout" | "breakdown" =
+    px > upperNow * 1.005 ? "breakout" : px < lowerNow * 0.995 ? "breakdown" : "inside";
+
+  // measured move = the widest height of the structure, projected from the breakout edge
+  const firstIdx = Math.min(highs[0].idx, lows[0].idx);
+  const baseHeight = (hiLine.slope * firstIdx + hiLine.ic) - (loLine.slope * firstIdx + loLine.ic);
+  const breakoutLevel = state === "breakdown" ? lowerNow : upperNow;
+  const rvol = relVol(bars);
+
+  const upperLine = [
+    { time: bars[firstIdx].time, price: r4(hiLine.slope * firstIdx + hiLine.ic) },
+    { time: bars[last].time,     price: r4(upperNow) },
+  ];
+  const lowerLine = [
+    { time: bars[firstIdx].time, price: r4(loLine.slope * firstIdx + loLine.ic) },
+    { time: bars[last].time,     price: r4(lowerNow) },
+  ];
+
+  // direction: after a break, follow the break; while inside, use the data-driven lean.
+  const e = PATTERN_EDGE[geo];
+  const direction: "long" | "short" =
+    state === "breakout" ? "long" : state === "breakdown" ? "short" : e.direction;
+  const dirSign = direction === "long" ? 1 : -1;
+  const target = r4(breakoutLevel + dirSign * baseHeight);        // measured move
+  const expectedLow = r4(state === "breakdown" ? breakoutLevel - baseHeight : lowerNow);
+  let conf = Math.min(95, 40 + (e.win - 50) * 1.5 + 10);
+  if (rvol && rvol > 1.3) conf = Math.min(99, conf + 10);          // volume expansion confirms a break
+  if (state !== "inside") conf = Math.min(99, conf + 8);           // already broken = higher conviction
+
+  return {
+    name: geo, label: `${LABELS[geo]} (macro)`, status: "forming",
+    direction, flipped: e.flipped,
+    breakoutLevel: r4(breakoutLevel), barsToBreakout: Math.max(1, apexBars),
+    target, expectedLow, confidence: Math.round(conf), winRate: e.win, sampleN: e.n,
+    rvol: rvol ? Math.round(rvol * 100) / 100 : null,
+    upperLine, lowerLine,
+    macro: true, upperEdgeNow: r4(upperNow), lowerEdgeNow: r4(lowerNow),
+    apexBars: Math.max(1, apexBars), positionInApex: r4(positionInApex), state,
+    spanBars: last - firstIdx,
+  };
+}
+
+/**
  * Detect forming (not-yet-broken-out) flags / wedges / triangles / rectangles on the
  * right edge and project breakout, target, expected low, and bars-to-fulfilment.
  */
 export function detectFormingPatterns(bars: OHLCVBar[]): FormingPattern[] {
   const out: FormingPattern[] = [];
+  // macro structure first (the multi-month triangle spanning the whole range)
+  const macro = detectMacroStructure(bars);
+  if (macro) out.push(macro);
   if (bars.length < 30) return out;
 
   // Flags first (pole + channel is the most recognisable forming shape).
