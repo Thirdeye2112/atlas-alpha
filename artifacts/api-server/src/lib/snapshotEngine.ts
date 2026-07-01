@@ -158,7 +158,9 @@ export async function resolveOutcomes(): Promise<number> {
       isNull(signalSnapshotsTable.outcomeResolvedAt),
       sql`snapshot_date <= CURRENT_DATE - INTERVAL '1 day'`,
     ))
-    .limit(200);
+    // grouped by ticker below (one OHLCV fetch each), so a larger batch clears the
+    // backlog quickly without proportionally more network calls.
+    .limit(1500);
 
   if (!unresolved.length) return 0;
 
@@ -173,7 +175,10 @@ export async function resolveOutcomes(): Promise<number> {
 
   for (const [ticker, snapshots] of byTicker) {
     let bars: Awaited<ReturnType<typeof fetchOHLCV>>;
-    try { bars = await fetchOHLCV(ticker, "1D", "3mo"); }
+    // (ticker, period, interval) — was called as ("1D","3mo") i.e. period="1D"
+    // (one day of data) at interval="3mo", which returned ~no bars, so forward
+    // returns could never be computed and every snapshot stayed unresolved.
+    try { bars = await fetchOHLCV(ticker, "3mo", "1d"); }
     catch { continue; }
     if (!bars.length) continue;
 
