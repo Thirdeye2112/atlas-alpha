@@ -37,6 +37,13 @@ export interface FormingPattern {
   upperLine: { time: string; price: number }[];
   lowerLine: { time: string; price: number }[];
   poleLine?: { time: string; price: number }[];
+  macro?: boolean;
+  upperEdgeNow?: number;
+  lowerEdgeNow?: number;
+  apexBars?: number;
+  positionInApex?: number;
+  state?: "inside" | "breakout" | "breakdown";
+  spanBars?: number;
 }
 
 export type DrawingTool = "pointer" | "trendline" | "hline" | "ray" | "rectangle";
@@ -375,9 +382,29 @@ export default function LightweightChart({
       ctx.globalAlpha = 0.95;
       // flag pole (thick, direction-colored)
       if (fp.poleLine && fp.poleLine.length === 2) drawSeg(fp.poleLine[0], fp.poleLine[1], dirColor, 3, []);
-      // pattern walls / flag channel (amber, solid)
-      const wallEnd = drawSeg(fp.upperLine[0], fp.upperLine[1], amber, 1.5, []);
-      drawSeg(fp.lowerLine[0], fp.lowerLine[1], amber, 1.5, []);
+      // pattern walls / flag channel — macro triangle gets thicker cyan lines + a label
+      const isMacro = fp.macro === true;
+      const wallColor = isMacro ? "rgba(56,189,248,0.95)" : amber;
+      const wallW     = isMacro ? 2.25 : 1.5;
+      const wallEnd = drawSeg(fp.upperLine[0], fp.upperLine[1], wallColor, wallW, []);
+      drawSeg(fp.lowerLine[0], fp.lowerLine[1], wallColor, wallW, []);
+      if (isMacro) {
+        // shade the retest zone: between the broken upper edge (now support) and the
+        // lower edge — where a throwback would look to hold.
+        const xu = xOf(fp.upperLine[1].time);
+        const yUp = fp.upperEdgeNow != null ? yOf(fp.upperEdgeNow) : yOf(fp.upperLine[1].price);
+        const yLo = fp.lowerEdgeNow != null ? yOf(fp.lowerEdgeNow) : yOf(fp.lowerLine[1].price);
+        if (xu != null && yUp != null && yLo != null) {
+          ctx.globalAlpha = 0.10; ctx.fillStyle = "rgba(56,189,248,1)";
+          ctx.fillRect(xu - barPx * 6, Math.min(yUp, yLo), barPx * 12, Math.abs(yLo - yUp));
+          ctx.globalAlpha = 0.95;
+          // label the triangle above the upper edge
+          ctx.font = `bold 10px "JetBrains Mono","Fira Code",monospace`; ctx.textAlign = "left";
+          ctx.fillStyle = "rgba(56,189,248,1)";
+          const st = fp.state === "breakout" ? "▲ BREAKOUT" : fp.state === "breakdown" ? "▼ BREAKDOWN" : "◆ inside";
+          ctx.fillText(`${fp.label} · ${st} · apex ~${fp.apexBars}b`, (xOf(fp.upperLine[0].time) ?? xu) + 6, (yOf(fp.upperLine[0].price) ?? yUp) - 6);
+        }
+      }
       // project breakout/target/exit into the future: x = last bar x + barSpacing * bars
       const lastT = fp.upperLine[1].time;
       const lastX = xOf(lastT);

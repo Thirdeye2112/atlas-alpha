@@ -1,10 +1,10 @@
-import { pgTable, serial, text, integer, boolean, timestamp, index } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, doublePrecision, boolean, timestamp, index } from "drizzle-orm/pg-core";
 
 export const alertsTable = pgTable("alerts", {
   id:              serial("id").primaryKey(),
   ticker:          text("ticker").notNull(),
-  conditionType:   text("condition_type").notNull(), // 'score_above' | 'score_below' | 'direction_change'
-  threshold:       integer("threshold"),             // for score_above / score_below
+  conditionType:   text("condition_type").notNull(), // 'score_above'|'score_below'|'direction_change'|'price_above'|'price_below'
+  threshold:       doublePrecision("threshold"),     // score (int) OR price (decimal) — double so price alerts work
   lastKnownDir:    text("last_known_dir"),            // tracks previous direction for direction_change
   isActive:        boolean("is_active").notNull().default(true),
   lastTriggeredAt: timestamp("last_triggered_at", { withTimezone: true }),
