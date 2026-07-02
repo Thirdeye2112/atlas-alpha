@@ -18,6 +18,7 @@ import { Search, Info, TrendingUp, TrendingDown, Minus, Clock, X, ChevronDown, C
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import IntelPanel from "@/components/IntelPanel";
+import ConfluencePanel, { type ConfluenceEvidence } from "@/components/ConfluencePanel";
 
 
 interface BacktestPoint  { x: number; y: number; date: string; }
@@ -1640,6 +1641,9 @@ export default function Dashboard() {
               <ScoreGauge score={displayAnalysis.atlasScore.overall} size={220} strokeWidth={18} />
               <div className="mt-4 w-full">
                 <IntelPanel ticker={urlTicker} analysis={displayAnalysis} />
+              </div>
+              <div className="mt-3 w-full">
+                <ConfluencePanel confluence={(displayAnalysis as unknown as { confluence?: ConfluenceEvidence | null }).confluence} />
               </div>
 
               <div className="mt-6 flex items-center justify-center gap-2">
