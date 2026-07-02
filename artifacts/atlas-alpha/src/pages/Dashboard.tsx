@@ -895,7 +895,7 @@ export default function Dashboard() {
   // patterns from /intraday-patterns. Only runs when overlays are on and the interval
   // is intraday (the 1d timeframes use displayAnalysis.formingPatterns directly).
   const isIntradayTf = ["1m", "5m", "15m", "30m", "60m", "90m"].includes(timeframe.interval);
-  const { data: intradayPatterns } = useQuery<{ forming?: unknown[]; signals?: unknown[] }>({
+  const { data: intradayPatterns } = useQuery<{ forming?: unknown[]; overlays?: unknown[] }>({
     queryKey: ["intraday-patterns", ticker, timeframe.interval, timeframe.period],
     queryFn: async ({ signal }) => {
       const url = `/api/stock/${encodeURIComponent(ticker)}/intraday-patterns?interval=${timeframe.interval}&period=${timeframe.period}`;
@@ -1008,11 +1008,13 @@ export default function Dashboard() {
     return [];
   }, [showOverlays, timeframe.interval, isIntradayTf, displayAnalysis, intradayPatterns]);
 
-  const chartSignalMarkers = useMemo<ChartSignalMarker[]>(() => {
+  // Confirmed chart PATTERNS (drawn shapes: flag channels, triangle/neckline lines,
+  // target levels) — NOT the candlestick signal pins. Daily on 1d, intraday otherwise.
+  const chartOverlays = useMemo<PatternOverlay[]>(() => {
     if (!showOverlays) return [];
     if (timeframe.interval === "1d")
-      return ((displayAnalysis as { chartSignals?: ChartSignalMarker[] } | undefined)?.chartSignals) ?? [];
-    if (isIntradayTf) return (intradayPatterns?.signals as ChartSignalMarker[] | undefined) ?? [];
+      return ((displayAnalysis as { patternOverlays?: PatternOverlay[] } | undefined)?.patternOverlays) ?? [];
+    if (isIntradayTf) return (intradayPatterns?.overlays as PatternOverlay[] | undefined) ?? [];
     return [];
   }, [showOverlays, timeframe.interval, isIntradayTf, displayAnalysis, intradayPatterns]);
 
@@ -1208,12 +1210,13 @@ export default function Dashboard() {
                   onCandleClick={timeframe.interval === "1d" || timeframe.interval === "1wk" || timeframe.interval === "1mo" ? handleCandleClick : undefined}
                   priceLines={[]}
                   lineSeries={anchoredVwapSeries}
-                  // Signal pins + forming-pattern trendlines are toggle-gated (Overlays
-                  // button). Daily patterns on 1d intervals; interval-matched intraday
-                  // patterns (incl. 5m) otherwise.
-                  signals={chartSignalMarkers}
+                  // PATTERNS toggle draws chart SHAPES only (no candlestick signal
+                  // pins): confirmed pattern overlays (flag/triangle/neckline geometry +
+                  // targets) and forming-pattern trendlines. Daily on 1d; intraday
+                  // (incl. 5m) fetched at the matching interval otherwise.
+                  signals={[]}
                   showSwingPoints={false}
-                  patternOverlays={[]}
+                  patternOverlays={chartOverlays}
                   formingPatterns={chartForming}
                   scoreOverlay={[]}
                   activeTool={drawingTool}
