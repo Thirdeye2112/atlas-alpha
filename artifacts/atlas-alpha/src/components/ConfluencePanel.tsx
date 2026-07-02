@@ -34,11 +34,27 @@ const C = {
 
 const TIER_LABEL = ["none", "low", "moderate", "high", "max"] as const
 
+// Readable timeframe labels + a top-down "full scope" order: daily context → daily
+// patterns → candle → intraday, so the stack reads the way the setup is actually read.
+const LAYER_META: Record<string, { label: string; rank: number }> = {
+  L2_trend:     { label: "Daily trend",     rank: 0 },
+  L3_structure: { label: "Daily structure", rank: 1 },
+  L0_candle:    { label: "Candle",          rank: 2 },
+  L1_5m:        { label: "5m intraday",     rank: 3 },
+}
+const humanize = (s: string) => s.replace(/_/g, " ")
+// A layer with no own weight but a note like "x0.6" is a DAMP (out-of-trend / falling
+// knife), not a neutral 0 — surface the multiplier so it doesn't read as "did nothing".
+const dampMult = (note?: string) => note?.match(/x(0?\.\d+)/)?.[1] ?? null
+
 export function ConfluencePanel({ confluence }: { confluence?: ConfluenceEvidence | null }) {
   if (!confluence) return null
   const { lift, tier, layers, veto, asOf } = confluence
   const gateCrossed = tier >= 1
   const tierColor = tier >= 3 ? C.green : tier >= 1 ? C.yellow : C.dim
+  const rank = (l: ConfluenceLayer) => LAYER_META[l.layer]?.rank ?? 9
+  const ordered = [...layers].sort((a, b) => rank(a) - rank(b))
+  const hasIntraday = layers.some(l => l.layer === "L1_5m")
 
   return (
     <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10, fontSize: 11 }}>
@@ -60,19 +76,25 @@ export function ConfluencePanel({ confluence }: { confluence?: ConfluenceEvidenc
           : "No validated confluence — confidence unchanged"}
       </div>
 
-      {/* per-layer evidence */}
+      {/* per-layer evidence — full scope, top-down by timeframe */}
       <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-        {layers.map((l, i) => (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10 }}>
-            <span style={{ color: C.dim, width: 78 }}>{l.layer}</span>
-            <span style={{ color: l.validated ? C.text : C.dim, flex: 1 }}>
-              {l.signal}{l.dir ? ` (${l.dir})` : ""}
-            </span>
-            {l.weight > 0
-              ? <span style={{ color: C.green, fontWeight: 700, width: 42, textAlign: "right" }}>+{l.weight.toFixed(2)}</span>
-              : <span style={{ color: C.dim, width: 42, textAlign: "right" }}>{l.validated ? "0" : "—"}</span>}
-          </div>
-        ))}
+        {ordered.map((l, i) => {
+          const meta = LAYER_META[l.layer]
+          const damp = dampMult(l.note)
+          return (
+            <div key={i} title={l.note ?? undefined} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10 }}>
+              <span style={{ color: C.dim, width: 82 }}>{meta?.label ?? l.layer}</span>
+              <span style={{ color: l.weight > 0 ? C.text : l.validated ? C.text : C.dim, flex: 1 }}>
+                {humanize(l.signal)}{l.dir ? ` (${l.dir})` : ""}
+              </span>
+              {l.weight > 0
+                ? <span style={{ color: C.green, fontWeight: 700, width: 46, textAlign: "right" }}>+{l.weight.toFixed(2)}</span>
+                : damp
+                  ? <span style={{ color: C.yellow, fontWeight: 700, width: 46, textAlign: "right" }}>×{damp}</span>
+                  : <span style={{ color: C.dim, width: 46, textAlign: "right" }}>{l.validated ? "0" : "—"}</span>}
+            </div>
+          )
+        })}
       </div>
 
       {/* contrary-evidence veto */}
@@ -83,7 +105,7 @@ export function ConfluencePanel({ confluence }: { confluence?: ConfluenceEvidenc
       )}
 
       <div style={{ color: C.dim, fontSize: 9, marginTop: 6 }}>
-        daily signal · as of {asOf?.slice(0, 10)} · lifts confidence only
+        {hasIntraday ? "daily + 5m intraday" : "daily signal"} · as of {asOf?.slice(0, 10)} · lifts confidence only
       </div>
     </div>
   )
