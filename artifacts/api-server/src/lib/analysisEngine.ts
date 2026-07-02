@@ -20,6 +20,7 @@ import { getUniverse } from "./scannerUniverse.js";
 import { calibrationStore } from "./calibrationStore.js";
 import { predictionStore } from "./predictionStore.js";
 import { confluenceStore, type ConfluenceRead } from "./confluenceStore.js";
+import { computeLiveConfluence } from "./confluenceLive.js";
 import { runCalibrationBackground } from "./backtestEngine.js";
 import { logger } from "./logger.js";
 
@@ -81,8 +82,19 @@ function buildResult(
   const exhaustion     = calcExhaustion(bars, momentum, volume, trend, volatility);
   const calEntry       = calibrationStore.getFitted(sym, 10);
   const mlScore        = predictionStore.getMlScore(sym);   // V4 model rank (all 47 features), or null
-  // Validated confluence gate (research deep_dive_events). Lifts confidence only; null-safe.
-  const confluence     = confluenceStore.getRead(sym);
+
+  // calcPatterns runs on already-fetched daily bars (fast, ~0.1ms per ticker); always
+  // computed so pattern labels surface in scanner rows AND feed the live confluence read.
+  const patterns     = calcPatterns(bars, trend, volatility);
+
+  // Validated confluence gate — computed LIVE from this request's detections (fresh, asOf
+  // = latest bar) rather than the up-to-3-day-stale nightly deep_dive_events table. The
+  // nightly store only supplements the two live-blind validated patterns. Lifts
+  // confidence only, never `overall`; null-safe.
+  const confluence     = computeLiveConfluence(
+    patterns.patterns, trend, momentum, confluenceStore.getRead(sym),
+    bars[bars.length - 1]?.time ?? new Date().toISOString(),
+  );
   const atlasScore     = calcAtlasScore(
     trend, momentum, volume, options, rs,
     regimeIndicators.regimeScore, volatility.expectedMovePercent, exhaustion,
@@ -90,10 +102,7 @@ function buildResult(
       confluenceLift: confluence?.lift ?? null }
   );
 
-  // calcPatterns runs on already-fetched daily bars (fast, ~0.1ms per ticker);
-  // always computed so pattern labels surface in scanner rows.
   // calcChartSignals / patternOverlays remain skipped in light-mode (expensive).
-  const patterns     = calcPatterns(bars, trend, volatility);
   const chartSignals = lightMode ? [] : calcChartSignals(bars);
   const patternOverlays  = lightMode ? [] : calcPatternOverlaysMultiTF(bars, weeklyBars);
   // Effort-vs-result volume read; forming patterns are tagged confirmed/contradicted

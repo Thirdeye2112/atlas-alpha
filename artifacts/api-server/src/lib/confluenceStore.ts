@@ -13,14 +13,22 @@ import { Pool } from "pg";
 import { logger } from "./logger.js";
 
 // Walk-forward OOS 5d edges (%) = the layer weights. 0 = not validated (raw candles etc).
-const W_BULL_STRUCT: Record<string, number> = {
+// Exported so the LIVE path (confluenceLive.ts) computes the same validated lift from
+// per-request detections instead of the stale nightly table — one source of truth.
+export const W_BULL_STRUCT: Record<string, number> = {
   bull_pennant: 0.79, falling_wedge: 0.60, hs_bottom: 0.29, descending_channel_break: 0.22,
 };
-const W_BEAR_STRUCT: Record<string, number> = {
+export const W_BEAR_STRUCT: Record<string, number> = {
   bear_pennant: 0.52, hs_top: 0.36, rising_wedge: 0.21, triple_top: 0.18,
 };
-const W_CANDLE_OVERSOLD = 0.26;   // oversold-gated bullish candle (raw candle = 0)
-const OUT_OF_TREND_DAMP = 0.50;   // patterns less reliable when price < EMA200
+export const W_CANDLE_OVERSOLD = 0.26;   // oversold-gated bullish candle (raw candle = 0)
+export const OUT_OF_TREND_DAMP = 0.50;   // patterns less reliable when price < EMA200
+
+/** Confluence tier from the summed lift — the validated GATE (tier>=1) is the robust
+ *  signal (15/15 OOS years); finer tiers are informational. Shared by store + live path. */
+export function tierFor(lift: number): number {
+  return lift <= 0 ? 0 : lift < 0.3 ? 1 : lift < 0.6 ? 2 : lift < 1.0 ? 3 : 4;
+}
 
 export interface ConfluenceLayer {
   layer: string; signal: string; dir?: string; weight: number; validated: boolean; note?: string;
@@ -89,8 +97,7 @@ function computeRead(
   if (!above200) { lift *= OUT_OF_TREND_DAMP; layers.push({ layer: "L2_trend", signal: "below_ema200", weight: 0, validated: false, note: `out-of-trend x${OUT_OF_TREND_DAMP}` }); }
   else { layers.push({ layer: "L2_trend", signal: "above_ema200", weight: 0, validated: false, note: "in-trend" }); }
   lift = Math.round(lift * 1000) / 1000;
-  const tier = lift <= 0 ? 0 : lift < 0.3 ? 1 : lift < 0.6 ? 2 : lift < 1.0 ? 3 : 4;
-  return { lift, tier, layers, veto, asOf };
+  return { lift, tier: tierFor(lift), layers, veto, asOf };
 }
 
 export async function refreshConfluence(): Promise<void> {
