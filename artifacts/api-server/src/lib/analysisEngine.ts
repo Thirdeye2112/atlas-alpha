@@ -20,7 +20,7 @@ import { getUniverse } from "./scannerUniverse.js";
 import { calibrationStore } from "./calibrationStore.js";
 import { predictionStore } from "./predictionStore.js";
 import { confluenceStore, type ConfluenceRead } from "./confluenceStore.js";
-import { computeLiveConfluence } from "./confluenceLive.js";
+import { computeLiveConfluence, confirm5mVwap } from "./confluenceLive.js";
 import { runCalibrationBackground } from "./backtestEngine.js";
 import { logger } from "./logger.js";
 
@@ -67,6 +67,8 @@ function buildResult(
   /** Skip display-only signals (chart pins, structural patterns) — for scanner/warmup paths */
   lightMode = false,
   weeklyBars: OHLCVBar[] = [],
+  /** Recent 5m bars for the L1 intraday VWAP-confirmation layer; empty in light/historical paths. */
+  bars5m: OHLCVBar[] = [],
 ): AnalysisResult {
   const trend          = calcTrend(bars, price);
   const momentum       = calcMomentum(bars);
@@ -91,9 +93,11 @@ function buildResult(
   // = latest bar) rather than the up-to-3-day-stale nightly deep_dive_events table. The
   // nightly store only supplements the two live-blind validated patterns. Lifts
   // confidence only, never `overall`; null-safe.
+  const confirm5m      = lightMode ? null : confirm5mVwap(bars5m);
   const confluence     = computeLiveConfluence(
     patterns.patterns, trend, momentum, confluenceStore.getRead(sym),
     bars[bars.length - 1]?.time ?? new Date().toISOString(),
+    confirm5m,
   );
   const atlasScore     = calcAtlasScore(
     trend, momentum, volume, options, rs,
@@ -179,18 +183,20 @@ export async function runFullAnalysis(ticker: string, lightMode = false): Promis
     return cached;
   }
 
-  const [quote, bars, spyBars, qqqBars, iwmBars, weeklyBars] = await Promise.all([
+  const [quote, bars, spyBars, qqqBars, iwmBars, weeklyBars, bars5m] = await Promise.all([
     fetchQuote(sym),
     fetchOHLCV(sym, "1y", "1d"),
     fetchOHLCV("SPY", "1y", "1d"),
     fetchOHLCV("QQQ", "1y", "1d"),
     fetchOHLCV("IWM", "1y", "1d"),
     lightMode ? Promise.resolve([]) : fetchOHLCV(sym, "2y", "1wk"),
+    // 5m bars for the L1 intraday VWAP-confirmation layer (full analysis only; cached).
+    lightMode ? Promise.resolve([]) : fetchOHLCV(sym, "5d", "5m").catch(() => [] as OHLCVBar[]),
   ]);
 
   if (bars.length < 30) throw new Error(`Insufficient historical data for ${sym}`);
 
-  const result = buildResult(sym, quote.price, bars, spyBars, qqqBars, iwmBars, quote as unknown as Record<string, unknown>, undefined, lightMode, weeklyBars);
+  const result = buildResult(sym, quote.price, bars, spyBars, qqqBars, iwmBars, quote as unknown as Record<string, unknown>, undefined, lightMode, weeklyBars, bars5m);
 
   analysisCache.set(cacheKey, result);
   logger.info({ ticker: sym, atlasScore: result.atlasScore.overall }, "Analysis complete");

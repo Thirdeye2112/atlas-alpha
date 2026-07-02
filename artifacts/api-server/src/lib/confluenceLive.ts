@@ -17,10 +17,46 @@
 // The regime crash-guard is applied downstream in scoring.ts (unchanged).
 // ─────────────────────────────────────────────────────────────────────────────
 import type { TrendResult, MomentumResult } from "./indicators.js";
+import type { OHLCVBar } from "./marketData.js";
 import {
   W_BULL_STRUCT, W_BEAR_STRUCT, W_CANDLE_OVERSOLD, OUT_OF_TREND_DAMP, tierFor,
   type ConfluenceRead, type ConfluenceLayer,
 } from "./confluenceStore.js";
+
+// L1 (5m intraday confirmation) — validated 2026-07-02 on a 120-liquid basket, 2023+:
+// among bullish daily setups, sessions that RECLAIM+HOLD VWAP nearly double the 5d edge
+// (+1.05%→+1.93%, +7pp hit, t=9.36, n=3295) while sessions that fail to hold VWAP are a
+// coin-flip (+0.17%, 49%). So a held-VWAP session CONFIRMS an existing bullish setup, and a
+// failed one is the validated "falling-knife" caution. Only applies WHEN a bullish setup is
+// present (structure/candle lift or oversold) — the study validated it as a confirmation,
+// not a standalone signal. See reports/validity/DAILY_5M_CORROBORATION.md.
+const W_5M_CONFIRM = 0.50;   // confirmation bonus (< the +0.88% marginal edge; bounded)
+const DAMP_5M_FAIL = 0.60;   // failed-session damp on an otherwise-bullish setup
+
+/**
+ * Intraday confirmation from 5m bars, replicating the research `confirm_5m` exactly:
+ * on the MOST RECENT session, using session-anchored cumulative VWAP (typical price),
+ * "confirmed" = price reclaimed VWAP intraday (crossed below→above) AND closed the
+ * session above VWAP; "failed" = it didn't hold; null = not enough data.
+ */
+export function confirm5mVwap(bars5m: OHLCVBar[]): "confirmed" | "failed" | null {
+  if (!bars5m || bars5m.length < 6) return null;
+  const dayKey = (t: string) => t.slice(0, 10);              // ISO UTC date; US RTH is one UTC day
+  const lastKey = dayKey(bars5m[bars5m.length - 1].time);
+  const sess = bars5m.filter(b => dayKey(b.time) === lastKey);
+  if (sess.length < 6) return null;
+  let cumPV = 0, cumV = 0;
+  const above: boolean[] = [];
+  for (const b of sess) {
+    const tp = (b.high + b.low + b.close) / 3;
+    cumPV += tp * b.volume; cumV += b.volume;
+    const vwap = cumV > 0 ? cumPV / cumV : b.close;
+    above.push(b.close > vwap);
+  }
+  const reclaimed = above.some((a, j) => j > 0 && a && !above[j - 1]);
+  const closedAbove = above[above.length - 1];
+  return reclaimed && closedAbove ? "confirmed" : "failed";
+}
 
 // calcPatterns() label → validated canonical name (only the walk-forward-validated set).
 const LIVE_TO_CANON: Record<string, string> = {
@@ -56,6 +92,8 @@ export function computeLiveConfluence(
   momentum: MomentumResult,
   nightly: ConfluenceRead | null,
   asOf: string,
+  /** Most-recent-session 5m VWAP confirmation (confirm5mVwap); null when unavailable. */
+  confirm5m: "confirmed" | "failed" | null = null,
 ): ConfluenceRead {
   const layers: ConfluenceLayer[] = [];
   const veto: string[] = [];
@@ -94,9 +132,9 @@ export function computeLiveConfluence(
   }
 
   // ── L0 candle — bullish candle, validated ONLY in an oversold context ──────
+  const oversold = momentum.rsiSignal === "oversold" || momentum.rsi < 35;
   const hasBullCandle = patternLabels.some(p => BULLISH_CANDLES.has(p));
   if (hasBullCandle) {
-    const oversold = momentum.rsiSignal === "oversold" || momentum.rsi < 35;
     if (oversold) {
       lift += W_CANDLE_OVERSOLD;
       layers.push({ layer: "L0_candle", signal: "bullish_candle_oversold", dir: "long", weight: W_CANDLE_OVERSOLD, validated: true, note: "live" });
@@ -112,6 +150,23 @@ export function computeLiveConfluence(
     layers.push({ layer: "L2_trend", signal: "below_sma200", weight: 0, validated: false, note: `out-of-trend x${OUT_OF_TREND_DAMP}` });
   } else {
     layers.push({ layer: "L2_trend", signal: "above_sma200", weight: 0, validated: false, note: "in-trend" });
+  }
+
+  // ── L1 intraday 5m confirmation — CONFIRMS an existing bullish setup ────────
+  // Validated only as a confirmation of a bullish daily setup (structure/candle lift OR
+  // oversold), never standalone. Held VWAP → bonus; failed VWAP → falling-knife caution.
+  const setupPresent = lift > 0 || oversold;
+  if (confirm5m !== null && setupPresent) {
+    if (confirm5m === "confirmed") {
+      lift += W_5M_CONFIRM;
+      layers.push({ layer: "L1_5m", signal: "vwap_reclaim_held", dir: "long", weight: W_5M_CONFIRM, validated: true, note: "5m session reclaimed + held VWAP (confirms)" });
+    } else {
+      lift *= DAMP_5M_FAIL;
+      layers.push({ layer: "L1_5m", signal: "vwap_lost", weight: 0, validated: true, note: `5m below VWAP (falling knife) → x${DAMP_5M_FAIL} caution` });
+    }
+  } else if (confirm5m === "confirmed") {
+    // confirmation with no bullish setup to confirm — informational only, 0 weight
+    layers.push({ layer: "L1_5m", signal: "vwap_held_no_setup", weight: 0, validated: false, note: "5m above VWAP but no bullish setup → 0 weight" });
   }
 
   lift = Math.round(lift * 1000) / 1000;
