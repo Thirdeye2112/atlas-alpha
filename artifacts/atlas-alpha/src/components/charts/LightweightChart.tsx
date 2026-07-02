@@ -44,6 +44,8 @@ export interface FormingPattern {
   positionInApex?: number;
   state?: "inside" | "breakout" | "breakdown";
   spanBars?: number;
+  volumeConfirms?: boolean;
+  volumeContradicts?: boolean;
 }
 
 export type DrawingTool = "pointer" | "trendline" | "hline" | "ray" | "rectangle";

@@ -7,6 +7,8 @@ import {
   OHLCVBar,
 } from "@workspace/api-client-react";
 import WatchlistSidebar from "@/components/layout/WatchlistSidebar";
+import ConvictionAlerts from "@/components/ConvictionAlerts";
+import { livePollMs } from "@/lib/marketHours";
 import LightweightChart, { ChartPriceLine, ChartLineSeries, ChartSignalMarker, ExtendedHoursPoint, PatternOverlay, ScoreOverlayPoint, DrawingTool, DrawingObject } from "@/components/charts/LightweightChart";
 import ScoreGauge from "@/components/charts/ScoreGauge";
 import MiniGauge from "@/components/charts/MiniGauge";
@@ -859,12 +861,15 @@ export default function Dashboard() {
   const [drawingTool, setDrawingTool] = useState<DrawingTool>("pointer");
   const [drawings, setDrawings] = useState<DrawingObject[]>([]);
 
-  // Live analysis — staleTime matches server cache TTL (5 min) to avoid re-fetching fresh data
+  // Live analysis — staleTime matches server cache TTL (5 min) to avoid re-fetching fresh data.
+  // refetchInterval keeps the dashboard current: 5 min during RTH, 15 min after hours (only
+  // polls while the tab is visible; server cache absorbs redundant fetches).
   const { data: analysis, isLoading: analysisLoading } = useGetStockAnalysis(ticker, {
     query: {
       enabled: !!ticker,
       queryKey: getGetStockAnalysisQueryKey(ticker),
       staleTime: 5 * 60 * 1000,
+      refetchInterval: () => livePollMs(),
     }
   });
 
@@ -881,6 +886,7 @@ export default function Dashboard() {
     },
     enabled: !!ticker,
     staleTime: 15 * 60 * 1000,
+    refetchInterval: () => livePollMs(),
   });
 
   // Historical (point-in-time) analysis — only when a candle is clicked
@@ -981,6 +987,7 @@ export default function Dashboard() {
 
       {/* Center Panel */}
       <div className="flex-1 flex flex-col min-w-0 border-r border-border h-full overflow-y-auto">
+        <ConvictionAlerts />
         <div className="p-4 border-b border-border bg-card">
           <form onSubmit={handleSearch} className="flex gap-4 flex-wrap items-center">
             <div className="relative w-64">
@@ -1175,6 +1182,63 @@ export default function Dashboard() {
               )}
             </div>
           </div>
+
+          {/* Patterns detected — always visible, all sources (chart kept minimal). */}
+          {displayAnalysis && (() => {
+            const fps = ((displayAnalysis as { formingPatterns?: import("@/components/charts/LightweightChart").FormingPattern[] }).formingPatterns) ?? [];
+            const structural = (displayAnalysis.patterns as { patterns?: string[] }).patterns ?? [];
+            const sigs = (displayAnalysis.chartSignals as ChartSignalMarker[]) ?? [];
+            // de-dupe candlestick signal labels, keep most recent few
+            const sigLabels = Array.from(new Set(sigs.map(s => s.label))).slice(0, 8);
+            const ve = (displayAnalysis as { volumeEffort?: { signal?: string } }).volumeEffort;
+            if (fps.length === 0 && structural.length === 0 && sigLabels.length === 0) {
+              return (
+                <div className="bg-card border border-border rounded-md p-2.5 text-[11px] font-mono text-muted-foreground/50">
+                  No patterns detected on this bar.
+                </div>
+              );
+            }
+            return (
+              <div className="bg-card border border-border rounded-md p-2.5 space-y-2">
+                <div className="text-[9px] font-mono text-muted-foreground/50 tracking-widest font-bold">PATTERNS DETECTED</div>
+                {fps.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {fps.map((p, i) => {
+                      const long = p.direction === "long";
+                      return (
+                        <span key={i} className={cn(
+                          "text-[10px] font-mono px-1.5 py-0.5 rounded border",
+                          long ? "text-success border-success/40 bg-success/10" : "text-destructive border-destructive/40 bg-destructive/10"
+                        )} title={p.macro ? `macro structure · state ${p.state ?? ""}` : "forming"}>
+                          {p.macro ? "◆ " : ""}{p.label} {long ? "▲" : "▼"} → ${p.target}
+                          {p.volumeConfirms ? " ✓vol" : p.volumeContradicts ? " ✗vol" : ""}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+                {structural.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {structural.map((p, i) => (
+                      <span key={i} className="text-[10px] font-mono px-1.5 py-0.5 rounded border text-primary border-primary/30 bg-primary/10">{p}</span>
+                    ))}
+                  </div>
+                )}
+                {sigLabels.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {sigLabels.map((l, i) => (
+                      <span key={i} className="text-[10px] font-mono px-1.5 py-0.5 rounded border text-muted-foreground border-border bg-muted/20">{l}</span>
+                    ))}
+                  </div>
+                )}
+                {ve?.signal && ve.signal !== "neutral" && (
+                  <div className={cn("text-[10px] font-mono", ve.signal === "no_demand" ? "text-destructive/80" : "text-success/80")}>
+                    volume: {ve.signal === "no_demand" ? "no demand (distribution risk)" : "demand confirmed"}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Signal key — shown on 1M and shorter */}
           {displayAnalysis?.chartSignals && displayAnalysis.chartSignals.length > 0 &&
