@@ -3279,13 +3279,13 @@ export default function BotLab() {
   const { data: trades = [], refetch: refetchTrades } = useQuery<PaperTrade[]>({
     queryKey:       ["bot-trades"],
     queryFn:        () => apiFetch("bot/trades?status=all"),
-    refetchInterval: 30000,
+    refetchInterval: 10000,   // 10s: marks are now live-quote fresh (≤60s), pull promptly
   });
 
   const { data: stats } = useQuery<BotStats>({
     queryKey:       ["bot-stats"],
     queryFn:        () => apiFetch("bot/stats"),
-    refetchInterval: 30000,
+    refetchInterval: 15000,
   });
 
   const { data: signalPerformance } = useQuery<SignalPerformance>({

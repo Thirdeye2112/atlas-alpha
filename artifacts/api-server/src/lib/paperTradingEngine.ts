@@ -4,9 +4,11 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getOrStartScanJob } from "./scanJob.js";
 import { smartEntryGate } from "./entryGate.js";
 import { runFullAnalysis, type AnalysisResult } from "./analysisEngine.js";
+import { fetchQuote } from "./marketData.js";
 import { analysisCache } from "./cache.js";
 import { logger } from "./logger.js";
 import { getMarketContext, getIntelligenceVerdict, runSelfLearning, type MarketContext } from "./botIntelligence.js";
+import { getSetupVerdict } from "./setupExpectancy.js";
 import { calcReversalScore, computeReversalShortLevels } from "./reversalShort.js";
 import { detectReversal, computeFlipTargets } from "./reversal-detector.js";
 
@@ -1018,19 +1020,24 @@ export async function runBotCycle(): Promise<BotCycleResult> {
             continue;
           }
 
-          // ── Feature-group alignment gate ──────────────────────────────────────
-          // When sub-scores diverge significantly, the overall composite score
-          // overstates conviction (e.g. trend=85 / momentum=18 inflates the mean).
-          // Block entries with high divergence; require a stronger score when
-          // divergence is moderate. Uses the pre-computed alignmentScore (0–100).
+          // ── Feature-group alignment gate (RE-SIGNED 2026-06-30) ───────────────
+          // Postmortem (220 trades): factor convergence is ANTI-predictive —
+          // corr(alignmentScore, win) = -0.35; winners cluster ~62, losers ~67.
+          // "All sub-scores agree" = late/exhausted, not high-conviction. So the
+          // OLD gate (block low alignment, demand high alignment) was backwards: it
+          // killed the divergent setups that actually win. Re-signed:
+          //   • LONGS: extreme convergence (≥80) is the exhaustion case → skip.
+          //   • keep only a minimal coherence floor (<20) against broken inputs.
+          //   • shorts/reversals fade strength, so they are not penalised here.
+          // NOTE: regime-fitted on a mean-reverting sample — revert if the tape
+          // turns trend-persistent. The setup-expectancy loop backstops sizing.
           const alignment = a.atlasScore.alignmentScore;
-          if (alignment < 40) {
-            logger.info({ ticker: a.quote.ticker, alignment }, "Bot: sub-score divergence too high — skipping");
+          if (alignment < 20) {
+            logger.info({ ticker: a.quote.ticker, alignment }, "Bot: incoherent sub-scores (align<20) — skipping");
             continue;
           }
-          if (alignment < 55 && a.atlasScore.overall < 75) {
-            logger.info({ ticker: a.quote.ticker, alignment, score: a.atlasScore.overall },
-              "Bot: moderate divergence — requires score ≥75 to enter");
+          if (!isShortEntry && alignment >= 80) {
+            logger.info({ ticker: a.quote.ticker, alignment }, "Bot: fully-aligned long = exhaustion risk (re-signed) — skipping");
             continue;
           }
 
@@ -1048,6 +1055,17 @@ export async function runBotCycle(): Promise<BotCycleResult> {
               continue;
             }
           }
+
+          // ── Per-setup expectancy gate (learns which setups actually pay) ──────
+          // Blocks setups with statistically clear negative realized expectancy and
+          // scales size by realized expectancy. Conservative: allows at full size
+          // until a bucket is well-sampled, so it only tightens what evidence backs.
+          const setupVerdict = getSetupVerdict(levels.trigger, a.momentum.rsi);
+          if (setupVerdict.block) {
+            logger.info({ ticker: a.quote.ticker, reason: setupVerdict.reason }, "Bot: setup-expectancy gate — skipping proven loser");
+            continue;
+          }
+          const setupSizeMult = setupVerdict.sizeMult;
 
           // ── Build decision log — persisted with the trade for explainability ──
           const dLog: Record<string, unknown> = {
@@ -1078,6 +1096,11 @@ export async function runBotCycle(): Promise<BotCycleResult> {
               calibGate:    verdict.calibGate.reason,
             },
             entryTrigger: levels.trigger,
+            setupExpectancy: setupVerdict.stat
+              ? { key: setupVerdict.stat.key, level: setupVerdict.stat.level, n: setupVerdict.stat.n,
+                  winRate: +(setupVerdict.stat.winRate * 100).toFixed(0), exp: +setupVerdict.stat.expectancy.toFixed(2),
+                  sizeMult: +setupSizeMult.toFixed(2) }
+              : null,
             categories,
             topFactors: (Object.entries({
               trend:    a.atlasScore.trendScore,
@@ -1106,7 +1129,7 @@ export async function runBotCycle(): Promise<BotCycleResult> {
             levels.targetPrice = isShortEntry ? quotePrice - riskDist * rrMult : quotePrice + riskDist * rrMult;
           }
 
-          await openPosition(a, config, levels, aiNotes, categories, positionMultiplier, dLog);
+          await openPosition(a, config, levels, aiNotes, categories, positionMultiplier * setupSizeMult, dLog);
           newEntries.push(a.quote.ticker as string);
           filled++;
         }
@@ -1207,6 +1230,16 @@ export async function getEnrichedTrades(status: "open" | "closed" | "all" = "all
 
   const job = getOrStartScanJob();
 
+  // Freshest-possible marks: the enrichment analysis is cached up to 5 min, so
+  // price/P&L would read stale between position-checker runs. Overlay a live quote
+  // (60s-cached) for every open ticker so the displayed price and unrealized P&L are
+  // at most ~60s old on each UI poll, decoupled from the heavier analysis cache.
+  const openTickers = [...new Set(rows.filter(r => r.status === "open").map(r => r.ticker))];
+  const freshPrice = new Map<string, number>();
+  await Promise.all(openTickers.map(async t => {
+    try { const q = await fetchQuote(t); if (q?.price) freshPrice.set(t, q.price as number); } catch { /* keep cached */ }
+  }));
+
   return rows.map(trade => {
     const holdDays = Math.floor((Date.now() - new Date(trade.entryAt).getTime()) / 86400000);
 
@@ -1216,10 +1249,14 @@ export async function getEnrichedTrades(status: "open" | "closed" | "all" = "all
     const fullCached   = analysisCache.get<AnalysisResult>(`analysis:${trade.ticker}`);
     const scanAnalysis = job.analyses.find(a => (a.quote.ticker as string) === trade.ticker);
     const analysis     = fullCached ?? scanAnalysis;
-    if (!analysis) return { ...trade, holdDays };
 
-    const currentPrice        = analysis.quote.price as number;
-    const currentScore        = analysis.atlasScore.overall;
+    // Price/P&L come from the live quote (≤60s) when available, else the cached
+    // analysis. Compute these even when no analysis is cached (e.g. right after a
+    // restart) so the marks are never blank; analysis-derived fields (score, cycle,
+    // reversal risk) are filled only when an analysis exists.
+    const currentPrice = freshPrice.get(trade.ticker) ?? (analysis?.quote.price as number | undefined);
+    if (currentPrice == null) return { ...trade, holdDays };
+    const currentScore        = analysis?.atlasScore.overall;
     const tradeIsShort        = trade.entryDirection === "bearish";
     const unrealizedPnlPct    = tradeIsShort
       ? ((trade.entryPrice - currentPrice) / trade.entryPrice) * 100
@@ -1227,13 +1264,13 @@ export async function getEnrichedTrades(status: "open" | "closed" | "all" = "all
     const unrealizedPnlDollar = tradeIsShort
       ? (trade.shares ?? 0) * (trade.entryPrice - currentPrice)
       : (trade.shares ?? 0) * (currentPrice - trade.entryPrice);
-    const currentCyclePhase     = analysis.marketCycle?.cyclePhase;
-    const currentWeeklyPatterns = analysis.marketCycle?.weeklyPatterns;
+    const currentCyclePhase     = analysis?.marketCycle?.cyclePhase;
+    const currentWeeklyPatterns = analysis?.marketCycle?.weeklyPatterns;
 
     // Reversal risk: flag open LONG positions where technical signals suggest
     // a developing top — gives the user early warning before direction flips.
     let reversalRisk: ReversalRisk | null = null;
-    if (!tradeIsShort) {
+    if (!tradeIsShort && analysis) {
       const rev = calcReversalScore(analysis);
       if (rev.score >= 45) {
         reversalRisk = { score: rev.score, triggers: rev.triggers, urgency: rev.urgency };

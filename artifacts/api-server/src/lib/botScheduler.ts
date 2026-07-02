@@ -76,7 +76,7 @@ function isMarketHours(): boolean {
 
 const CYCLE_INTERVAL_MS        = 30 * 60 * 1000; // 30 minutes
 const FIRST_CYCLE_DELAY        =  2 * 60 * 1000; // 2 min after startup
-const POSITION_CHECK_INTERVAL  =  5 * 60 * 1000; // 5 minutes — T1/T2 milestone + stop checker
+const POSITION_CHECK_INTERVAL  =  2 * 60 * 1000; // 2 minutes — T1/T2 milestone + stop checker + mark refresh (tightened from 5m for faster stop/target execution and fresher position marks)
 
 async function scheduledCycle(): Promise<void> {
   if (state.isRunning) {
