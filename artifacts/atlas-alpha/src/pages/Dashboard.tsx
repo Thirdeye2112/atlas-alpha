@@ -856,6 +856,7 @@ export default function Dashboard() {
   const [timeframe, setTimeframe] = useState<Timeframe>(DEFAULT_TF);
   const [selectedBar, setSelectedBar] = useState<{ date: string; close: number } | null>(null);
   const [showVwap, setShowVwap] = useState(false);
+  const [showOverlays, setShowOverlays] = useState(false);
   const [vwapAnchor, setVwapAnchor] = useState<"3M" | "6M" | "1Y">("3M");
   const [scoreTimeline, setScoreTimeline] = useState<{ date: string; score: number }[] | null>(null);
   const [drawingTool, setDrawingTool] = useState<DrawingTool>("pointer");
@@ -886,6 +887,24 @@ export default function Dashboard() {
     },
     enabled: !!ticker,
     staleTime: 15 * 60 * 1000,
+    refetchInterval: () => livePollMs(),
+  });
+
+  // Intraday patterns for the chart overlay: the daily analysis only carries daily
+  // patterns, so on an intraday timeframe (5m/15m/60m/1m) fetch the matching-interval
+  // patterns from /intraday-patterns. Only runs when overlays are on and the interval
+  // is intraday (the 1d timeframes use displayAnalysis.formingPatterns directly).
+  const isIntradayTf = ["1m", "5m", "15m", "30m", "60m", "90m"].includes(timeframe.interval);
+  const { data: intradayPatterns } = useQuery<{ forming?: unknown[]; signals?: unknown[] }>({
+    queryKey: ["intraday-patterns", ticker, timeframe.interval, timeframe.period],
+    queryFn: async ({ signal }) => {
+      const url = `/api/stock/${encodeURIComponent(ticker)}/intraday-patterns?interval=${timeframe.interval}&period=${timeframe.period}`;
+      const res = await fetch(url, { signal });
+      if (!res.ok) throw new Error("intraday-patterns fetch failed");
+      return res.json();
+    },
+    enabled: !!ticker && showOverlays && isIntradayTf,
+    staleTime: 5 * 60 * 1000,
     refetchInterval: () => livePollMs(),
   });
 
@@ -977,6 +996,25 @@ export default function Dashboard() {
   const isHistoricalMode = !!selectedBar;
   const displayAnalysis = isHistoricalMode ? historicalAnalysis : analysis;
   const displayLoading = isHistoricalMode ? historicalLoading : analysisLoading;
+
+  // Chart pattern overlays (toggle-gated): daily patterns on the 1d intervals, else
+  // the interval-matched intraday patterns fetched above. Signal pins likewise.
+  type FP = import("@/components/charts/LightweightChart").FormingPattern;
+  const chartForming = useMemo<FP[]>(() => {
+    if (!showOverlays) return [];
+    if (timeframe.interval === "1d")
+      return ((displayAnalysis as { formingPatterns?: FP[] } | undefined)?.formingPatterns) ?? [];
+    if (isIntradayTf) return (intradayPatterns?.forming as FP[] | undefined) ?? [];
+    return [];
+  }, [showOverlays, timeframe.interval, isIntradayTf, displayAnalysis, intradayPatterns]);
+
+  const chartSignalMarkers = useMemo<ChartSignalMarker[]>(() => {
+    if (!showOverlays) return [];
+    if (timeframe.interval === "1d")
+      return ((displayAnalysis as { chartSignals?: ChartSignalMarker[] } | undefined)?.chartSignals) ?? [];
+    if (isIntradayTf) return (intradayPatterns?.signals as ChartSignalMarker[] | undefined) ?? [];
+    return [];
+  }, [showOverlays, timeframe.interval, isIntradayTf, displayAnalysis, intradayPatterns]);
 
   return (
     <div className="flex-1 flex overflow-hidden">
@@ -1073,6 +1111,20 @@ export default function Dashboard() {
                   </button>
                 ))}
               </div>
+              {/* Pattern overlay toggle — draws forming-pattern trendlines + signal
+                  pins on the chart (daily patterns on 1d, intraday incl. 5m otherwise). */}
+              <div className="flex items-center gap-0.5 border-l border-border pl-2 ml-1">
+                <button
+                  onClick={() => setShowOverlays(v => !v)}
+                  title="Show pattern trendlines & signal pins on the chart"
+                  className={cn(
+                    "px-2 py-0.5 text-[10px] font-mono font-bold rounded transition-colors",
+                    showOverlays ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/40" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  )}
+                >
+                  PATTERNS
+                </button>
+              </div>
               {/* Anchored VWAP toggle — only useful on daily bars */}
               {["3mo","6mo","1y","2y","5y","max"].includes(timeframe.period) && (
                 <div className="flex items-center gap-0.5 border-l border-border pl-2 ml-1">
@@ -1156,12 +1208,13 @@ export default function Dashboard() {
                   onCandleClick={timeframe.interval === "1d" || timeframe.interval === "1wk" || timeframe.interval === "1mo" ? handleCandleClick : undefined}
                   priceLines={[]}
                   lineSeries={anchoredVwapSeries}
-                  signals={[]}
+                  // Signal pins + forming-pattern trendlines are toggle-gated (Overlays
+                  // button). Daily patterns on 1d intervals; interval-matched intraday
+                  // patterns (incl. 5m) otherwise.
+                  signals={chartSignalMarkers}
                   showSwingPoints={false}
                   patternOverlays={[]}
-                  // Forming (not-yet-broken-out) patterns projected on the right edge.
-                  // Daily-timed lines, so only overlay them on the daily interval.
-                  formingPatterns={timeframe.interval === "1d" ? ((displayAnalysis as { formingPatterns?: import("@/components/charts/LightweightChart").FormingPattern[] } | undefined)?.formingPatterns ?? []) : []}
+                  formingPatterns={chartForming}
                   scoreOverlay={[]}
                   activeTool={drawingTool}
                   drawings={drawings}
