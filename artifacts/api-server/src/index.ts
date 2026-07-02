@@ -5,6 +5,7 @@ import { startBotScheduler } from "./lib/botScheduler";
 import { hydrateFromDb } from "./lib/dbCache";
 import { initCalibrationFromDB } from "./lib/calibrationStore";
 import { initPredictions } from "./lib/predictionStore";
+import { initConfluence } from "./lib/confluenceStore";
 import { loadDynamicUniverse } from "./lib/dynamicUniverse";
 
 const rawPort = process.env["PORT"];
@@ -44,6 +45,7 @@ app.listen(port, (err) => {
       hydrateFromDb(),
       initCalibrationFromDB(),
       initPredictions(),
+      initConfluence(),
     ]).catch(err => logger.error({ err }, "Startup DB hydration failed"));
   });
 

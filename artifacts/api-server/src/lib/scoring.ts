@@ -56,10 +56,19 @@ export interface ScoreOpts {
    *  provided, it's fused into `overall` at ML_WEIGHT and the factor terms scale down
    *  proportionally; when null/undefined, scoring is unchanged (graceful fallback). */
   mlScore?: number | null;
+  /** Validated multi-modality confluence lift (atlas-research confluence gate; walk-forward
+   *  OOS-stable 15/15 years). POSITIVE-ONLY, and it lifts `confidenceScore` ONLY — never the
+   *  directional `overall`. 0 / null / undefined ⇒ no change (graceful fallback). */
+  confluenceLift?: number | null;
 }
 
 /** Weight given to the research V4 ML model when a prediction is available. */
 const ML_WEIGHT = 0.20;
+
+/** Confluence confidence lift: points-per-unit-lift and the hard cap (bounded so a strong
+ *  full-scope stack adds at most CONF_LIFT_CAP confidence points; it can never lower it). */
+const CONF_LIFT_SCALE = 10;
+const CONF_LIFT_CAP   = 12;
 
 function clamp(val: number, min = 0, max = 100): number {
   return Math.max(min, Math.min(max, val));
@@ -202,6 +211,17 @@ export function calcAtlasScore(
   const isContrarian = opts?.rankIC !== undefined && opts.rankIC < -0.02 && !isNoiseIC;
   const cappedConfidence = isNoiseIC ? Math.min(confidenceScore, 50) : confidenceScore;
 
+  // ── Confluence confidence lift (validated, positive-only) ─────────────────────
+  // The validated multi-modality confluence GATE (atlas-research: crossing it ~doubles
+  // the 5d edge and adds ~3pp hit, OOS-stable 15/15 years) lifts CONFIDENCE only —
+  // never the directional `overall`. Positive-only + capped; applied on the long side
+  // (the gate was validated long) and damped in risk-off regime (crash guard, 2020).
+  const confLiftRaw  = (opts?.confluenceLift != null && opts.confluenceLift > 0) ? opts.confluenceLift : 0;
+  const confRegimeOk = marketRegimeScore >= 35 ? 1 : 0.4;
+  const confApplies  = overall >= 50 ? 1 : 0;
+  const confBoost    = Math.min(CONF_LIFT_CAP, confLiftRaw * CONF_LIFT_SCALE) * confRegimeOk * confApplies;
+  const finalConfidence = clamp(cappedConfidence + confBoost);
+
   // Logistic-calibrated probability
   const bullishProbability = logisticProb(overall);
   const bearishProbability = clamp(100 - bullishProbability);
@@ -209,14 +229,14 @@ export function calcAtlasScore(
   const direction: Direction = overall >= 60 ? "bullish" : overall <= 40 ? "bearish" : "neutral";
 
   let timeHorizon: TimeHorizon = "1-2w";
-  if (cappedConfidence >= 80 && Math.abs(overall - 50) > 25) timeHorizon = "1-3d";
-  else if (cappedConfidence < 60) timeHorizon = "1-3m";
+  if (finalConfidence >= 80 && Math.abs(overall - 50) > 25) timeHorizon = "1-3d";
+  else if (finalConfidence < 60) timeHorizon = "1-3m";
 
-  const riskScore = clamp(100 - cappedConfidence + (expectedMovePercent > 5 ? 20 : 0));
+  const riskScore = clamp(100 - finalConfidence + (expectedMovePercent > 5 ? 20 : 0));
 
   const signalNarrative = buildNarrative(
     trend, momentum, volume, options, rs, exhaustion,
-    direction, overall, cappedConfidence,
+    direction, overall, finalConfidence,
     bullCats, bearCats, totalIndicators, regimeGate,
     isContrarian, !!ow
   );
@@ -234,7 +254,7 @@ export function calcAtlasScore(
     mlScore: mlScore != null ? Math.round(mlScore) : null,
     bullishProbability,
     bearishProbability,
-    confidenceScore: Math.round(cappedConfidence),
+    confidenceScore: Math.round(finalConfidence),
     riskScore: Math.round(riskScore),
     direction,
     timeHorizon,

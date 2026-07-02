@@ -1,6 +1,6 @@
 import { fetchQuote, fetchOHLCV, type OHLCVBar } from "./marketData.js";
 import {
-  calcTrend, calcMomentum, calcVolume, calcVolatility, calcOptions,
+  calcTrend, calcMomentum, calcVolume, sessionVolumeFraction, calcVolatility, calcOptions,
   calcPatterns, calcRelativeStrength, calcChartSignals, calcRegimeIndicators,
   calcExhaustion, calcFibLevels, calcVolumeProfile, calcWeeklyContext, calcMarketCycle,
   calcRecentCandleStructure,
@@ -19,6 +19,7 @@ import { analysisCache } from "./cache.js";
 import { getUniverse } from "./scannerUniverse.js";
 import { calibrationStore } from "./calibrationStore.js";
 import { predictionStore } from "./predictionStore.js";
+import { confluenceStore, type ConfluenceRead } from "./confluenceStore.js";
 import { runCalibrationBackground } from "./backtestEngine.js";
 import { logger } from "./logger.js";
 
@@ -43,6 +44,9 @@ export interface AnalysisResult {
   marketCycle: MarketCycleResult | null;
   pullbackSetup: PullbackReversalResult | null;
   recentCandles: RecentCandleStructure | null;
+  /** Validated multi-modality confluence read (per-layer evidence + tier). Null when no
+   *  research data. Its `lift` boosts `atlasScore.confidenceScore` only, never `overall`. */
+  confluence: ConfluenceRead | null;
   /** Effort-vs-result volume read; forming patterns below are tagged confirmed/
    *  contradicted by it (parity with the intraday-patterns endpoint). */
   volumeEffort: VolumeEffortRead;
@@ -65,7 +69,10 @@ function buildResult(
 ): AnalysisResult {
   const trend          = calcTrend(bars, price);
   const momentum       = calcMomentum(bars);
-  const volume         = calcVolume(bars, (quoteOverride.avgVolume as number) ?? 0);
+  // Pace-adjust RVOL by time-of-day for live reads; historical reads (historicalDate
+  // set) compare against a full completed day (fraction 1).
+  const sessionFraction = sessionVolumeFraction(historicalDate);
+  const volume         = calcVolume(bars, (quoteOverride.avgVolume as number) ?? 0, sessionFraction);
   const volatility     = calcVolatility(bars, price);
   const options        = calcOptions(momentum, volume, volatility, price, bars);
   const rs             = calcRelativeStrength(sym, bars, spyBars, qqqBars, iwmBars, (quoteOverride.sector as string | null) ?? null);
@@ -74,10 +81,13 @@ function buildResult(
   const exhaustion     = calcExhaustion(bars, momentum, volume, trend, volatility);
   const calEntry       = calibrationStore.getFitted(sym, 10);
   const mlScore        = predictionStore.getMlScore(sym);   // V4 model rank (all 47 features), or null
+  // Validated confluence gate (research deep_dive_events). Lifts confidence only; null-safe.
+  const confluence     = confluenceStore.getRead(sym);
   const atlasScore     = calcAtlasScore(
     trend, momentum, volume, options, rs,
     regimeIndicators.regimeScore, volatility.expectedMovePercent, exhaustion,
-    { weights: calEntry?.optimalWeights ?? null, rankIC: calEntry?.rankIC, icRating: calEntry?.icRating, mlScore }
+    { weights: calEntry?.optimalWeights ?? null, rankIC: calEntry?.rankIC, icRating: calEntry?.icRating, mlScore,
+      confluenceLift: confluence?.lift ?? null }
   );
 
   // calcPatterns runs on already-fetched daily bars (fast, ~0.1ms per ticker);
@@ -121,6 +131,7 @@ function buildResult(
     marketCycle,
     pullbackSetup,
     recentCandles,
+    confluence,
     volumeEffort,
     ...(historicalDate ? { historicalDate } : {}),
     cachedAt: new Date().toISOString(),
